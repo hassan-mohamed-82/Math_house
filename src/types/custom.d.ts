@@ -2,7 +2,7 @@
 // 🔐 ROLES
 // ═══════════════════════════════════════════════════════════════
 
-export type Role = 'admin' | 'user';
+export type Role = 'admin' | 'teacher' | 'user';
 
 // ═══════════════════════════════════════════════════════════════
 // 🔐 TOKEN PAYLOAD
@@ -11,6 +11,7 @@ export type Role = 'admin' | 'user';
 export interface TokenPayload {
   id: string;
   name: string;
+  email: string;
   role: Role;
   iat?: number;
   exp?: number;
