@@ -28,7 +28,7 @@ export async function login(req: Request, res: Response) {
 
     const tokenPayload = {
         id: admin[0].id,
-        role: admin[0].role,
+        role: admin[0].type,
         email: admin[0].email,
         name: admin[0].name,
     };
@@ -44,7 +44,7 @@ export async function login(req: Request, res: Response) {
                 id: admin[0].id,
                 name: admin[0].name,
                 email: admin[0].email,
-                role: admin[0].role,
+                role: admin[0].type,
             },
         },
         200
