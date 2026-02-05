@@ -14,7 +14,6 @@ exports.admins = (0, mysql_core_1.mysqlTable)("admins", {
     // role: mysqlEnum("role", ["admin", "teacher"]).notNull(),
     roleId: (0, mysql_core_1.char)("role_id", { length: 36 }).references(() => roles_1.roles.id),
     avatar: (0, mysql_core_1.varchar)("avatar", { length: 500 }),
-    type: (0, mysql_core_1.mysqlEnum)("type", ["admin", "teacher"]).notNull().default("admin"),
     permissions: (0, mysql_core_1.json)("permissions").$type().default([]),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow(),

@@ -3,32 +3,32 @@
 import { z } from "zod";
 
 export const studentSchema = z.object({
-    firstname: z.string().min(2, "الاسم الأول يجب أن يكون حرفين على الأقل").max(255),
-    lastname: z.string().min(2, "الاسم الأخير يجب أن يكون حرفين على الأقل").max(255),
-    nickname: z.string().min(2, "اللقب يجب أن يكون حرفين على الأقل").max(255),
-    email: z.string().email("البريد الإلكتروني غير صالح"),
-    password: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل"),
-    phone: z.string().regex(/^01[0125][0-9]{8}$/, "رقم الهاتف غير صالح"),
-    category: z.string().uuid("معرف الفئة غير صالح"),
+    firstname: z.string().min(2, "firstname must be at least 2 characters").max(255),
+    lastname: z.string().min(2, "lastname must be at least 2 characters").max(255),
+    nickname: z.string().min(2, "nickname must be at least 2 characters").max(255),
+    email: z.string().email("email is not valid"),
+    password: z.string().min(8, "password must be at least 8 characters"),
+    phone: z.string().regex(/^01[0125][0-9]{8}$/, "phone number is not valid"),
+    category: z.string().uuid("category id is not valid"),
     grade: z.enum(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], {
-        errorMap: () => ({ message: "الصف غير صالح" })
+        errorMap: () => ({ message: "grade is not valid" })
     }),
-    parentphone: z.string().regex(/^01[0125][0-9]{8}$/, "رقم هاتف ولي الأمر غير صالح")
+    parentphone: z.string().regex(/^01[0125][0-9]{8}$/, "parent phone number is not valid")
 });
 
 export const updateStudentSchema = z.object({
-    firstname: z.string().min(2, "الاسم الأول يجب أن يكون حرفين على الأقل").max(255).optional(),
-    lastname: z.string().min(2, "الاسم الأخير يجب أن يكون حرفين على الأقل").max(255).optional(),
-    nickname: z.string().min(2, "اللقب يجب أن يكون حرفين على الأقل").max(255).optional(),
-    email: z.string().email("البريد الإلكتروني غير صالح").optional(),
-    phone: z.string().regex(/^01[0125][0-9]{8}$/, "رقم الهاتف غير صالح").optional(),
-    category: z.string().uuid("معرف الفئة غير صالح").optional(),
+    firstname: z.string().min(2, "firstname must be at least 2 characters").max(255).optional(),
+    lastname: z.string().min(2, "lastname must be at least 2 characters").max(255).optional(),
+    nickname: z.string().min(2, "nickname must be at least 2 characters").max(255).optional(),
+    email: z.string().email("email is not valid").optional(),
+    phone: z.string().regex(/^01[0125][0-9]{8}$/, "phone number is not valid").optional(),
+    category: z.string().uuid("category id is not valid").optional(),
     grade: z.enum(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], {
-        errorMap: () => ({ message: "الصف غير صالح" })
+        errorMap: () => ({ message: "grade is not valid" })
     }).optional(),
-    parentphone: z.string().regex(/^01[0125][0-9]{8}$/, "رقم هاتف ولي الأمر غير صالح").optional(),
+    parentphone: z.string().regex(/^01[0125][0-9]{8}$/, "parent phone number is not valid").optional(),
     oldPassword: z.string().optional(),
-    newPassword: z.string().min(8, "كلمة المرور يجب أن تكون 8 أحرف على الأقل").optional()
+    newPassword: z.string().min(8, "password must be at least 8 characters").optional()
 }).refine((data) => {
     if (data.newPassword && !data.oldPassword) {
         return false;

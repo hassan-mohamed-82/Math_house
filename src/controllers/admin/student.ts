@@ -22,7 +22,7 @@ export const createStudent = async (req: Request, res: Response) => {
     } = req.body;
 
     if (!firstname || !lastname || !nickname || !email || !password || !phone || !category || !grade || !parentphone) {
-        throw new BadRequest("جميع الحقول مطلوبة");
+        throw new BadRequest("all fields are required");
     }
 
     const existingStudent = await db
@@ -31,7 +31,7 @@ export const createStudent = async (req: Request, res: Response) => {
         .where(eq(Student.email, email));
 
     if (existingStudent.length > 0) {
-        throw new BadRequest("البريد الإلكتروني مستخدم بالفعل");
+        throw new BadRequest("email already exists");
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -50,7 +50,7 @@ export const createStudent = async (req: Request, res: Response) => {
         parentphone
     });
 
-    SuccessResponse(res,{message:"تم إنشاء الطالب بنجاح",data:{id}});
+    SuccessResponse(res,{message:"create student success",data:{id}});
 };
 
 export const getAllStudents = async (req: Request, res: Response) => {
@@ -68,14 +68,14 @@ export const getAllStudents = async (req: Request, res: Response) => {
         })
         .from(Student);
 
-    SuccessResponse(res,{message:"تم جلب جميع الطلاب",data:students});
+    SuccessResponse(res,{message:"get all students success",data:students});
 };
 
 export const getStudentById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-        throw new BadRequest("معرف الطالب مطلوب");
+        throw new BadRequest("id is required");
     }
 
     const student = await db
@@ -94,10 +94,10 @@ export const getStudentById = async (req: Request, res: Response) => {
         .where(eq(Student.id, id));
 
     if (student.length === 0) {
-        throw new NotFound("الطالب غير موجود");
+        throw new NotFound("student not found");
     }
 
-    SuccessResponse(res,{message:"تم جلب الطالب",data:student[0]});
+    SuccessResponse(res,{message:"get student success",data:student[0]});
 };
 
 export const updateStudent = async (req: Request, res: Response) => {
@@ -116,7 +116,7 @@ export const updateStudent = async (req: Request, res: Response) => {
     } = req.body;
 
     if (!id) {
-        throw new BadRequest("معرف الطالب مطلوب");
+        throw new BadRequest("id is required");
     }
 
     const existingStudent = await db
@@ -125,7 +125,7 @@ export const updateStudent = async (req: Request, res: Response) => {
         .where(eq(Student.id, id));
 
     if (existingStudent.length === 0) {
-        throw new NotFound("الطالب غير موجود");
+        throw new NotFound("student not found");
     }
 
     if (email && email !== existingStudent[0].email) {
@@ -135,7 +135,7 @@ export const updateStudent = async (req: Request, res: Response) => {
             .where(eq(Student.email, email));
 
         if (emailExists.length > 0) {
-            throw new BadRequest("البريد الإلكتروني مستخدم بالفعل");
+            throw new BadRequest("email already exists");
         }
     }
 
@@ -152,20 +152,20 @@ export const updateStudent = async (req: Request, res: Response) => {
 
     if (newPassword) {
         if (!oldPassword) {
-            throw new BadRequest("كلمة المرور القديمة مطلوبة لتغيير كلمة المرور");
+            throw new BadRequest("old password is required to change password");
         }
 
         const isPasswordValid = await bcrypt.compare(oldPassword, existingStudent[0].password);
 
         if (!isPasswordValid) {
-            throw new BadRequest("كلمة المرور القديمة غير صحيحة");
+            throw new BadRequest("old password is not valid");
         }
 
         updateData.password = await bcrypt.hash(newPassword, 10);
     }
 
     if (Object.keys(updateData).length === 0) {
-        throw new BadRequest("لا توجد بيانات للتحديث");
+        throw new BadRequest("no data to update");
     }
 
     await db
@@ -173,14 +173,14 @@ export const updateStudent = async (req: Request, res: Response) => {
         .set(updateData)
         .where(eq(Student.id, id));
      
-        SuccessResponse(res,{message:"تم تحديث بيانات الطالب بنجاح",data:updateData});
+        SuccessResponse(res,{message:"update student success",data:updateData});
 };
 
 export const deleteStudent = async (req: Request, res: Response) => {
     const { id } = req.params;
 
     if (!id) {
-        throw new BadRequest("معرف الطالب مطلوب");
+        throw new BadRequest("id is required");
     }
 
     const student = await db
@@ -189,19 +189,19 @@ export const deleteStudent = async (req: Request, res: Response) => {
         .where(eq(Student.id, id));
 
     if (student.length === 0) {
-        throw new NotFound("الطالب غير موجود");
+        throw new NotFound("student not found");
     }
 
     await db.delete(Student).where(eq(Student.id, id));
 
-    SuccessResponse(res,{message:"تم حذف الطالب بنجاح"});
+    SuccessResponse(res,{message:"delete student success"});
 };
 
 export const getStudentsByCategory = async (req: Request, res: Response) => {
     const { categoryId } = req.params;
 
     if (!categoryId) {
-        throw new BadRequest("معرف الفئة مطلوب");
+        throw new BadRequest("category id is required");
     }
 
     const students = await db
@@ -219,14 +219,14 @@ export const getStudentsByCategory = async (req: Request, res: Response) => {
         .from(Student)
         .where(eq(Student.category, categoryId));
 
-    SuccessResponse(res,{message:"تم جلب الطلاب",data:students});
+    SuccessResponse(res,{message:"get students by category success",data:students});
 };
 
 export const getStudentsByGrade = async (req: Request, res: Response) => {
     const { grade } = req.params;
 
     if (!grade) {
-        throw new BadRequest("الصف مطلوب");
+        throw new BadRequest("grade is required");
     }
 
     const students = await db
@@ -244,11 +244,11 @@ export const getStudentsByGrade = async (req: Request, res: Response) => {
         .from(Student)
         .where(eq(Student.grade, grade as any));
 
-    SuccessResponse(res,{message:"تم جلب الطلاب",data:students});
+    SuccessResponse(res,{message:"get students by grade success",data:students});
 };
 
 
 export const getallgrades = async (req: Request, res: Response) => {
     const grades = ["1","2","3","4","5","6","7","8","9","10","11","12","13"];
-    SuccessResponse(res,{message:"تم جلب جميع الصفوف",data:grades});
+    SuccessResponse(res,{message:"get all grades success",data:grades});
 };

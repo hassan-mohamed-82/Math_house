@@ -14,7 +14,6 @@ export const admins = mysqlTable("admins", {
 
     roleId: char("role_id", { length: 36 }).references(() => roles.id),
     avatar: varchar("avatar", { length: 500 }),
-    type: mysqlEnum("type", ["admin", "teacher"]).notNull().default("admin"),
     permissions: json("permissions").$type<Permission[]>().default([]),
 
     createdAt: timestamp("created_at").defaultNow(),
