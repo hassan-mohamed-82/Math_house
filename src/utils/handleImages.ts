@@ -1,10 +1,11 @@
 import path from "path";
 import fs from "fs/promises";
 import { Request } from "express";
+import { BadRequest } from "../Errors/BadRequest";
+import { BASE64_IMAGE_REGEX } from "../types/constant";
 
 export async function saveBase64Image(
   base64: string,
-  userId: string,
   req: Request,
   folder: string
 ): Promise<string> {
@@ -18,7 +19,6 @@ export async function saveBase64Image(
   }
 
   const buffer = Buffer.from(data, "base64");
-  const fileName = `${userId}.${ext}`;
 
   const rootDir = path.resolve(__dirname, "../../");
   const uploadsDir = path.join(rootDir, "uploads", folder);
@@ -35,3 +35,13 @@ export async function saveBase64Image(
 
   return `${protocol}://${req.get("host")}/uploads/${folder}/${fileName}`;
 }
+const validateAndSaveLogo = async (req: Request, logo: string, folder: string): Promise<void> => {
+  if (!logo.match(BASE64_IMAGE_REGEX)) {
+    throw new BadRequest("Invalid logo format. Must be a base64 encoded image (JPEG, PNG, GIF, or WebP)");
+  }
+  try {
+    await saveBase64Image(logo, req, folder);
+  } catch (error: any) {
+    throw new BadRequest(`Failed to save logo: ${error.message}`);
+  }
+};
