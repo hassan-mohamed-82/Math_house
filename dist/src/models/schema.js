@@ -20,6 +20,5 @@ __exportStar(require("./schema/admin/roles"), exports);
 __exportStar(require("./schema/admin/Student"), exports);
 __exportStar(require("./schema/admin/parent"), exports);
 __exportStar(require("./schema/admin/category"), exports);
-__exportStar(require("./schema/admin/techer"), exports);
 __exportStar(require("./schema/admin/courses"), exports);
 __exportStar(require("./schema/admin/chapters"), exports);

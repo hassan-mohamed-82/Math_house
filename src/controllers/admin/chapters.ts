@@ -54,7 +54,3 @@ export const getAllChapters = async (req: Request, res: Response) =>{
 
 }
 
-export const deleteChapter = async (req:Request, res:Response) =>{
-    const { id } = req.params;
-    const existingChapter = await db.select().from(chapters).where()
-}

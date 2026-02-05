@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteChapter = exports.getAllChapters = exports.getChapterById = exports.createChapter = void 0;
+exports.getAllChapters = exports.getChapterById = exports.createChapter = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -54,8 +54,3 @@ exports.getChapterById = getChapterById;
 const getAllChapters = async (req, res) => {
 };
 exports.getAllChapters = getAllChapters;
-const deleteChapter = async (req, res) => {
-    const { id } = req.params;
-    const existingChapter = await connection_1.db.select().from(schema_1.chapters).where();
-};
-exports.deleteChapter = deleteChapter;
