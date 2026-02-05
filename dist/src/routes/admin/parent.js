@@ -9,4 +9,5 @@ router.get("/", (0, catchAsync_1.catchAsync)(parent_1.getAllParents));
 router.get("/:id", (0, catchAsync_1.catchAsync)(parent_1.getParentById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(parent_1.updateParent));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(parent_1.deleteParent));
+router.put("/:id/status", (0, catchAsync_1.catchAsync)(parent_1.toggleParentStatus));
 exports.default = router;

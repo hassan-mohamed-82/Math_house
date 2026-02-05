@@ -16,12 +16,12 @@ export const createStudent = async (req: Request, res: Response) => {
         email,
         password,
         phone,
-        category,
+        category: categoryId,
         grade,
         parentphone
     } = req.body;
 
-    if (!firstname || !lastname || !nickname || !email || !password || !phone || !category || !grade || !parentphone) {
+    if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade || !parentphone) {
         throw new BadRequest("all fields are required");
     }
 
@@ -37,7 +37,7 @@ export const createStudent = async (req: Request, res: Response) => {
     const existingCategory = await db
         .select()
         .from(category)
-        .where(eq(category.id, category));
+        .where(eq(category.id, categoryId));
 
     if (existingCategory.length === 0) {
         throw new BadRequest("category not found");
@@ -46,19 +46,19 @@ export const createStudent = async (req: Request, res: Response) => {
     const existingGrade = await db
         .select()
         .from(category)
-        .where(eq(category.id, category));
+        .where(eq(category.id, categoryId));
 
     if (existingGrade.length === 0) {
         throw new BadRequest("grade not found");
     }
-    const existingParent = await db
-        .select()
-        .from(parents)
-        .where(eq(parents.id, parentphone));
+    // const existingParent = await db
+    //     .select()
+    //     .from(parents)
+    //     .where(eq(parents.id, parentphone));
 
-    if (existingParent.length === 0) {
-        throw new BadRequest("parent not found");
-    }
+    // if (existingParent.length === 0) {
+    //     throw new BadRequest("parent not found");
+    // }
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = uuidv4();
@@ -71,12 +71,12 @@ export const createStudent = async (req: Request, res: Response) => {
         email,
         password: hashedPassword,
         phone,
-        category,
+        category: categoryId,
         grade,
         parentphone
     });
 
-    SuccessResponse(res,{message:"create student success",data:{id}});
+    SuccessResponse(res, { message: "create student success", data: { id } });
 };
 
 export const getAllStudents = async (req: Request, res: Response) => {
@@ -94,7 +94,7 @@ export const getAllStudents = async (req: Request, res: Response) => {
         })
         .from(Student);
 
-    SuccessResponse(res,{message:"get all students success",data:students});
+    SuccessResponse(res, { message: "get all students success", data: students });
 };
 
 export const getStudentById = async (req: Request, res: Response) => {
@@ -123,7 +123,7 @@ export const getStudentById = async (req: Request, res: Response) => {
         throw new NotFound("student not found");
     }
 
-    SuccessResponse(res,{message:"get student success",data:student[0]});
+    SuccessResponse(res, { message: "get student success", data: student[0] });
 };
 
 export const updateStudent = async (req: Request, res: Response) => {
@@ -198,8 +198,8 @@ export const updateStudent = async (req: Request, res: Response) => {
         .update(Student)
         .set(updateData)
         .where(eq(Student.id, id));
-     
-        SuccessResponse(res,{message:"update student success",data:updateData});
+
+    SuccessResponse(res, { message: "update student success", data: updateData });
 };
 
 export const deleteStudent = async (req: Request, res: Response) => {
@@ -220,7 +220,7 @@ export const deleteStudent = async (req: Request, res: Response) => {
 
     await db.delete(Student).where(eq(Student.id, id));
 
-    SuccessResponse(res,{message:"delete student success"});
+    SuccessResponse(res, { message: "delete student success" });
 };
 
 export const getStudentsByCategory = async (req: Request, res: Response) => {
@@ -245,7 +245,7 @@ export const getStudentsByCategory = async (req: Request, res: Response) => {
         .from(Student)
         .where(eq(Student.category, categoryId));
 
-    SuccessResponse(res,{message:"get students by category success",data:students});
+    SuccessResponse(res, { message: "get students by category success", data: students });
 };
 
 export const getStudentsByGrade = async (req: Request, res: Response) => {
@@ -270,18 +270,14 @@ export const getStudentsByGrade = async (req: Request, res: Response) => {
         .from(Student)
         .where(eq(Student.grade, grade as any));
 
-    SuccessResponse(res,{message:"get students by grade success",data:students});
+    SuccessResponse(res, { message: "get students by grade success", data: students });
 };
 
 
-export const getallgrades = async (req: Request, res: Response) => {
-    const grades = ["1","2","3","4","5","6","7","8","9","10","11","12","13"];
-    SuccessResponse(res,{message:"get all grades success",data:grades});
-};
 
 
 export const selection = async (req: Request, res: Response) => {
     const categories = await db.select().from(category);
-     const grades = ["1","2","3","4","5","6","7","8","9","10","11","12","13"];
-    SuccessResponse(res,{message:"get all categories and grades success",data:{categories,grades}});
+    const grades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
+    SuccessResponse(res, { message: "get all categories and grades success", data: { categories, grades } });
 };

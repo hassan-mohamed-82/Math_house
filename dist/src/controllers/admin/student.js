@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.selection = exports.getallgrades = exports.getStudentsByGrade = exports.getStudentsByCategory = exports.deleteStudent = exports.updateStudent = exports.getStudentById = exports.getAllStudents = exports.createStudent = void 0;
+exports.selection = exports.getStudentsByGrade = exports.getStudentsByCategory = exports.deleteStudent = exports.updateStudent = exports.getStudentById = exports.getAllStudents = exports.createStudent = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -13,8 +13,8 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const uuid_1 = require("uuid");
 const createStudent = async (req, res) => {
-    const { firstname, lastname, nickname, email, password, phone, category, grade, parentphone } = req.body;
-    if (!firstname || !lastname || !nickname || !email || !password || !phone || !category || !grade || !parentphone) {
+    const { firstname, lastname, nickname, email, password, phone, category: categoryId, grade, parentphone } = req.body;
+    if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade || !parentphone) {
         throw new BadRequest_1.BadRequest("all fields are required");
     }
     const existingStudent = await connection_1.db
@@ -26,25 +26,25 @@ const createStudent = async (req, res) => {
     }
     const existingCategory = await connection_1.db
         .select()
-        .from(category)
-        .where((0, drizzle_orm_1.eq)(category.id, category));
+        .from(schema_1.category)
+        .where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId));
     if (existingCategory.length === 0) {
         throw new BadRequest_1.BadRequest("category not found");
     }
     const existingGrade = await connection_1.db
         .select()
-        .from(category)
-        .where((0, drizzle_orm_1.eq)(category.id, category));
+        .from(schema_1.category)
+        .where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId));
     if (existingGrade.length === 0) {
         throw new BadRequest_1.BadRequest("grade not found");
     }
-    const existingParent = await connection_1.db
-        .select()
-        .from(schema_1.parents)
-        .where((0, drizzle_orm_1.eq)(schema_1.parents.id, parentphone));
-    if (existingParent.length === 0) {
-        throw new BadRequest_1.BadRequest("parent not found");
-    }
+    // const existingParent = await db
+    //     .select()
+    //     .from(parents)
+    //     .where(eq(parents.id, parentphone));
+    // if (existingParent.length === 0) {
+    //     throw new BadRequest("parent not found");
+    // }
     const hashedPassword = await bcrypt_1.default.hash(password, 10);
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.Student).values({
@@ -55,7 +55,7 @@ const createStudent = async (req, res) => {
         email,
         password: hashedPassword,
         phone,
-        category,
+        category: categoryId,
         grade,
         parentphone
     });
@@ -223,11 +223,6 @@ const getStudentsByGrade = async (req, res) => {
     (0, response_1.SuccessResponse)(res, { message: "get students by grade success", data: students });
 };
 exports.getStudentsByGrade = getStudentsByGrade;
-const getallgrades = async (req, res) => {
-    const grades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
-    (0, response_1.SuccessResponse)(res, { message: "get all grades success", data: grades });
-};
-exports.getallgrades = getallgrades;
 const selection = async (req, res) => {
     const categories = await connection_1.db.select().from(schema_1.category);
     const grades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
