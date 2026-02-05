@@ -4,7 +4,7 @@ import { db } from "../../models/connection";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
-import { validateAndSaveLogo } from "../../utils/handleImages";
+import {  validateAndSaveLogo } from "../../utils/handleImages";
 
 export const createCategory = async (req: Request, res: Response) => {
     const { name, description, image } = req.body;
