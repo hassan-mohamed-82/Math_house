@@ -1,21 +1,25 @@
-import { mysqlTable, varchar, char, timestamp, mysqlEnum, double } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, double } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
+import { courses } from "./courses";
 import { category } from "./category";
-export const courses = mysqlTable("courses", {
+
+export const chapters = mysqlTable("chapters", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     name: varchar("name", { length: 255 }).notNull(),
     categoryId: char("category_id", { length: 255 }).notNull().references(() => category.id),
+    courseId: char("course_id", { length: 255 }).notNull().references(() => courses.id),
     description: varchar("description", { length: 255 }),
     image: varchar("image", { length: 255 }),
 
+    // TODO: Add teacher schema and check for existing teacher
     teacherId: char("teacher_id", { length: 255 }).notNull(),
     preRequisition: varchar("pre_requisition", { length: 255 }),
     whatYouGain: varchar("what_you_gain", { length: 255 }),
 
-    duration: varchar("duration", { length: 255 }),
+    // Pricing
+    duration: varchar("duration", { length: 255 }).notNull(),
     price: double("price").notNull(),
     discount: double("discount").default(0),
-
     totalPrice: double("total_amount").generatedAlwaysAs(sql`price - COALESCE(discount, 0)`),
 
     createdAt: timestamp("created_at").defaultNow(),
