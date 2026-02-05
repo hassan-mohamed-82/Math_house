@@ -19,6 +19,7 @@ export async function saveBase64Image(
   }
 
   const buffer = Buffer.from(data, "base64");
+  const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`;
 
   const rootDir = path.resolve(__dirname, "../../");
   const uploadsDir = path.join(rootDir, "uploads", folder);
