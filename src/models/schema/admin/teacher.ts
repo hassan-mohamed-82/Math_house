@@ -11,8 +11,7 @@ export const teachers = mysqlTable("teachers", {
     phoneNumber: varchar("phone_number", { length: 255 }).notNull(),
     password: varchar("password", { length: 255 }).notNull(),
     avatar: varchar("avatar", { length: 500 }),
-    categoryId: char("category_id", { length: 36 }).references(() => category.id),
-    courseId: char("course_id", { length: 36 }).references(() => courses.id),
+    categoryId: char("category_id", { length: 255 }).references(() => category.id),
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),

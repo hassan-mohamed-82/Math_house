@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { chapters, courses, category } from "../../models/schema";
+import { chapters, courses, category, teachers } from "../../models/schema";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -23,6 +23,12 @@ export const createChapter = async (req: Request, res: Response) => {
     if (existingCategory.length === 0) {
         throw new BadRequest("Category not found");
     }
+
+    const existingTeacher = await db.select().from(teachers).where(eq(teachers.id, teacherId));
+    if (existingTeacher.length === 0) {
+        throw new BadRequest("Teacher not found");
+    }
+
     const imageURL = await validateAndSaveLogo(req, image, "chapters");
     await db.insert(chapters).values({
         name,
@@ -47,10 +53,10 @@ export const getChapterById = async (req: Request, res: Response) => {
     if (chapter.length === 0) {
         throw new BadRequest("Chapter not found");
     }
-    return SuccessResponse(res, {message: "Chapter fetched successfully", chapter: chapter[0]}, 200);
+    return SuccessResponse(res, { message: "Chapter fetched successfully", chapter: chapter[0] }, 200);
 }
 
-export const getAllChapters = async (req: Request, res: Response) =>{
+export const getAllChapters = async (req: Request, res: Response) => {
 
 }
 

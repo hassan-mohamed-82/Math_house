@@ -2,6 +2,7 @@ import { mysqlTable, varchar, char, timestamp, double } from "drizzle-orm/mysql-
 import { sql } from "drizzle-orm";
 import { courses } from "./courses";
 import { category } from "./category";
+import { teachers } from "./teacher";
 
 export const chapters = mysqlTable("chapters", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
@@ -10,9 +11,8 @@ export const chapters = mysqlTable("chapters", {
     courseId: char("course_id", { length: 255 }).notNull().references(() => courses.id),
     description: varchar("description", { length: 255 }),
     image: varchar("image", { length: 255 }),
-
-    // TODO: Add teacher schema and check for existing teacher
-    teacherId: char("teacher_id", { length: 255 }).notNull(),
+    
+    teacherId: char("teacher_id", { length: 255 }).notNull().references(() => teachers.id),
     preRequisition: varchar("pre_requisition", { length: 255 }),
     whatYouGain: varchar("what_you_gain", { length: 255 }),
 
