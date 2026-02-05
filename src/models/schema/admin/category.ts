@@ -8,5 +8,5 @@ export const category = mysqlTable("category", {
     image: varchar("image", { length: 255 }),
 
     createdAt: timestamp("created_at").defaultNow(),
-    updatedAt: timestamp("updated_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });

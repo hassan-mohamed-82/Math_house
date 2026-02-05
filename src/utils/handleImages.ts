@@ -36,12 +36,13 @@ export async function saveBase64Image(
 
   return `${protocol}://${req.get("host")}/uploads/${folder}/${fileName}`;
 }
-const validateAndSaveLogo = async (req: Request, logo: string, folder: string): Promise<void> => {
+export const validateAndSaveLogo = async (req: Request, logo: string, folder: string): Promise<string> => {
   if (!logo.match(BASE64_IMAGE_REGEX)) {
     throw new BadRequest("Invalid logo format. Must be a base64 encoded image (JPEG, PNG, GIF, or WebP)");
   }
   try {
     await saveBase64Image(logo, req, folder);
+    return logo;
   } catch (error: any) {
     throw new BadRequest(`Failed to save logo: ${error.message}`);
   }

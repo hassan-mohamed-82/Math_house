@@ -4,13 +4,13 @@ import { db } from "../../models/connection";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
-import { saveBase64Image } from "../../utils/handleImages";
+import { validateAndSaveLogo } from "../../utils/handleImages";
 
 export const createCategory = async (req: Request, res: Response) => {
     const { name, description, image } = req.body;
 
-    if (!name || !description || !image) {
-        throw new BadRequest("All fields are required");
+    if (!name) {
+        throw new BadRequest("Name is required");
     }
 
     const existingCategory = await db.select().from(category).where(eq(category.name, name));
@@ -19,9 +19,9 @@ export const createCategory = async (req: Request, res: Response) => {
         throw new BadRequest("Category already exists");
     }
 
-    const logoUrl = await validateAndSaveLogo(req, logo);
+    const imageUrl = await validateAndSaveLogo(req, image, "category");
 
-    await db.insert(category).values({ name, description, image });
+    await db.insert(category).values({ name, description, image: imageUrl });
 
     return SuccessResponse(res, { message: "Category created successfully" }, 200);
 }
