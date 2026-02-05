@@ -4,6 +4,7 @@ import { Router } from "express";
 import rolesRouter from "./roles"
 import studentRouter from "./student"
 import parentRouter from "./parent"
+import categoryRouter from "./category"
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 const router = Router()
@@ -13,6 +14,7 @@ const router = Router()
 router.use(authenticated, authorizeRoles("admin", "teacher"))
 // router.use("/", adminRouter)
 router.use("/roles", rolesRouter)
+router.use("/category", categoryRouter)
 router.use("/student", studentRouter)
 router.use("/parent", parentRouter)
 
