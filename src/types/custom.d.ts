@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'teacher' | 'user';
+export type Role = 'admin' | 'teacher' | 'parent' | 'student';
 
 export interface TokenPayload {
   id: string;
