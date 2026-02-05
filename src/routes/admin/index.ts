@@ -10,10 +10,11 @@ import { authorizeRoles } from "../../middlewares/authorized";
 const router = Router()
 
 
-router.use("/auth", authRouter)
+// router.use("/auth", authRouter)
+
+router.use("/category", categoryRouter)
 router.use(authenticated, authorizeRoles("admin", "teacher"))
 // router.use("/", adminRouter)
 router.use("/roles", rolesRouter)
-router.use("/category", categoryRouter)
 
 export default router

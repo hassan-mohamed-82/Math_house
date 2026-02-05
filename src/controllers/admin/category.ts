@@ -4,8 +4,8 @@ import { db } from "../../models/connection";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
-import { validateAndSaveLogo } from "../../utils/handleImages";
-
+import { handleImageUpdate, validateAndSaveLogo } from "../../utils/handleImages";
+import { deleteImage } from "../../utils/handleImages";
 export const createCategory = async (req: Request, res: Response) => {
     const { name, description, image } = req.body;
 
@@ -39,7 +39,9 @@ export const updateCategory = async (req: Request, res: Response) => {
         throw new BadRequest("Category not found");
     }
 
-    await db.update(category).set({ name: name || existingCategory[0].name, description: description || existingCategory[0].description, image: image || existingCategory[0].image }).where(eq(category.id, id));
+    const imageUrl = await handleImageUpdate(req, existingCategory[0].image, image, "category");
+
+    await db.update(category).set({ name: name || existingCategory[0].name, description: description || existingCategory[0].description, image: imageUrl || existingCategory[0].image }).where(eq(category.id, id));
 
     return SuccessResponse(res, { message: "Category updated successfully" }, 200);
 }
@@ -56,6 +58,10 @@ export const deleteCategory = async (req: Request, res: Response) => {
     }
 
     await db.delete(category).where(eq(category.id, id));
+
+    if (existingCategory[0].image) {
+        await deleteImage(existingCategory[0].image);
+    }
 
     return SuccessResponse(res, { message: "Category deleted successfully" }, 200);
 }
