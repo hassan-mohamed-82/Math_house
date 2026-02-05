@@ -4,7 +4,7 @@ import { roles } from "./roles";
 import { Permission } from "../../../types/custom";
 import { category, courses } from "../../schema";
 
-export const admins = mysqlTable("admins", {
+export const teachers = mysqlTable("teachers", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     name: varchar("name", { length: 255 }).notNull(),
     email: varchar("email", { length: 255 }).notNull(),
