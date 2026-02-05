@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { Student } from "../../models/schema";
+import { category, parents, Student } from "../../models/schema";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
@@ -32,6 +32,32 @@ export const createStudent = async (req: Request, res: Response) => {
 
     if (existingStudent.length > 0) {
         throw new BadRequest("email already exists");
+    }
+
+    const existingCategory = await db
+        .select()
+        .from(category)
+        .where(eq(category.id, category));
+
+    if (existingCategory.length === 0) {
+        throw new BadRequest("category not found");
+    }
+
+    const existingGrade = await db
+        .select()
+        .from(category)
+        .where(eq(category.id, category));
+
+    if (existingGrade.length === 0) {
+        throw new BadRequest("grade not found");
+    }
+    const existingParent = await db
+        .select()
+        .from(parents)
+        .where(eq(parents.id, parentphone));
+
+    if (existingParent.length === 0) {
+        throw new BadRequest("parent not found");
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -251,4 +277,11 @@ export const getStudentsByGrade = async (req: Request, res: Response) => {
 export const getallgrades = async (req: Request, res: Response) => {
     const grades = ["1","2","3","4","5","6","7","8","9","10","11","12","13"];
     SuccessResponse(res,{message:"get all grades success",data:grades});
+};
+
+
+export const selection = async (req: Request, res: Response) => {
+    const categories = await db.select().from(category);
+     const grades = ["1","2","3","4","5","6","7","8","9","10","11","12","13"];
+    SuccessResponse(res,{message:"get all categories and grades success",data:{categories,grades}});
 };

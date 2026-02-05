@@ -7,6 +7,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const handleImages_1 = require("../../utils/handleImages");
+const handleImages_2 = require("../../utils/handleImages");
 const createCategory = async (req, res) => {
     const { name, description, image } = req.body;
     if (!name) {
@@ -31,7 +32,8 @@ const updateCategory = async (req, res) => {
     if (existingCategory.length === 0) {
         throw new BadRequest_1.BadRequest("Category not found");
     }
-    await connection_1.db.update(schema_1.category).set({ name: name || existingCategory[0].name, description: description || existingCategory[0].description, image: image || existingCategory[0].image }).where((0, drizzle_orm_1.eq)(schema_1.category.id, id));
+    const imageUrl = await (0, handleImages_1.handleImageUpdate)(req, existingCategory[0].image, image, "category");
+    await connection_1.db.update(schema_1.category).set({ name: name || existingCategory[0].name, description: description || existingCategory[0].description, image: imageUrl || existingCategory[0].image }).where((0, drizzle_orm_1.eq)(schema_1.category.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Category updated successfully" }, 200);
 };
 exports.updateCategory = updateCategory;
@@ -45,6 +47,9 @@ const deleteCategory = async (req, res) => {
         throw new BadRequest_1.BadRequest("Category not found");
     }
     await connection_1.db.delete(schema_1.category).where((0, drizzle_orm_1.eq)(schema_1.category.id, id));
+    if (existingCategory[0].image) {
+        await (0, handleImages_2.deleteImage)(existingCategory[0].image);
+    }
     return (0, response_1.SuccessResponse)(res, { message: "Category deleted successfully" }, 200);
 };
 exports.deleteCategory = deleteCategory;

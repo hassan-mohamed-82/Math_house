@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { createStudent, deleteStudent, getAllStudents,
-     getStudentById, updateStudent,getallgrades } from "../../controllers/admin/student";
+     getStudentById, updateStudent,getallgrades,selection} from "../../controllers/admin/student";
 import {
     catchAsync
 } from "../../utils/catchAsync";
@@ -8,7 +8,7 @@ import { validate } from "../../middlewares/validation";
 import {studentSchema,updateStudentSchema,idSchema} from "../../validation/admin/student";
 const router = Router();
 
-router.get("/grades", catchAsync(getallgrades));
+router.get("/select", catchAsync(getallgrades));
 
 router.post("/", validate(studentSchema), catchAsync(createStudent));
 router.get("/", catchAsync(getAllStudents));

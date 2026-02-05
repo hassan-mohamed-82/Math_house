@@ -16,5 +16,7 @@ router.use("/category", categoryRouter)
 router.use(authenticated, authorizeRoles("admin", "teacher"))
 // router.use("/", adminRouter)
 router.use("/roles", rolesRouter)
+router.use("/student", studentRouter)
+router.use("/parent", parentRouter)
 
 export default router
