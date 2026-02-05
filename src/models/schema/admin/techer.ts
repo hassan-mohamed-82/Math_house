@@ -2,7 +2,7 @@ import { mysqlTable, varchar, char, timestamp, mysqlEnum, json } from "drizzle-o
 import { sql } from "drizzle-orm";
 import { roles } from "./roles";
 import { Permission } from "../../../types/custom";
-import { category } from "../../schema";
+import { category, courses } from "../../schema";
 
 export const admins = mysqlTable("admins", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
@@ -12,8 +12,9 @@ export const admins = mysqlTable("admins", {
     password: varchar("password", { length: 255 }).notNull(),
     avatar: varchar("avatar", { length: 500 }),
     categoryId: char("category_id", { length: 36 }).references(() => category.id),
-    courseId: char("course_id", { length: 36 }).references(() => course.id),
+    courseId: char("course_id", { length: 36 }).references(() => courses.id),
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
 });
+
