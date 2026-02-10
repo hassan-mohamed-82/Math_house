@@ -12,7 +12,7 @@ export const admins = mysqlTable("admins", {
 
     roleId: char("role_id", { length: 36 }).references(() => roles.id),
     permissions: json("permissions").$type<Permission[]>().default([]),
-   status: mysqlEnum("status", ["active", "inactive"]).notNull().default("active"),
+    status: mysqlEnum("status", ["active", "inactive"]).notNull().default("active"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
 });

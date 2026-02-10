@@ -47,6 +47,7 @@ export const createChapter = async (req: Request, res: Response) => {
 }
 
 // TODO: Add Number of Lessons
+
 export const getChapterById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const chapter = await db.select().from(chapters).where(eq(chapters.id, id));
