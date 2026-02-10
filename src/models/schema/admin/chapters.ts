@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, char, timestamp, double } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, double, int } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { courses } from "./courses";
 import { category } from "./category";
@@ -11,8 +11,9 @@ export const chapters = mysqlTable("chapters", {
     courseId: char("course_id", { length: 255 }).notNull().references(() => courses.id),
     description: varchar("description", { length: 255 }),
     image: varchar("image", { length: 255 }),
-    
+
     teacherId: char("teacher_id", { length: 255 }).notNull().references(() => teachers.id),
+    order: int("order").notNull(),
     preRequisition: varchar("pre_requisition", { length: 255 }),
     whatYouGain: varchar("what_you_gain", { length: 255 }),
 

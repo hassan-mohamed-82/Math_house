@@ -1,14 +1,15 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { courses, category, teachers, chapters, courseTeachers } from "../../models/schema";
-import { eq, count, inArray, and } from "drizzle-orm";
+import { courses, category, teachers, chapters, courseTeachers, semesters } from "../../models/schema";
+import { eq, count, inArray, and, aliasedTable, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { handleImageUpdate, validateAndSaveLogo, deleteImage } from "../../utils/handleImages";
 import { randomUUID } from "crypto";
 
+// ADD switch from the front end to use Semester ID if needed
 export const createCourse = async (req: Request, res: Response) => {
-    const { name, categoryId, teacherIds, preRequisition, whatYouGain, duration, image, description, price, discount } = req.body;
+    const { name, categoryId, semesterId, teacherIds, preRequisition, whatYouGain, duration, image, description, price, discount } = req.body;
 
     if (!name || !categoryId || !duration || !price) {
         throw new BadRequest("Name, Category, Duration, Price are required");
@@ -24,6 +25,17 @@ export const createCourse = async (req: Request, res: Response) => {
         throw new BadRequest("Category not found");
     }
 
+    // Ensure the category is a leaf (has no children)
+    const childCategories = await db.select({ id: category.id }).from(category).where(eq(category.parentCategoryId, categoryId));
+    if (childCategories.length > 0) {
+        throw new BadRequest("Cannot assign a course to a non-leaf category. Please select a category with no sub-categories.");
+    }
+    if (semesterId) {
+        const existingSemester = await db.select().from(semesters).where(eq(semesters.id, semesterId));
+        if (existingSemester.length === 0) {
+            throw new BadRequest("Semester not found");
+        }
+    }
     // Validate teachers if provided
     if (teacherIds && teacherIds.length > 0) {
         const existingTeachers = await db.select().from(teachers).where(inArray(teachers.id, teacherIds));
@@ -51,6 +63,7 @@ export const createCourse = async (req: Request, res: Response) => {
         id: courseId,
         name,
         categoryId,
+        semesterId,
         preRequisition,
         whatYouGain,
         duration,
@@ -109,7 +122,7 @@ export const getAllCourses = async (req: Request, res: Response) => {
 
 export const updateCourse = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, categoryId, teacherIds, preRequisition, whatYouGain, duration, image, description, price, discount } = req.body;
+    const { name, categoryId, semesterId, teacherIds, preRequisition, whatYouGain, duration, image, description, price, discount } = req.body;
 
     const course = await db.select().from(courses).where(eq(courses.id, id));
     if (course.length === 0) {
@@ -128,6 +141,12 @@ export const updateCourse = async (req: Request, res: Response) => {
         const existingCategory = await db.select().from(category).where(eq(category.id, categoryId));
         if (existingCategory.length === 0) {
             throw new BadRequest("Category not found");
+        }
+
+        // Ensure the category is a leaf (has no children)
+        const childCategories = await db.select({ id: category.id }).from(category).where(eq(category.parentCategoryId, categoryId));
+        if (childCategories.length > 0) {
+            throw new BadRequest("Cannot assign a course to a non-leaf category. Please select a category with no sub-categories.");
         }
     }
 
@@ -150,6 +169,7 @@ export const updateCourse = async (req: Request, res: Response) => {
     await db.update(courses).set({
         name: name || course[0].name,
         categoryId: categoryId || course[0].categoryId,
+        semesterId: semesterId || course[0].semesterId,
         preRequisition: preRequisition || course[0].preRequisition,
         whatYouGain: whatYouGain || course[0].whatYouGain,
         duration: duration || course[0].duration,
@@ -252,4 +272,18 @@ export const getCourseTeachers = async (req: Request, res: Response) => {
         .where(eq(courseTeachers.courseId, id));
 
     return SuccessResponse(res, { teachers: courseTeachersList }, 200);
+}
+
+export const getCategoriesSelection = async (req: Request, res: Response) => {
+    const child = aliasedTable(category, "child");
+
+    const categories = await db.selectDistinct({
+        id: category.id,
+        name: category.name
+    })
+        .from(category)
+        .leftJoin(child, eq(child.parentCategoryId, category.id))
+        .where(isNull(child.id));
+
+    return SuccessResponse(res, { message: "Categories fetched successfully", data: categories }, 200);
 }
