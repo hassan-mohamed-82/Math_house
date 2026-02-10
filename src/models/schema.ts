@@ -7,4 +7,5 @@ export * from "./schema/admin/teacher";
 export * from "./schema/admin/category";
 export * from "./schema/admin/courses";
 export * from "./schema/admin/chapters";
+export * from "./schema/admin/semester";
 export * from "./schema/admin/courseTeachers";
