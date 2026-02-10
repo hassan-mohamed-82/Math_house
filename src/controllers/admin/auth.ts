@@ -1,13 +1,13 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { admins } from "../../models/schema";
+import { admins, roles } from "../../models/schema";
 import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { UnauthorizedError } from "../../Errors";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import { Permission } from "../../types/custom";
+import { Permission, Role } from "../../types/custom";
 import { generateAdminToken } from "../../utils/jwt";
 
 export async function login(req: Request, res: Response) {
@@ -27,22 +27,28 @@ export async function login(req: Request, res: Response) {
         throw new UnauthorizedError("Admin is inactive");
     }
 
+    let role = null;
+    if (admin[0].roleId) {
+        role = await db.select().from(roles).where(eq(roles.id, admin[0].roleId));
+    }
     const tokenPayload = {
         id: admin[0].id,
         name: admin[0].name,
-        // role: admin[0].roleId,
+        role: (role && role[0] ? role[0].name : "admin") as Role,
         // permissions: admin[0].permissions,
     };
 
     const token = generateAdminToken(tokenPayload);
 
 
-    return SuccessResponse(res, { message: "Admin logged in successfully", token, admin:{
-        name: admin[0].name,
-        email: admin[0].email,
-        phoneNumber: admin[0].phoneNumber,
-        roleId: admin[0].roleId,
-        permissions: admin[0].permissions,
-        status: admin[0].status,
-    } }, 200);
+    return SuccessResponse(res, {
+        message: "Admin logged in successfully", token, admin: {
+            name: admin[0].name,
+            email: admin[0].email,
+            phoneNumber: admin[0].phoneNumber,
+            roleId: admin[0].roleId,
+            permissions: admin[0].permissions,
+            status: admin[0].status,
+        }
+    }, 200);
 }

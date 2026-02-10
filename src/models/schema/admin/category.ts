@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, char, timestamp, mysqlEnum, double } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, mysqlEnum, double, AnyMySqlColumn } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 
 export const category = mysqlTable("category", {
@@ -7,6 +7,7 @@ export const category = mysqlTable("category", {
     description: varchar("description", { length: 255 }),
     image: varchar("image", { length: 255 }),
 
+    parentCategoryId: char("parent_category_id", { length: 255 }).references((): AnyMySqlColumn => category.id),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });

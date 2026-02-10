@@ -3,7 +3,7 @@ export type Role = 'admin' | 'teacher' | 'parent' | 'student';
 export interface TokenPayload {
   id: string;
   name: string;
-  // role: Role;
+  role: Role;
   // permissions: Permission[];
 }
 
