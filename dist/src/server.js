@@ -14,8 +14,19 @@ const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const helmet_1 = __importDefault(require("helmet"));
 // import { startCronJobs } from "./jobs/cronJobs";
 const http_1 = __importDefault(require("http"));
+const fs_1 = __importDefault(require("fs"));
+// import { Server } from "socket.io";
 // import { initSocket } from "./socket";
-dotenv_1.default.config();
+const logFile = path_1.default.join(__dirname, "../../server_debug.log");
+const log = (msg) => fs_1.default.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`);
+log("Starting server.ts...");
+try {
+    dotenv_1.default.config();
+    log("Environment loaded.");
+}
+catch (e) {
+    log(`Error loading dotenv: ${e}`);
+}
 const app = (0, express_1.default)();
 // Trust proxy for correct IP/protocol behind Nginx/Passenger
 app.set("trust proxy", 1);
@@ -41,7 +52,8 @@ app.use((0, helmet_1.default)({
 app.use((0, cookie_parser_1.default)());
 app.use(express_1.default.json({ limit: "20mb" }));
 app.use(express_1.default.urlencoded({ extended: true, limit: "20mb" }));
-app.use("/uploads", express_1.default.static(path_1.default.join(process.cwd(), "uploads")));
+app.use("/uploads", express_1.default.static(path_1.default.join(__dirname, "../../uploads")));
+log("Middleware configured.");
 app.get("/api/test", (req, res, next) => {
     res.json({ message: "API is working! notify token" });
 });
@@ -53,7 +65,15 @@ app.use(errorHandler_1.errorHandler);
 // startCronJobs();
 // startCronJobs();
 const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => {
-    console.log(`🚀 Server is running on port/pipe ${PORT}`);
-});
+log(`Attempting to listen on port/pipe: ${PORT}`);
+try {
+    httpServer.listen(PORT, () => {
+        log(`🚀 Server successfully started on port ${PORT}`);
+        console.log(`🚀 Server is running on port/pipe ${PORT}`);
+    });
+}
+catch (error) {
+    log(`❌ Failed to listen: ${error}`);
+    process.exit(1);
+}
 exports.default = app;

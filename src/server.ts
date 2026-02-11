@@ -9,10 +9,21 @@ import cookieParser from "cookie-parser";
 import helmet from "helmet";
 // import { startCronJobs } from "./jobs/cronJobs";
 import http from "http";
-import { Server } from "socket.io";
+import fs from "fs";
+// import { Server } from "socket.io";
 // import { initSocket } from "./socket";
 
-dotenv.config();
+const logFile = path.join(__dirname, "../../server_debug.log");
+const log = (msg: string) => fs.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`);
+
+log("Starting server.ts...");
+
+try {
+  dotenv.config();
+  log("Environment loaded.");
+} catch (e) {
+  log(`Error loading dotenv: ${e}`);
+}
 
 const app = express();
 
@@ -46,7 +57,9 @@ app.use(
 app.use(cookieParser());
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+app.use("/uploads", express.static(path.join(__dirname, "../../uploads")));
+
+log("Middleware configured.");
 
 app.get("/api/test", (req, res, next) => {
   res.json({ message: "API is working! notify token" });
@@ -65,8 +78,16 @@ app.use(errorHandler);
 // startCronJobs();
 
 const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Server is running on port/pipe ${PORT}`);
-});
+log(`Attempting to listen on port/pipe: ${PORT}`);
+
+try {
+  httpServer.listen(PORT, () => {
+    log(`🚀 Server successfully started on port ${PORT}`);
+    console.log(`🚀 Server is running on port/pipe ${PORT}`);
+  });
+} catch (error) {
+  log(`❌ Failed to listen: ${error}`);
+  process.exit(1);
+}
 
 export default app;
