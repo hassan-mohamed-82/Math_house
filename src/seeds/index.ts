@@ -5,6 +5,7 @@ import { seedTeachers } from "./teachers";
 import { seedSemesters } from "./semesters";
 import { seedCourses } from "./courses";
 import { seedChapters } from "./chapters";
+import { seedLessons } from "./lessons";
 import { seedStudents } from "./students";
 import { seedParents } from "./parents";
 import { pool } from "../models/connection";
@@ -38,13 +39,17 @@ async function main() {
 
         // 6. Chapters (depends on courses, categories, teachers)
         console.log("\n📖 Seeding Chapters...");
-        await seedChapters(courseMap, categoryMap, teacherMap);
+        const chapterMap = await seedChapters(courseMap, categoryMap, teacherMap);
 
-        // 7. Students (depends on categories)
+        // 7. Lessons & Ideas (depends on chapters, courses, categories, teachers)
+        console.log("\n📝 Seeding Lessons & Ideas...");
+        await seedLessons(chapterMap, courseMap, categoryMap, teacherMap);
+
+        // 8. Students (depends on categories)
         console.log("\n🎓 Seeding Students...");
         await seedStudents(categoryMap);
 
-        // 8. Parents
+        // 9. Parents
         console.log("\n👪 Seeding Parents...");
         await seedParents();
 

@@ -7,7 +7,9 @@ export async function seedChapters(
     courseMap: Record<string, string>,
     categoryMap: Record<string, string>,
     teacherMap: Record<string, string>
-) {
+): Promise<Record<string, string>> {
+    const chapterMap: Record<string, string> = {};
+
     const chaptersData = [
         // Algebra Basics chapters
         { name: "Numbers & Operations", course: "Algebra Basics", category: "Primary 1", teacher: "Ahmed Hassan", duration: "2 weeks", price: 50, discount: 5, order: 1 },
@@ -47,12 +49,14 @@ export async function seedChapters(
 
         // Skip if chapter with same name already exists for this course
         if (existing.length > 0 && existing.some(e => e.courseId === courseId)) {
+            chapterMap[ch.name] = existing.find(e => e.courseId === courseId)!.id;
             console.log(`  Chapter "${ch.name}" already exists`);
             continue;
         }
 
+        const id = uuidv4();
         await db.insert(chapters).values({
-            id: uuidv4(),
+            id,
             name: ch.name,
             courseId,
             categoryId,
@@ -63,6 +67,9 @@ export async function seedChapters(
             order: ch.order,
         });
 
+        chapterMap[ch.name] = id;
         console.log(`  ✅ Chapter "${ch.name}" created (order: ${ch.order})`);
     }
+
+    return chapterMap;
 }

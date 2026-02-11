@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { courses, category, teachers, chapters, courseTeachers, semesters } from "../../models/schema";
+import { courses, category, teachers, chapters, courseTeachers, semesters, lessons, lessonIdeas } from "../../models/schema";
 import { eq, count, inArray, and, aliasedTable, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -188,10 +188,37 @@ export const deleteCourse = async (req: Request, res: Response) => {
     if (course.length === 0) {
         throw new BadRequest("Course not found");
     }
+
+    // Cascade: find all chapters under this course
+    const courseChapters = await db.select().from(chapters).where(eq(chapters.courseId, id));
+
+    for (const chapter of courseChapters) {
+        // Find all lessons under this chapter
+        const chapterLessons = await db.select().from(lessons).where(eq(lessons.chapterId, chapter.id));
+
+        for (const lesson of chapterLessons) {
+            // Delete all ideas under this lesson
+            await db.delete(lessonIdeas).where(eq(lessonIdeas.lessonId, lesson.id));
+
+            // Delete lesson image if exists
+            if (lesson.image) {
+                await deleteImage(lesson.image);
+            }
+        }
+
+        // Delete all lessons under this chapter
+        await db.delete(lessons).where(eq(lessons.chapterId, chapter.id));
+    }
+
+    // Delete all chapters under this course
+    await db.delete(chapters).where(eq(chapters.courseId, id));
+
+    // Delete course image
     if (course[0].image) {
         await deleteImage(course[0].image);
     }
-    // Junction table entries will be deleted automatically due to ON DELETE CASCADE
+
+    // Delete the course (junction table entries handled by ON DELETE CASCADE)
     await db.delete(courses).where(eq(courses.id, id));
     return SuccessResponse(res, { message: "Course deleted successfully" }, 200);
 }

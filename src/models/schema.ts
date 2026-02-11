@@ -9,3 +9,4 @@ export * from "./schema/admin/courses";
 export * from "./schema/admin/chapters";
 export * from "./schema/admin/semester";
 export * from "./schema/admin/courseTeachers";
+export * from "./schema/admin/lessons";
