@@ -70,14 +70,20 @@ if (!fs.existsSync(uploadsPath)) {
 
 app.use("/uploads", express.static(uploadsPath));
 
-// 🩺 Health Check
-app.get("/api/test", (req, res, next) => {
-  log("Received request on /api/test");
+// 🩺 Health Check (Root Level)
+app.get("/health", (req, res) => {
+  log("Received request on /health");
+  res.json({ status: "OK", message: "Server is healthy" });
+});
+
+// 🩺 Debug Route (Renamed to avoid /api prefix issues)
+app.get("/server-check", (req, res) => {
+  log("Received request on /server-check");
   res.json({ message: "API is working! (FULL MODE RESTORED)" });
 });
 
-// 🛣️ Main Routes
-app.use("/api", ApiRoute);
+// 🛣️ Main Routes (Commented out temporarily to test prefix theory)
+// app.use("/api", ApiRoute);
 
 // 🚫 404 Handler
 app.use((req, res, next) => {

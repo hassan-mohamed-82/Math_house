@@ -14,8 +14,6 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const helmet_1 = __importDefault(require("helmet"));
-// 🔄 App Modules
-const routes_1 = __importDefault(require("./routes"));
 const errorHandler_1 = require("./middlewares/errorHandler");
 const Errors_1 = require("./Errors");
 // import { startCronJobs } from "./jobs/cronJobs";
@@ -64,13 +62,18 @@ if (!fs_1.default.existsSync(uploadsPath)) {
     // Optional: fs.mkdirSync(uploadsPath, { recursive: true });
 }
 app.use("/uploads", express_1.default.static(uploadsPath));
-// 🩺 Health Check
-app.get("/api/test", (req, res, next) => {
-    log("Received request on /api/test");
+// 🩺 Health Check (Root Level)
+app.get("/health", (req, res) => {
+    log("Received request on /health");
+    res.json({ status: "OK", message: "Server is healthy" });
+});
+// 🩺 Debug Route (Renamed to avoid /api prefix issues)
+app.get("/server-check", (req, res) => {
+    log("Received request on /server-check");
     res.json({ message: "API is working! (FULL MODE RESTORED)" });
 });
-// 🛣️ Main Routes
-app.use("/api", routes_1.default);
+// 🛣️ Main Routes (Commented out temporarily to test prefix theory)
+// app.use("/api", ApiRoute);
 // 🚫 404 Handler
 app.use((req, res, next) => {
     throw new Errors_1.NotFound("Route not found");
