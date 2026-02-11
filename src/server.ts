@@ -1,30 +1,116 @@
+// 🚀 FIRST: Load Environment Variables BEFORE imports via hoisting
+import "dotenv/config";
+
+// 🔌 Built-in Modules
 import http from "http";
 import fs from "fs";
 import path from "path";
 
-const logFile = path.join(__dirname, "../../SERVER_CRASH.log");
+// 📦 External Modules
+import express from "express";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import helmet from "helmet";
+
+// 🔄 App Modules
+import ApiRoute from "./routes";
+import { errorHandler } from "./middlewares/errorHandler";
+import { NotFound } from "./Errors";
+// import { startCronJobs } from "./jobs/cronJobs";
+// import { Server } from "socket.io";
+// import { initSocket } from "./socket";
+import { connectDB } from "./models/connection";
+
+// 📝 Logging Setup
+const logFile = path.join(__dirname, "../../server_debug.log");
 const log = (msg: string) => {
   try {
+    // Use synchronous append to ensure write happens before crash
     fs.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`);
   } catch (e) { console.error(e) }
 };
 
-log("Server.ts: Starting pure node execution...");
+log("Server.ts: Starting full application execution...");
 
-try {
-  const server = http.createServer((req, res) => {
-    log(`Received request: ${req.method} ${req.url}`);
-    res.writeHead(200, { "Content-Type": "application/json" });
-    res.end(JSON.stringify({ message: "API is working! PURE NODE MODE" }));
-  });
+const app = express();
 
-  const PORT = process.env.PORT || 3000;
-  server.listen(PORT, () => {
-    log(`Server listening on port/pipe: ${PORT}`);
-    console.log(`Server listening on port/pipe: ${PORT}`);
-  });
-} catch (e: any) {
-  log(`FATAL ERROR: ${e.message}`);
+// 🛡️ Security & Proxy
+app.set("trust proxy", 1); // Essential for Passenger/Nginx
+app.use(helmet({ crossOriginResourcePolicy: false }));
+
+// 🔌 CORS Setup
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+}));
+
+// 🍪 Middlewares
+app.use(cookieParser());
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+
+// 📁 Static Files (Fixed path resolution)
+// Use process.cwd() as backup if __dirname fails, but traverse up from dist/src/
+const uploadsPath = path.resolve(__dirname, "../../uploads");
+log(`Serving uploads from: ${uploadsPath}`);
+
+if (!fs.existsSync(uploadsPath)) {
+  log(`WARNING: Uploads directory does not exist at ${uploadsPath}`);
+  // Optional: fs.mkdirSync(uploadsPath, { recursive: true });
 }
-// Export nothing, this is a standalone script effectively
-export { };
+
+app.use("/uploads", express.static(uploadsPath));
+
+// 🩺 Health Check
+app.get("/api/test", (req, res, next) => {
+  log("Received request on /api/test");
+  res.json({ message: "API is working! (FULL MODE RESTORED)" });
+});
+
+// 🛣️ Main Routes
+app.use("/api", ApiRoute);
+
+// 🚫 404 Handler
+app.use((req, res, next) => {
+  throw new NotFound("Route not found");
+});
+
+// 🚨 Global Error Handler
+app.use(errorHandler);
+
+// 🚀 Server Startup
+const httpServer = http.createServer(app);
+
+/*
+const io = new Server(httpServer, {
+  cors: { origin: "*", methods: ["GET", "POST"] }
+});
+initSocket(io);
+*/
+
+const startServer = async () => {
+  try {
+    await connectDB();
+    // startCronJobs();
+
+    const PORT = process.env.PORT || 3000;
+    log(`Attempting to listen on port/pipe: ${PORT}`);
+
+    httpServer.listen(PORT, () => {
+      log(`🚀 Server successfully started on port ${PORT}`);
+      console.log(`🚀 Server is running on port/pipe ${PORT}`);
+    });
+
+  } catch (error: any) {
+    log(`❌ CRITICAL STARTUP ERROR: ${error.message}`);
+    log(error.stack);
+    process.exit(1);
+  }
+};
+
+startServer();
+
+export default app;
