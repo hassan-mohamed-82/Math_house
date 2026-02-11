@@ -53,7 +53,7 @@ app.use(errorHandler_1.errorHandler);
 // startCronJobs();
 // startCronJobs();
 const PORT = process.env.PORT || 3000;
-httpServer.listen(Number(PORT), () => {
-    console.log(`🚀 Server is running on port ${PORT}`);
+httpServer.listen(PORT, () => {
+    console.log(`🚀 Server is running on port/pipe ${PORT}`);
 });
 exports.default = app;
