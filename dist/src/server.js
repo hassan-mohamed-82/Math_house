@@ -41,7 +41,7 @@ app.use((0, helmet_1.default)({
 app.use((0, cookie_parser_1.default)());
 app.use(express_1.default.json({ limit: "20mb" }));
 app.use(express_1.default.urlencoded({ extended: true, limit: "20mb" }));
-app.use("/uploads", express_1.default.static(path_1.default.join(__dirname, "../uploads")));
+app.use("/uploads", express_1.default.static(path_1.default.join(process.cwd(), "uploads")));
 app.get("/api/test", (req, res, next) => {
     res.json({ message: "API is working! notify token" });
 });
