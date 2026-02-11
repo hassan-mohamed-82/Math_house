@@ -16,6 +16,9 @@ dotenv.config();
 
 const app = express();
 
+// Trust proxy for correct IP/protocol behind Nginx/Passenger
+app.set("trust proxy", 1);
+
 const httpServer = http.createServer(app);
 // const io = new Server(httpServer, {
 //   cors: {
@@ -59,6 +62,11 @@ app.use(errorHandler);
 
 // startCronJobs();
 
-httpServer.listen(3000, () => {
-  console.log("Server is running on http://localhost:3000");
+// startCronJobs();
+
+const PORT = process.env.PORT || 3000;
+httpServer.listen(Number(PORT), () => {
+  console.log(`🚀 Server is running on port ${PORT}`);
 });
+
+export default app;

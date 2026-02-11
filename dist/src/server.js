@@ -17,6 +17,8 @@ const http_1 = __importDefault(require("http"));
 // import { initSocket } from "./socket";
 dotenv_1.default.config();
 const app = (0, express_1.default)();
+// Trust proxy for correct IP/protocol behind Nginx/Passenger
+app.set("trust proxy", 1);
 const httpServer = http_1.default.createServer(app);
 // const io = new Server(httpServer, {
 //   cors: {
@@ -49,6 +51,9 @@ app.use((req, res, next) => {
 });
 app.use(errorHandler_1.errorHandler);
 // startCronJobs();
-httpServer.listen(3000, () => {
-    console.log("Server is running on http://localhost:3000");
+// startCronJobs();
+const PORT = process.env.PORT || 3000;
+httpServer.listen(Number(PORT), () => {
+    console.log(`🚀 Server is running on port ${PORT}`);
 });
+exports.default = app;
