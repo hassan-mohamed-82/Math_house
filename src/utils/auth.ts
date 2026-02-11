@@ -32,6 +32,7 @@ export const generateToken = (data: GenerateTokenInput): string => {
   const payload: TokenPayload = {
     id: data.id,
     name: data.name,
+    email: data.email,
     role: data.role,
   };
 
@@ -89,6 +90,7 @@ export const refreshToken = (oldToken: string): string => {
   const payload: TokenPayload = {
     id: decoded.id,
     name: decoded.name,
+    email: decoded.email,
     role: decoded.role,
   };
 
