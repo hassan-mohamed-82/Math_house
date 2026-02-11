@@ -11,8 +11,7 @@ exports.teachers = (0, mysql_core_1.mysqlTable)("teachers", {
     phoneNumber: (0, mysql_core_1.varchar)("phone_number", { length: 255 }).notNull(),
     password: (0, mysql_core_1.varchar)("password", { length: 255 }).notNull(),
     avatar: (0, mysql_core_1.varchar)("avatar", { length: 500 }),
-    categoryId: (0, mysql_core_1.char)("category_id", { length: 36 }).references(() => schema_1.category.id),
-    courseId: (0, mysql_core_1.char)("course_id", { length: 36 }).references(() => schema_1.courses.id),
+    categoryId: (0, mysql_core_1.char)("category_id", { length: 255 }).references(() => schema_1.category.id),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow(),
 });

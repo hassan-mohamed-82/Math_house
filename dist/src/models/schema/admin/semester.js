@@ -1,14 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.category = void 0;
+exports.semesters = void 0;
 const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
-exports.category = (0, mysql_core_1.mysqlTable)("category", {
+const category_1 = require("./category");
+exports.semesters = (0, mysql_core_1.mysqlTable)("semesters", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
-    description: (0, mysql_core_1.varchar)("description", { length: 255 }),
-    image: (0, mysql_core_1.varchar)("image", { length: 255 }),
-    parentCategoryId: (0, mysql_core_1.char)("parent_category_id", { length: 255 }).references(() => exports.category.id),
+    categoryId: (0, mysql_core_1.char)("category_id", { length: 255 }).notNull().references(() => category_1.category.id),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

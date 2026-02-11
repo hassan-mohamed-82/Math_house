@@ -16,6 +16,8 @@ const connection_1 = require("./models/connection");
 const path_1 = __importDefault(require("path"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
+// Trust proxy for correct IP/protocol behind Nginx/Passenger
+app.set("trust proxy", 1);
 app.use((0, helmet_1.default)({ crossOriginResourcePolicy: false }));
 app.use((0, cors_1.default)({ origin: "*" }));
 app.use((0, cookie_parser_1.default)());
@@ -32,9 +34,29 @@ const server = http_1.default.createServer(app);
 const startServer = async () => {
     await (0, connection_1.connectDB)();
     const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
+    /*
+     * Bind explicitly to 0.0.0.0 for Passenger/Container compatibility.
+     * Passenger will still manage the port via process.env.PORT, but this ensures
+     * the app is reachable on all interfaces if run standalone or in container.
+     */
+    server.listen(Number(PORT), "0.0.0.0", () => {
         console.log(`🚀 Server is running on port ${PORT}`);
     });
+    // Graceful shutdown logic
+    const shutdown = () => {
+        console.log("🛑 Received kill signal, shutting down gracefully...");
+        server.close(() => {
+            console.log("✅ Closed out remaining connections.");
+            process.exit(0);
+        });
+        // Force close if it takes too long
+        setTimeout(() => {
+            console.error("❌ Could not close connections in time, forcefully shutting down");
+            process.exit(1);
+        }, 10000);
+    };
+    process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
 };
 startServer();
 exports.default = app;

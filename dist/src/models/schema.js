@@ -23,3 +23,6 @@ __exportStar(require("./schema/admin/teacher"), exports);
 __exportStar(require("./schema/admin/category"), exports);
 __exportStar(require("./schema/admin/courses"), exports);
 __exportStar(require("./schema/admin/chapters"), exports);
+__exportStar(require("./schema/admin/semester"), exports);
+__exportStar(require("./schema/admin/courseTeachers"), exports);
+__exportStar(require("./schema/admin/lessons"), exports);

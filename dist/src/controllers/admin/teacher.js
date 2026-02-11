@@ -7,6 +7,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const handleImages_1 = require("../../utils/handleImages");
+const crypto_1 = require("crypto");
 const createTeacher = async (req, res) => {
     const { name, email, phoneNumber, password, avatar, categoryId, courseId } = req.body;
     if (!name || !email || !phoneNumber || !password) {
@@ -16,24 +17,39 @@ const createTeacher = async (req, res) => {
     if (existingTeacher.length > 0) {
         throw new BadRequest_1.BadRequest("Teacher already exists");
     }
-    const existingCategory = await connection_1.db.select().from(schema_1.category).where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId));
-    if (existingCategory.length === 0) {
-        throw new BadRequest_1.BadRequest("Category not found");
-    }
-    const existingCourse = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, courseId));
-    if (existingCourse.length === 0) {
-        throw new BadRequest_1.BadRequest("Course not found");
-    }
     const avatarURL = await (0, handleImages_1.validateAndSaveLogo)(req, avatar, "teachers");
+    if (categoryId) {
+        const existingCategory = await connection_1.db.select().from(schema_1.category).where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId));
+        if (existingCategory.length === 0) {
+            throw new BadRequest_1.BadRequest("Category not found");
+        }
+    }
+    // Add Teacher to Course if courseId is provided
+    if (courseId) {
+        const existingCourse = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, courseId));
+        if (existingCourse.length === 0) {
+            throw new BadRequest_1.BadRequest("Course not found");
+        }
+    }
+    // ---------------------------------------------------
+    // Generate teacher ID
+    const teacherId = (0, crypto_1.randomUUID)();
     await connection_1.db.insert(schema_1.teachers).values({
+        id: teacherId,
         name,
         email,
         phoneNumber,
         password,
         avatar: avatarURL,
         categoryId,
-        courseId,
     });
+    // Add teacher to course via junction table if courseId provided
+    if (courseId) {
+        await connection_1.db.insert(schema_1.courseTeachers).values({
+            courseId,
+            teacherId,
+        });
+    }
     return (0, response_1.SuccessResponse)(res, { message: "Teacher created successfully" }, 200);
 };
 exports.createTeacher = createTeacher;
@@ -53,21 +69,13 @@ const getAllTeachers = async (req, res) => {
 exports.getAllTeachers = getAllTeachers;
 const updateTeacher = async (req, res) => {
     const { id } = req.params;
-    const { name, email, phoneNumber, password, avatar, categoryId, courseId } = req.body;
+    const { name, email, phoneNumber, password, avatar } = req.body;
     if (!name || !email || !phoneNumber || !password) {
         throw new BadRequest_1.BadRequest("Name, Email, Phone Number, Password are required");
     }
     const existingTeacher = await connection_1.db.select().from(schema_1.teachers).where((0, drizzle_orm_1.eq)(schema_1.teachers.id, id));
     if (existingTeacher.length === 0) {
         throw new BadRequest_1.BadRequest("Teacher not found");
-    }
-    const existingCategory = await connection_1.db.select().from(schema_1.category).where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId));
-    if (existingCategory.length === 0) {
-        throw new BadRequest_1.BadRequest("Category not found");
-    }
-    const existingCourse = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, courseId));
-    if (existingCourse.length === 0) {
-        throw new BadRequest_1.BadRequest("Course not found");
     }
     const avatarURL = await (0, handleImages_1.handleImageUpdate)(req, existingTeacher[0].avatar, avatar, "teachers");
     await connection_1.db.update(schema_1.teachers).set({
@@ -76,8 +84,6 @@ const updateTeacher = async (req, res) => {
         phoneNumber,
         password,
         avatar: avatarURL,
-        categoryId,
-        courseId,
     }).where((0, drizzle_orm_1.eq)(schema_1.teachers.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Teacher updated successfully" }, 200);
 };

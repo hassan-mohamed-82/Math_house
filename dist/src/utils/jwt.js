@@ -11,8 +11,8 @@ const generateAdminToken = (data) => {
     const payload = {
         id: data.id,
         name: data.name,
-        email: data.email,
         role: data.role,
+        // permissions: data.permissions,
     };
     return jsonwebtoken_1.default.sign(payload, JWT_SECRET, { expiresIn: "7d" });
 };

@@ -52,7 +52,6 @@ const generateToken = (data) => {
     const payload = {
         id: data.id,
         name: data.name,
-        email: data.email,
         role: data.role,
     };
     const expiresIn = TOKEN_EXPIRY[data.role];
@@ -100,7 +99,6 @@ const refreshToken = (oldToken) => {
     const payload = {
         id: decoded.id,
         name: decoded.name,
-        email: decoded.email,
         role: decoded.role,
     };
     const expiresIn = TOKEN_EXPIRY[payload.role];
