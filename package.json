@@ -1,7 +1,7 @@
 {
   "name": "first_project",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "dist/src/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
