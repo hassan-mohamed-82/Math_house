@@ -34,7 +34,13 @@ log("Server.ts: Starting full application execution...");
 
 const app = express();
 
-// 🛡️ Security & Proxy
+// � Global Request Logger - Debugging 500
+app.use((req, res, next) => {
+  log(`[REQUEST] ${req.method} ${req.url} from ${req.ip}`);
+  next();
+});
+
+// �🛡️ Security & Proxy
 app.set("trust proxy", 1); // Essential for Passenger/Nginx
 app.use(helmet({ crossOriginResourcePolicy: false }));
 
@@ -92,6 +98,17 @@ initSocket(io);
 */
 
 const startServer = async () => {
+  // Global Exception Handlers
+  process.on('uncaughtException', (err) => {
+    log(`CRITICAL: Uncaught Exception: ${err.message}`);
+    log(err.stack || '');
+    // process.exit(1); // Don't crash immediately if possible
+  });
+
+  process.on('unhandledRejection', (reason: any, promise) => {
+    log(`CRITICAL: Unhandled Rejection at: ${promise} reason: ${reason}`);
+  });
+
   try {
     await connectDB();
     // startCronJobs();
