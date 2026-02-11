@@ -1,26 +1,34 @@
+// import express from "express";
+// import path from "path";
+// import ApiRoute from "./routes";
+// import { errorHandler } from "./middlewares/errorHandler";
+// import { NotFound } from "./Errors";
+// import dotenv from "dotenv";
+// import cors from "cors";
+// import cookieParser from "cookie-parser";
+// import helmet from "helmet";
+// // import { startCronJobs } from "./jobs/cronJobs";
+// import http from "http";
+// import fs from "fs";
+
+// Minimal import block
 import express from "express";
-import path from "path";
-import ApiRoute from "./routes";
-import { errorHandler } from "./middlewares/errorHandler";
-import { NotFound } from "./Errors";
-import dotenv from "dotenv";
-import cors from "cors";
-import cookieParser from "cookie-parser";
-import helmet from "helmet";
-// import { startCronJobs } from "./jobs/cronJobs";
 import http from "http";
 import fs from "fs";
-// import { Server } from "socket.io";
-// import { initSocket } from "./socket";
+import path from "path";
 
-const logFile = path.join(__dirname, "../../server_debug.log");
-const log = (msg: string) => fs.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`);
+const logFile = path.join(__dirname, "../../SERVER_CRASH.log");
+const log = (msg: string) => {
+  try {
+    fs.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`);
+  } catch (e) { console.error(e) }
+};
 
-log("Starting server.ts...");
+log("Server.ts: Starting minimal execution...");
 
 try {
-  dotenv.config();
-  log("Environment loaded.");
+  // dotenv.config();
+  log("Environment config skipped (minimal mode).");
 } catch (e) {
   log(`Error loading dotenv: ${e}`);
 }
@@ -40,7 +48,7 @@ const httpServer = http.createServer(app);
 
 // initSocket(io);
 
-// ✅ CORS بدون app.options
+/*
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -60,11 +68,14 @@ app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 app.use("/uploads", express.static(path.join(__dirname, "../../uploads")));
 
 log("Middleware configured.");
+*/
 
 app.get("/api/test", (req, res, next) => {
-  res.json({ message: "API is working! notify token" });
+  log("Received request on /api/test");
+  res.json({ message: "API is working! notify token (MINIMAL MODE)" });
 });
 
+/*
 app.use("/api", ApiRoute);
 
 app.use((req, res, next) => {
@@ -72,6 +83,7 @@ app.use((req, res, next) => {
 });
 
 app.use(errorHandler);
+*/
 
 // startCronJobs();
 

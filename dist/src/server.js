@@ -1,28 +1,38 @@
 "use strict";
+// import express from "express";
+// import path from "path";
+// import ApiRoute from "./routes";
+// import { errorHandler } from "./middlewares/errorHandler";
+// import { NotFound } from "./Errors";
+// import dotenv from "dotenv";
+// import cors from "cors";
+// import cookieParser from "cookie-parser";
+// import helmet from "helmet";
+// // import { startCronJobs } from "./jobs/cronJobs";
+// import http from "http";
+// import fs from "fs";
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+// Minimal import block
 const express_1 = __importDefault(require("express"));
-const path_1 = __importDefault(require("path"));
-const routes_1 = __importDefault(require("./routes"));
-const errorHandler_1 = require("./middlewares/errorHandler");
-const Errors_1 = require("./Errors");
-const dotenv_1 = __importDefault(require("dotenv"));
-const cors_1 = __importDefault(require("cors"));
-const cookie_parser_1 = __importDefault(require("cookie-parser"));
-const helmet_1 = __importDefault(require("helmet"));
-// import { startCronJobs } from "./jobs/cronJobs";
 const http_1 = __importDefault(require("http"));
 const fs_1 = __importDefault(require("fs"));
-// import { Server } from "socket.io";
-// import { initSocket } from "./socket";
-const logFile = path_1.default.join(__dirname, "../../server_debug.log");
-const log = (msg) => fs_1.default.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`);
-log("Starting server.ts...");
+const path_1 = __importDefault(require("path"));
+const logFile = path_1.default.join(__dirname, "../../SERVER_CRASH.log");
+const log = (msg) => {
+    try {
+        fs_1.default.appendFileSync(logFile, `${new Date().toISOString()} - ${msg}\n`);
+    }
+    catch (e) {
+        console.error(e);
+    }
+};
+log("Server.ts: Starting minimal execution...");
 try {
-    dotenv_1.default.config();
-    log("Environment loaded.");
+    // dotenv.config();
+    log("Environment config skipped (minimal mode).");
 }
 catch (e) {
     log(`Error loading dotenv: ${e}`);
@@ -38,30 +48,40 @@ const httpServer = http_1.default.createServer(app);
 //   }
 // });
 // initSocket(io);
-// ✅ CORS بدون app.options
-app.use((0, cors_1.default)({
-    origin: "*",
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
-    preflightContinue: false,
-    optionsSuccessStatus: 204,
+/*
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
 }));
-app.use((0, helmet_1.default)({
+
+app.use(
+  helmet({
     crossOriginResourcePolicy: false,
-}));
-app.use((0, cookie_parser_1.default)());
-app.use(express_1.default.json({ limit: "20mb" }));
-app.use(express_1.default.urlencoded({ extended: true, limit: "20mb" }));
-app.use("/uploads", express_1.default.static(path_1.default.join(__dirname, "../../uploads")));
+  })
+);
+app.use(cookieParser());
+app.use(express.json({ limit: "20mb" }));
+app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+app.use("/uploads", express.static(path.join(__dirname, "../../uploads")));
+
 log("Middleware configured.");
+*/
 app.get("/api/test", (req, res, next) => {
-    res.json({ message: "API is working! notify token" });
+    log("Received request on /api/test");
+    res.json({ message: "API is working! notify token (MINIMAL MODE)" });
 });
-app.use("/api", routes_1.default);
+/*
+app.use("/api", ApiRoute);
+
 app.use((req, res, next) => {
-    throw new Errors_1.NotFound("Route not found");
+  throw new NotFound("Route not found");
 });
-app.use(errorHandler_1.errorHandler);
+
+app.use(errorHandler);
+*/
 // startCronJobs();
 // startCronJobs();
 const PORT = process.env.PORT || 3000;
