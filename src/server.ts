@@ -1,5 +1,5 @@
 import express from "express";
-import http from "http";
+import path from "path";
 import ApiRoute from "./routes";
 import { errorHandler } from "./middlewares/errorHandler";
 import { NotFound } from "./Errors";
@@ -7,24 +7,47 @@ import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
-import { connectDB } from "./models/connection";
-import path from "path";
+// import { startCronJobs } from "./jobs/cronJobs";
+import http from "http";
+import { Server } from "socket.io";
+// import { initSocket } from "./socket";
 
 dotenv.config();
 
 const app = express();
 
-// Trust proxy for correct IP/protocol behind Nginx/Passenger
-app.set("trust proxy", 1);
+const httpServer = http.createServer(app);
+// const io = new Server(httpServer, {
+//   cors: {
+//     origin: "*",
+//     methods: ["GET", "POST"]
+//   }
+// });
 
-app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors({ origin: "*" }));
+// initSocket(io);
+
+// ✅ CORS بدون app.options
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+}));
+
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false,
+  })
+);
 app.use(cookieParser());
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
-const uploadsPath = path.join(process.cwd(), "uploads");
-app.use("/uploads", express.static(uploadsPath));
+app.get("/api/test", (req, res, next) => {
+  res.json({ message: "API is working! notify token" });
+});
 
 app.use("/api", ApiRoute);
 
@@ -34,41 +57,8 @@ app.use((req, res, next) => {
 
 app.use(errorHandler);
 
-const server = http.createServer(app);
+// startCronJobs();
 
-const startServer = async () => {
-  await connectDB();
-
-
-  const PORT = process.env.PORT || 3000;
-  /* 
-   * Bind explicitly to 0.0.0.0 for Passenger/Container compatibility.
-   * Passenger will still manage the port via process.env.PORT, but this ensures
-   * the app is reachable on all interfaces if run standalone or in container.
-   */
-  server.listen(Number(PORT), "0.0.0.0", () => {
-    console.log(`🚀 Server is running on port ${PORT}`);
-  });
-
-  // Graceful shutdown logic
-  const shutdown = () => {
-    console.log("🛑 Received kill signal, shutting down gracefully...");
-    server.close(() => {
-      console.log("✅ Closed out remaining connections.");
-      process.exit(0);
-    });
-
-    // Force close if it takes too long
-    setTimeout(() => {
-      console.error("❌ Could not close connections in time, forcefully shutting down");
-      process.exit(1);
-    }, 10000);
-  };
-
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
-};
-
-startServer();
-
-export default app;
+httpServer.listen(3000, () => {
+  console.log("Server is running on http://localhost:3000");
+});
