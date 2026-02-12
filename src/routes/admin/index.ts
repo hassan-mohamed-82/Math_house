@@ -10,6 +10,7 @@ import courseRouter from "./courses"
 import semesterRouter from "./semester"
 import chaptersRouter from "./chapters"
 import lessonsRouter from "./lessons"
+import questionsRouter from "./questions"
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import authRouter from "./auth"
@@ -28,4 +29,5 @@ router.use("/courses", courseRouter)
 router.use("/semester", semesterRouter)
 router.use("/chapters", chaptersRouter)
 router.use("/lessons", lessonsRouter)
+router.use("/questions", questionsRouter)
 export default router
