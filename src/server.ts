@@ -10,7 +10,8 @@ import helmet from "helmet";
 // import { startCronJobs } from "./jobs/cronJobs";
 import http from "http";
 import { Server } from "socket.io";
-// import { initSocket } from "./socket";
+// import { initSocket } from "./socket"; // I will uncomment this in the next step or manually add it 
+import { initSocket } from "./socket/socket";
 
 dotenv.config();
 
@@ -18,14 +19,14 @@ const app = express();
 
 const httpServer = http.createServer(app);
 
-// const io = new Server(httpServer, {
-//   cors: {
-//     origin: "*",
-//     methods: ["GET", "POST"]
-//   }
-// });
+const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
 
-// initSocket(io);
+initSocket(io);
 
 // ✅ CORS بدون app.options
 app.use(cors({

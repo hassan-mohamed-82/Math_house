@@ -8,6 +8,8 @@ import { seedChapters } from "./chapters";
 import { seedLessons } from "./lessons";
 import { seedStudents } from "./students";
 import { seedParents } from "./parents";
+import { seedExamCodes } from "./examCodes";
+import { seedQuestions } from "./questions";
 import { pool } from "../models/connection";
 
 async function main() {
@@ -52,6 +54,14 @@ async function main() {
         // 9. Parents
         console.log("\n👪 Seeding Parents...");
         await seedParents();
+
+        // 10. Exam Codes
+        console.log("\n🏷️ Seeding Exam Codes...");
+        await seedExamCodes();
+
+        // 11. Questions (depends on lessons, exam codes)
+        console.log("\n❓ Seeding Questions...");
+        await seedQuestions();
 
         console.log("\n✅ Seeding completed successfully!");
     } catch (error) {
