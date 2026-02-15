@@ -28,3 +28,5 @@ __exportStar(require("./schema/admin/courseTeachers"), exports);
 __exportStar(require("./schema/admin/lessons"), exports);
 __exportStar(require("./schema/admin/questions"), exports);
 __exportStar(require("./schema/admin/examCodes"), exports);
+__exportStar(require("./schema/admin/Quiz"), exports);
+__exportStar(require("./schema/admin/Quiz"), exports);

@@ -12,3 +12,6 @@ export * from "./schema/admin/courseTeachers";
 export * from "./schema/admin/lessons";
 export * from "./schema/admin/questions";
 export * from "./schema/admin/examCodes";
+export * from "./schema/admin/Quiz";
+export * from "./schema/admin/Quiz";
+

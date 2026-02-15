@@ -15,6 +15,13 @@
       "when": 1771144222739,
       "tag": "0001_tired_omega_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1771156171966,
+      "tag": "0002_pretty_vision",
+      "breakpoints": true
     }
   ]
 }
