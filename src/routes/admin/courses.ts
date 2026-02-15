@@ -8,7 +8,8 @@ import {
     addTeacherToCourse,
     removeTeacherFromCourse,
     getCourseTeachers,
-    getCategoriesSelection
+    getCategoriesSelection,
+    getCoursesbyCategoryId
 } from "../../controllers/admin/courses";
 import { catchAsync } from "../../utils/catchAsync";
 const router = Router();
@@ -20,6 +21,7 @@ router.get("/:id", catchAsync(getCourseById));
 router.put("/:id", catchAsync(updateCourse));
 router.delete("/:id", catchAsync(deleteCourse));
 
+router.get("/category/:categoryId", catchAsync(getCoursesbyCategoryId));
 // Course-Teacher management endpoints
 router.get("/:id/teachers", catchAsync(getCourseTeachers));
 router.post("/:id/teachers", catchAsync(addTeacherToCourse));

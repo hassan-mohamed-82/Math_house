@@ -314,3 +314,30 @@ export const getCategoriesSelection = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Categories fetched successfully", data: categories }, 200);
 }
+
+export const getCoursesbyCategoryId = async (req: Request, res: Response) => {
+    const { categoryId } = req.params;
+    if (!categoryId) {
+        throw new BadRequest("Category ID is required");
+    }
+    const existingCategory = await db.select().from(category).where(eq(category.id, categoryId));
+    if (existingCategory.length === 0) {
+        throw new BadRequest("Category not found");
+    }
+    const AllcoursesWithCategory = await db.select({
+        id: courses.id,
+        name: courses.name,
+        description: courses.description,
+        price: courses.price,
+        discount: courses.discount,
+        duration: courses.duration,
+        image: courses.image,
+        preRequisition: courses.preRequisition,
+        whatYouGain: courses.whatYouGain,
+        createdAt: courses.createdAt,
+        updatedAt: courses.updatedAt,
+        semester: { id: semesters.id, name: semesters.name },
+        totalPrice: courses.totalPrice
+    }).from(courses).leftJoin(semesters, eq(courses.semesterId, semesters.id)).where(eq(courses.categoryId, categoryId));
+    return SuccessResponse(res, { message: "Courses fetched successfully", data: AllcoursesWithCategory }, 200);
+}

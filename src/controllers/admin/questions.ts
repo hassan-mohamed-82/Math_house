@@ -5,7 +5,7 @@ import { extractTextFromImage } from "../../ai/services/ocr-service";
 import { BadRequest } from "../../Errors/BadRequest";
 import { db } from "../../models/connection";
 import { questions, questionOptions, questionAnswers, lessons, examCodes, ParallelQuestion, ParallelQuestionOptions } from "../../models/schema";
-import { eq } from "drizzle-orm";
+import { eq, count, desc } from "drizzle-orm";
 import { NotFound } from "../../Errors";
 import { addGenerationJob } from "../../queues/questionQueue";
 import { validateAndSaveLogo, deleteImage, handleImageUpdate } from "../../utils/handleImages";
@@ -93,6 +93,14 @@ export const createQuestion = async (req: Request, res: Response) => {
 
 
 export const getAllQuestions = async (req: Request, res: Response) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+
+    const [totalQueries] = await db.select({ count: count() }).from(questions);
+    const total = totalQueries.count;
+    const totalPages = Math.ceil(total / limit);
+
     const Allquestions = await db.select({
         question: questions.question,
         answerType: questions.answerType,
@@ -115,8 +123,21 @@ export const getAllQuestions = async (req: Request, res: Response) => {
     })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
-        .innerJoin(examCodes, eq(examCodes.id, questions.codeId));
-    return SuccessResponse(res, { message: "Questions fetched successfully", data: Allquestions }, 200);
+        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .limit(limit)
+        .offset(offset)
+        .orderBy(desc(questions.createdAt));
+
+    return SuccessResponse(res, {
+        message: "Questions fetched successfully",
+        data: Allquestions,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages
+        }
+    }, 200);
 }
 
 export const getQuestionbyId = async (req: Request, res: Response) => {
@@ -400,6 +421,13 @@ export const deleteParallelQuestion = async (req: Request, res: Response) => {
 };
 
 export const getAllParallelQuestions = async (req: Request, res: Response) => {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+
+    const [totalQueries] = await db.select({ count: count() }).from(ParallelQuestion);
+    const total = totalQueries.count;
+    const totalPages = Math.ceil(total / limit);
 
     const allParallelQuestions = await db.select({
         id: ParallelQuestion.id,
@@ -420,9 +448,20 @@ export const getAllParallelQuestions = async (req: Request, res: Response) => {
         },
     }).from(ParallelQuestion)
         .innerJoin(lessons, eq(lessons.id, ParallelQuestion.lessonId))
-        .innerJoin(questions, eq(questions.id, ParallelQuestion.origianlQuestionId));
+        .innerJoin(questions, eq(questions.id, ParallelQuestion.origianlQuestionId))
+        .limit(limit)
+        .offset(offset)
+        .orderBy(desc(ParallelQuestion.createdAt));
 
-    return SuccessResponse(res, { data: allParallelQuestions }, 200);
+    return SuccessResponse(res, {
+        data: allParallelQuestions,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages
+        }
+    }, 200);
 };
 
 export const getParallelQuestionbyId = async (req: Request, res: Response) => {
