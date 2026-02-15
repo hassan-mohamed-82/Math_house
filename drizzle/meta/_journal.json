@@ -8,6 +8,13 @@
       "when": 1770289994317,
       "tag": "0000_silky_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1771144222739,
+      "tag": "0001_tired_omega_sentinel",
+      "breakpoints": true
     }
   ]
 }

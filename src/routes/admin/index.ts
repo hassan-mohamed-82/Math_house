@@ -12,6 +12,7 @@ import chaptersRouter from "./chapters"
 import lessonsRouter from "./lessons"
 import questionsRouter from "./questions"
 import examCodesRouter from "./examCodes"
+import adminRouter from "./admin"
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import authRouter from "./auth"
@@ -25,6 +26,7 @@ router.use("/category", categoryRouter)
 router.use("/roles", rolesRouter)
 router.use("/student", studentRouter)
 router.use("/parent", parentRouter)
+router.use("/admin", adminRouter)
 router.use("/teacher", teacherRouter)
 router.use("/courses", courseRouter)
 router.use("/semester", semesterRouter)

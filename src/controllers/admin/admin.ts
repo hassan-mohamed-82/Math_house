@@ -44,14 +44,26 @@ export const getAllAdmins = async (req: Request, res: Response) => {
             name: admins.name,
             email: admins.email,
             phoneNumber: admins.phoneNumber,
-            roleId: admins.roleId,
+            status: admins.status,
             createdAt: admins.createdAt,
-            updatedAt: admins.updatedAt
+            updatedAt: admins.updatedAt,
+            // بيانات الـ Role
+            role: {
+                id: roles.id,
+                name: roles.name,
+                permissions: roles.permissions,
+                status: roles.status,
+            },
         })
-        .from(admins);
+        .from(admins)
+        .leftJoin(roles, eq(admins.roleId, roles.id));
 
-    return SuccessResponse(res, { message: "get all admins success", data: allAdmins });
+    return SuccessResponse(res, { 
+        message: "get all admins success", 
+        data: allAdmins 
+    });
 };
+
 
 export const getAdminById = async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -62,20 +74,30 @@ export const getAdminById = async (req: Request, res: Response) => {
             name: admins.name,
             email: admins.email,
             phoneNumber: admins.phoneNumber,
-            roleId: admins.roleId,
+            status: admins.status,
             createdAt: admins.createdAt,
-            updatedAt: admins.updatedAt
+            updatedAt: admins.updatedAt,
+            // بيانات الـ Role
+            role: {
+                id: roles.id,
+                name: roles.name,
+                permissions: roles.permissions,
+                status: roles.status,
+            },
         })
         .from(admins)
+        .leftJoin(roles, eq(admins.roleId, roles.id))
         .where(eq(admins.id, id));
 
     if (admin.length === 0) {
         throw new NotFound("admin not found");
     }
 
-    return SuccessResponse(res, { message: "get admin by id success", data: admin[0] });
+    return SuccessResponse(res, { 
+        message: "get admin by id success", 
+        data: admin[0] 
+    });
 };
-
 
 
 export const updateAdmin = async (req: Request, res: Response) => {

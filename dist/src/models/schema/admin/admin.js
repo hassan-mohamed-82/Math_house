@@ -8,6 +8,7 @@ exports.admins = (0, mysql_core_1.mysqlTable)("admins", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
     email: (0, mysql_core_1.varchar)("email", { length: 255 }).notNull(),
+    type: (0, mysql_core_1.mysqlEnum)("type", ["super_admin", "admin"]).notNull().default("admin"),
     phoneNumber: (0, mysql_core_1.varchar)("phone_number", { length: 255 }).notNull(),
     password: (0, mysql_core_1.varchar)("password", { length: 255 }).notNull(),
     roleId: (0, mysql_core_1.char)("role_id", { length: 36 }).references(() => roles_1.roles.id),

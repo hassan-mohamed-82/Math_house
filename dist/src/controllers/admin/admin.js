@@ -42,12 +42,23 @@ const getAllAdmins = async (req, res) => {
         name: schema_1.admins.name,
         email: schema_1.admins.email,
         phoneNumber: schema_1.admins.phoneNumber,
-        roleId: schema_1.admins.roleId,
+        status: schema_1.admins.status,
         createdAt: schema_1.admins.createdAt,
-        updatedAt: schema_1.admins.updatedAt
+        updatedAt: schema_1.admins.updatedAt,
+        // بيانات الـ Role
+        role: {
+            id: schema_1.roles.id,
+            name: schema_1.roles.name,
+            permissions: schema_1.roles.permissions,
+            status: schema_1.roles.status,
+        },
     })
-        .from(schema_1.admins);
-    return (0, response_1.SuccessResponse)(res, { message: "get all admins success", data: allAdmins });
+        .from(schema_1.admins)
+        .leftJoin(schema_1.roles, (0, drizzle_orm_1.eq)(schema_1.admins.roleId, schema_1.roles.id));
+    return (0, response_1.SuccessResponse)(res, {
+        message: "get all admins success",
+        data: allAdmins
+    });
 };
 exports.getAllAdmins = getAllAdmins;
 const getAdminById = async (req, res) => {
@@ -58,16 +69,27 @@ const getAdminById = async (req, res) => {
         name: schema_1.admins.name,
         email: schema_1.admins.email,
         phoneNumber: schema_1.admins.phoneNumber,
-        roleId: schema_1.admins.roleId,
+        status: schema_1.admins.status,
         createdAt: schema_1.admins.createdAt,
-        updatedAt: schema_1.admins.updatedAt
+        updatedAt: schema_1.admins.updatedAt,
+        // بيانات الـ Role
+        role: {
+            id: schema_1.roles.id,
+            name: schema_1.roles.name,
+            permissions: schema_1.roles.permissions,
+            status: schema_1.roles.status,
+        },
     })
         .from(schema_1.admins)
+        .leftJoin(schema_1.roles, (0, drizzle_orm_1.eq)(schema_1.admins.roleId, schema_1.roles.id))
         .where((0, drizzle_orm_1.eq)(schema_1.admins.id, id));
     if (admin.length === 0) {
         throw new NotFound_1.NotFound("admin not found");
     }
-    return (0, response_1.SuccessResponse)(res, { message: "get admin by id success", data: admin[0] });
+    return (0, response_1.SuccessResponse)(res, {
+        message: "get admin by id success",
+        data: admin[0]
+    });
 };
 exports.getAdminById = getAdminById;
 const updateAdmin = async (req, res) => {

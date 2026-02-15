@@ -14,17 +14,19 @@ const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const helmet_1 = __importDefault(require("helmet"));
 // import { startCronJobs } from "./jobs/cronJobs";
 const http_1 = __importDefault(require("http"));
-// import { initSocket } from "./socket";
+const socket_io_1 = require("socket.io");
+// import { initSocket } from "./socket"; // I will uncomment this in the next step or manually add it 
+const socket_1 = require("./socket/socket");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const httpServer = http_1.default.createServer(app);
-// const io = new Server(httpServer, {
-//   cors: {
-//     origin: "*",
-//     methods: ["GET", "POST"]
-//   }
-// });
-// initSocket(io);
+const io = new socket_io_1.Server(httpServer, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+(0, socket_1.initSocket)(io);
 // ✅ CORS بدون app.options
 app.use((0, cors_1.default)({
     origin: "*",

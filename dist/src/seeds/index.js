@@ -10,6 +10,8 @@ const chapters_1 = require("./chapters");
 const lessons_1 = require("./lessons");
 const students_1 = require("./students");
 const parents_1 = require("./parents");
+const examCodes_1 = require("./examCodes");
+const questions_1 = require("./questions");
 const connection_1 = require("../models/connection");
 async function main() {
     try {
@@ -43,6 +45,12 @@ async function main() {
         // 9. Parents
         console.log("\n👪 Seeding Parents...");
         await (0, parents_1.seedParents)();
+        // 10. Exam Codes
+        console.log("\n🏷️ Seeding Exam Codes...");
+        await (0, examCodes_1.seedExamCodes)();
+        // 11. Questions (depends on lessons, exam codes)
+        console.log("\n❓ Seeding Questions...");
+        await (0, questions_1.seedQuestions)();
         console.log("\n✅ Seeding completed successfully!");
     }
     catch (error) {
