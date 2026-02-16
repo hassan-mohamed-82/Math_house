@@ -59,7 +59,21 @@ export const createTeacher = async (req: Request, res: Response) => {
 
 export const getTeacherById = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const teacher = await db.select().from(teachers).where(eq(teachers.id, id));
+    const teacher = await db.select({
+        id: teachers.id,
+        name: teachers.name,
+        email: teachers.email,
+        phoneNumber: teachers.phoneNumber,
+        avatar: teachers.avatar,
+        categoryId: teachers.categoryId,
+        courses: {
+            id: courses.id,
+            name: courses.name,
+        }
+    }).from(teachers)
+        .innerJoin(courseTeachers, eq(teachers.id, courseTeachers.teacherId))
+        .innerJoin(courses, eq(courses.id, courseTeachers.courseId))
+        .where(eq(teachers.id, id));
     if (teacher.length === 0) {
         throw new BadRequest("Teacher not found");
     }
