@@ -1,9 +1,20 @@
 import { Router } from "express";
-import { createTeacher, getTeacherById, getAllTeachers, updateTeacher, deleteTeacher } from "../../controllers/admin/teacher";
+import {
+    createTeacher,
+    getTeacherById,
+    getAllTeachers,
+    updateTeacher,
+    deleteTeacher,
+    getCategorySelection
+} from "../../controllers/admin/teacher";
 import { catchAsync } from "../../utils/catchAsync";
 import { getAllCourses } from "../../controllers/admin/courses";
 const router = Router();
-router.get("/selectionCourses", catchAsync(getAllCourses)); // No Authorization for roles for it
+// No Authorization for roles for it -------------
+router.get("/selectionCourses", catchAsync(getAllCourses));
+router.get("/selectionCategories", catchAsync(getCategorySelection))
+// -------------------------------------------------
+
 router.post("/", catchAsync(createTeacher));
 router.get("/:id", catchAsync(getTeacherById));
 router.get("/", catchAsync(getAllTeachers));

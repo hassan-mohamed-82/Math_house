@@ -104,3 +104,44 @@ export const deleteTeacher = async (req: Request, res: Response) => {
     await db.delete(teachers).where(eq(teachers.id, id));
     return SuccessResponse(res, { message: "Teacher deleted successfully" }, 200);
 }
+
+export const getCategorySelection = async (req: Request, res: Response) => {
+    const allCategories = await db.select({
+        id: category.id,
+        name: category.name,
+        parentCategoryId: category.parentCategoryId,
+    }).from(category);
+
+    const categoryMap = new Map<string, typeof allCategories[0]>();
+    const parentIds = new Set<string>();
+
+    allCategories.forEach(cat => {
+        categoryMap.set(cat.id, cat);
+        if (cat.parentCategoryId) {
+            parentIds.add(cat.parentCategoryId);
+        }
+    });
+
+    const leafCategories = allCategories.filter(cat => !parentIds.has(cat.id));
+
+    const formattedCategories = leafCategories.map(leaf => {
+        let current = leaf;
+        const ancestors: string[] = [];
+
+        while (current) {
+            ancestors.unshift(current.name);
+            if (current.parentCategoryId && categoryMap.has(current.parentCategoryId)) {
+                current = categoryMap.get(current.parentCategoryId)!;
+            } else {
+                break;
+            }
+        }
+
+        return {
+            id: leaf.id,
+            name: ancestors.join(" ")
+        };
+    });
+
+    return SuccessResponse(res, { message: "Categories fetched successfully", data: formattedCategories }, 200);
+}
