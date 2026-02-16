@@ -20,10 +20,10 @@ export async function seedQuestions() {
     }
     const codeId = existingCode[0].id;
 
-    console.log("  Generating 50 questions...");
+    console.log("  Generating 100 questions...");
     const questionsToInsert: any[] = [];
 
-    for (let i = 1; i <= 50; i++) {
+    for (let i = 1; i <= 100; i++) {
         questionsToInsert.push({
             question: `Question ${i}: Solve for x in ${i}x + 10 = 20`,
             answerType: "MCQ",

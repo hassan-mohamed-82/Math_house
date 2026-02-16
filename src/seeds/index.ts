@@ -10,6 +10,7 @@ import { seedStudents } from "./students";
 import { seedParents } from "./parents";
 import { seedExamCodes } from "./examCodes";
 import { seedQuestions } from "./questions";
+import { seedRawScores } from "./rawScore";
 import { pool } from "../models/connection";
 
 async function main() {
@@ -39,6 +40,10 @@ async function main() {
         console.log("\n📚 Seeding Courses...");
         const courseMap = await seedCourses(categoryMap, semesterMap, teacherMap);
 
+        // 5.5 Raw Scores (depends on courses)
+        console.log("\n📊 Seeding Raw Scores...");
+        await seedRawScores(courseMap);
+
         // 6. Chapters (depends on courses, categories, teachers)
         console.log("\n📖 Seeding Chapters...");
         const chapterMap = await seedChapters(courseMap, categoryMap, teacherMap);
@@ -63,6 +68,11 @@ async function main() {
         console.log("\n❓ Seeding Questions...");
         await seedQuestions();
 
+        // 12. Diagnostic Exams (depends on Raw Scores)
+        console.log("\n📝 Seeding Diagnostic Exams...");
+        const { seedDiagnosticExams } = await import("./diagnosticExam");
+        await seedDiagnosticExams();
+
         console.log("\n✅ Seeding completed successfully!");
     } catch (error) {
         console.error("❌ Seeding failed:", error);
@@ -72,5 +82,6 @@ async function main() {
         process.exit(0);
     }
 }
+
 
 main();
