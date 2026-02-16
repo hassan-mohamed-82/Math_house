@@ -10,6 +10,7 @@ router.get("/categories", (0, catchAsync_1.catchAsync)(courses_1.getCategoriesSe
 router.get("/:id", (0, catchAsync_1.catchAsync)(courses_1.getCourseById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(courses_1.updateCourse));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(courses_1.deleteCourse));
+router.get("/category/:categoryId", (0, catchAsync_1.catchAsync)(courses_1.getCoursesbyCategoryId));
 // Course-Teacher management endpoints
 router.get("/:id/teachers", (0, catchAsync_1.catchAsync)(courses_1.getCourseTeachers));
 router.post("/:id/teachers", (0, catchAsync_1.catchAsync)(courses_1.addTeacherToCourse));

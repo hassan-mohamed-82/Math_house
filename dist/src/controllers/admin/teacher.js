@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteTeacher = exports.updateTeacher = exports.getAllTeachers = exports.getTeacherById = exports.createTeacher = void 0;
+exports.getCategorySelection = exports.deleteTeacher = exports.updateTeacher = exports.getAllTeachers = exports.getTeacherById = exports.createTeacher = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -101,3 +101,38 @@ const deleteTeacher = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Teacher deleted successfully" }, 200);
 };
 exports.deleteTeacher = deleteTeacher;
+const getCategorySelection = async (req, res) => {
+    const allCategories = await connection_1.db.select({
+        id: schema_1.category.id,
+        name: schema_1.category.name,
+        parentCategoryId: schema_1.category.parentCategoryId,
+    }).from(schema_1.category);
+    const categoryMap = new Map();
+    const parentIds = new Set();
+    allCategories.forEach(cat => {
+        categoryMap.set(cat.id, cat);
+        if (cat.parentCategoryId) {
+            parentIds.add(cat.parentCategoryId);
+        }
+    });
+    const leafCategories = allCategories.filter(cat => !parentIds.has(cat.id));
+    const formattedCategories = leafCategories.map(leaf => {
+        let current = leaf;
+        const ancestors = [];
+        while (current) {
+            ancestors.unshift(current.name);
+            if (current.parentCategoryId && categoryMap.has(current.parentCategoryId)) {
+                current = categoryMap.get(current.parentCategoryId);
+            }
+            else {
+                break;
+            }
+        }
+        return {
+            id: leaf.id,
+            name: ancestors.join(" ")
+        };
+    });
+    return (0, response_1.SuccessResponse)(res, { message: "Categories fetched successfully", data: formattedCategories }, 200);
+};
+exports.getCategorySelection = getCategorySelection;

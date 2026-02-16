@@ -85,6 +85,12 @@ const createQuestion = async (req, res) => {
 };
 exports.createQuestion = createQuestion;
 const getAllQuestions = async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() }).from(schema_1.questions);
+    const total = totalQueries.count;
+    const totalPages = Math.ceil(total / limit);
     const Allquestions = await connection_1.db.select({
         question: schema_1.questions.question,
         answerType: schema_1.questions.answerType,
@@ -107,8 +113,20 @@ const getAllQuestions = async (req, res) => {
     })
         .from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
-        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId));
-    return (0, response_1.SuccessResponse)(res, { message: "Questions fetched successfully", data: Allquestions }, 200);
+        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .limit(limit)
+        .offset(offset)
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.questions.createdAt));
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Questions fetched successfully",
+        data: Allquestions,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages
+        }
+    }, 200);
 };
 exports.getAllQuestions = getAllQuestions;
 const getQuestionbyId = async (req, res) => {
@@ -375,6 +393,12 @@ const deleteParallelQuestion = async (req, res) => {
 };
 exports.deleteParallelQuestion = deleteParallelQuestion;
 const getAllParallelQuestions = async (req, res) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() }).from(schema_1.ParallelQuestion);
+    const total = totalQueries.count;
+    const totalPages = Math.ceil(total / limit);
     const allParallelQuestions = await connection_1.db.select({
         id: schema_1.ParallelQuestion.id,
         question: schema_1.ParallelQuestion.question,
@@ -394,8 +418,19 @@ const getAllParallelQuestions = async (req, res) => {
         },
     }).from(schema_1.ParallelQuestion)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.ParallelQuestion.lessonId))
-        .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.questions.id, schema_1.ParallelQuestion.origianlQuestionId));
-    return (0, response_1.SuccessResponse)(res, { data: allParallelQuestions }, 200);
+        .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.questions.id, schema_1.ParallelQuestion.origianlQuestionId))
+        .limit(limit)
+        .offset(offset)
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.ParallelQuestion.createdAt));
+    return (0, response_1.SuccessResponse)(res, {
+        data: allParallelQuestions,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages
+        }
+    }, 200);
 };
 exports.getAllParallelQuestions = getAllParallelQuestions;
 const getParallelQuestionbyId = async (req, res) => {

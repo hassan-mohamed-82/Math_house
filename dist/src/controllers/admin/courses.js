@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCategoriesSelection = exports.getCourseTeachers = exports.removeTeacherFromCourse = exports.addTeacherToCourse = exports.deleteCourse = exports.updateCourse = exports.getAllCourses = exports.getCourseById = exports.createCourse = void 0;
+exports.getCoursesbyCategoryId = exports.getCategoriesSelection = exports.getCourseTeachers = exports.removeTeacherFromCourse = exports.addTeacherToCourse = exports.deleteCourse = exports.updateCourse = exports.getAllCourses = exports.getCourseById = exports.createCourse = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -270,3 +270,30 @@ const getCategoriesSelection = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Categories fetched successfully", data: categories }, 200);
 };
 exports.getCategoriesSelection = getCategoriesSelection;
+const getCoursesbyCategoryId = async (req, res) => {
+    const { categoryId } = req.params;
+    if (!categoryId) {
+        throw new BadRequest_1.BadRequest("Category ID is required");
+    }
+    const existingCategory = await connection_1.db.select().from(schema_1.category).where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId));
+    if (existingCategory.length === 0) {
+        throw new BadRequest_1.BadRequest("Category not found");
+    }
+    const AllcoursesWithCategory = await connection_1.db.select({
+        id: schema_1.courses.id,
+        name: schema_1.courses.name,
+        description: schema_1.courses.description,
+        price: schema_1.courses.price,
+        discount: schema_1.courses.discount,
+        duration: schema_1.courses.duration,
+        image: schema_1.courses.image,
+        preRequisition: schema_1.courses.preRequisition,
+        whatYouGain: schema_1.courses.whatYouGain,
+        createdAt: schema_1.courses.createdAt,
+        updatedAt: schema_1.courses.updatedAt,
+        semester: { id: schema_1.semesters.id, name: schema_1.semesters.name },
+        totalPrice: schema_1.courses.totalPrice
+    }).from(schema_1.courses).leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.semesterId, schema_1.semesters.id)).where((0, drizzle_orm_1.eq)(schema_1.courses.categoryId, categoryId));
+    return (0, response_1.SuccessResponse)(res, { message: "Courses fetched successfully", data: AllcoursesWithCategory }, 200);
+};
+exports.getCoursesbyCategoryId = getCoursesbyCategoryId;
