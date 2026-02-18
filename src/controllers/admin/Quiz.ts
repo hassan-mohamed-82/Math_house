@@ -259,7 +259,7 @@ export const getQuizById = async (req: Request, res: Response) => {
                 questionType: questions.questionType,
                 year: questions.year,
                 month: questions.month,
-                section: questions.section,
+                section: questions.sectionId,
             },
             chapter: {
                 id: chapters.id,
@@ -546,7 +546,7 @@ export const getQuestionsBank = async (req: Request, res: Response) => {
     if (type) conditions.push(eq(questions.questionType, type as any));
     if (year) conditions.push(eq(questions.year, Number(year)));
     if (month) conditions.push(eq(questions.month, month as any));
-    if (section) conditions.push(eq(questions.section, section as any));
+    if (section) conditions.push(eq(questions.sectionId, section as any));
     if (codeId) conditions.push(eq(questions.codeId, codeId as string));
     if (difficulty) conditions.push(eq(questions.difficulty, difficulty as any));
 
@@ -563,7 +563,7 @@ export const getQuestionsBank = async (req: Request, res: Response) => {
             questionType: questions.questionType,
             year: questions.year,
             month: questions.month,
-            section: questions.section,
+            section: questions.sectionId,
             chapter: {
                 id: chapters.id,
                 name: chapters.name,
