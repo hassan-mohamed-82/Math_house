@@ -16,6 +16,7 @@ import adminRouter from "./admin"
 import quizRouter from "./Quiz"
 import rawScoreRouter from "./rawScore"
 import diagnosticExamRouter from "./diagnosticExam"
+import groupsRouter from "./Groups"
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import authRouter from "./auth"
@@ -34,6 +35,7 @@ router.use("/teacher", teacherRouter)
 router.use("/courses", courseRouter)
 router.use("/quiz", quizRouter)
 router.use("/semester", semesterRouter)
+router.use("/groups", groupsRouter)
 router.use("/chapters", chaptersRouter)
 router.use("/lessons", lessonsRouter)
 router.use("/questions", questionsRouter)
