@@ -14,4 +14,7 @@ router.put("/:id", (0, validation_1.validate)(student_2.updateStudentSchema), (0
 router.delete("/:id", (0, validation_1.validate)(student_2.idSchema), (0, catchAsync_1.catchAsync)(student_1.deleteStudent));
 // router.get("/category/:categoryId", catchAsync(getStudentsByCategory));
 // router.get("/grade/:grade", catchAsync(getStudentsByGrade));
+router.get("/:id/open-account", (0, validation_1.validate)(student_2.idSchema), (0, catchAsync_1.catchAsync)(student_1.openStudentAccount));
+router.post("/:id/top-up-wallet", (0, validation_1.validate)(student_2.idSchema), (0, catchAsync_1.catchAsync)(student_1.topUpWallet));
+router.get("/:id/payment-history", (0, validation_1.validate)(student_2.idSchema), (0, catchAsync_1.catchAsync)(student_1.getPaymentHistory));
 exports.default = router;

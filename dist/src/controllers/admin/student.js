@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.selection = exports.getStudentsByGrade = exports.getStudentsByCategory = exports.deleteStudent = exports.updateStudent = exports.getStudentById = exports.getAllStudents = exports.createStudent = void 0;
+exports.getPaymentHistory = exports.topUpWallet = exports.openStudentAccount = exports.selection = exports.getStudentsByGrade = exports.getStudentsByCategory = exports.deleteStudent = exports.updateStudent = exports.getStudentById = exports.getAllStudents = exports.createStudent = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -12,6 +12,8 @@ const NotFound_1 = require("../../Errors/NotFound");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const uuid_1 = require("uuid");
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const JWT_SECRET = process.env.JWT_SECRET;
 const createStudent = async (req, res) => {
     const { firstname, lastname, nickname, email, password, phone, category: categoryId, grade, parentphone } = req.body;
     if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade || !parentphone) {
@@ -31,20 +33,6 @@ const createStudent = async (req, res) => {
     if (existingCategory.length === 0) {
         throw new BadRequest_1.BadRequest("category not found");
     }
-    const existingGrade = await connection_1.db
-        .select()
-        .from(schema_1.category)
-        .where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId));
-    if (existingGrade.length === 0) {
-        throw new BadRequest_1.BadRequest("grade not found");
-    }
-    // const existingParent = await db
-    //     .select()
-    //     .from(parents)
-    //     .where(eq(parents.id, parentphone));
-    // if (existingParent.length === 0) {
-    //     throw new BadRequest("parent not found");
-    // }
     const hashedPassword = await bcrypt_1.default.hash(password, 10);
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.Student).values({
@@ -63,7 +51,9 @@ const createStudent = async (req, res) => {
 };
 exports.createStudent = createStudent;
 const getAllStudents = async (req, res) => {
-    const students = await connection_1.db
+    const { page = 1, limit = 10, search } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+    let query = connection_1.db
         .select({
         id: schema_1.Student.id,
         firstname: schema_1.Student.firstname,
@@ -72,11 +62,34 @@ const getAllStudents = async (req, res) => {
         email: schema_1.Student.email,
         phone: schema_1.Student.phone,
         category: schema_1.Student.category,
+        categoryName: schema_1.category.name,
         grade: schema_1.Student.grade,
         parentphone: schema_1.Student.parentphone
     })
-        .from(schema_1.Student);
-    (0, response_1.SuccessResponse)(res, { message: "get all students success", data: students });
+        .from(schema_1.Student)
+        .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.Student.category, schema_1.category.id));
+    // Search
+    if (search) {
+        const searchTerm = `%${search}%`;
+        query = query.where((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.Student.firstname, searchTerm), (0, drizzle_orm_1.like)(schema_1.Student.lastname, searchTerm), (0, drizzle_orm_1.like)(schema_1.Student.nickname, searchTerm), (0, drizzle_orm_1.like)(schema_1.Student.email, searchTerm), (0, drizzle_orm_1.like)(schema_1.Student.phone, searchTerm)));
+    }
+    const students = await query.limit(Number(limit)).offset(offset);
+    // Format response like the image
+    const formattedStudents = students.map(s => ({
+        id: s.id,
+        name: `${s.firstname} ${s.lastname} (${s.nickname})`,
+        firstname: s.firstname,
+        lastname: s.lastname,
+        nickname: s.nickname,
+        email: s.email,
+        phone: s.phone,
+        parentPhone: s.parentphone,
+        category: s.category,
+        categoryName: s.categoryName,
+        grade: s.grade,
+        paymentStatus: "Free" // هتحتاج تعدلها حسب الـ Logic بتاعك
+    }));
+    (0, response_1.SuccessResponse)(res, { message: "get all students success", data: formattedStudents });
 };
 exports.getAllStudents = getAllStudents;
 const getStudentById = async (req, res) => {
@@ -84,7 +97,7 @@ const getStudentById = async (req, res) => {
     if (!id) {
         throw new BadRequest_1.BadRequest("id is required");
     }
-    const student = await connection_1.db
+    const [student] = await connection_1.db
         .select({
         id: schema_1.Student.id,
         firstname: schema_1.Student.firstname,
@@ -93,20 +106,22 @@ const getStudentById = async (req, res) => {
         email: schema_1.Student.email,
         phone: schema_1.Student.phone,
         category: schema_1.Student.category,
+        categoryName: schema_1.category.name,
         grade: schema_1.Student.grade,
         parentphone: schema_1.Student.parentphone
     })
         .from(schema_1.Student)
+        .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.Student.category, schema_1.category.id))
         .where((0, drizzle_orm_1.eq)(schema_1.Student.id, id));
-    if (student.length === 0) {
+    if (!student) {
         throw new NotFound_1.NotFound("student not found");
     }
-    (0, response_1.SuccessResponse)(res, { message: "get student success", data: student[0] });
+    (0, response_1.SuccessResponse)(res, { message: "get student success", data: student });
 };
 exports.getStudentById = getStudentById;
 const updateStudent = async (req, res) => {
     const { id } = req.params;
-    const { firstname, lastname, nickname, email, phone, category, grade, parentphone, oldPassword, newPassword } = req.body;
+    const { firstname, lastname, nickname, email, phone, category: categoryId, grade, parentphone, oldPassword, newPassword } = req.body;
     if (!id) {
         throw new BadRequest_1.BadRequest("id is required");
     }
@@ -137,8 +152,8 @@ const updateStudent = async (req, res) => {
         updateData.email = email;
     if (phone)
         updateData.phone = phone;
-    if (category)
-        updateData.category = category;
+    if (categoryId)
+        updateData.category = categoryId;
     if (grade)
         updateData.grade = grade;
     if (parentphone)
@@ -229,3 +244,115 @@ const selection = async (req, res) => {
     (0, response_1.SuccessResponse)(res, { message: "get all categories and grades success", data: { categories, grades } });
 };
 exports.selection = selection;
+// ===================== NEW APIs =====================
+// 🔥 Open Account (Impersonation) - الدخول كـ Student
+const openStudentAccount = async (req, res) => {
+    const { id } = req.params;
+    const adminId = req.user?.id;
+    const [student] = await connection_1.db
+        .select({
+        id: schema_1.Student.id,
+        firstname: schema_1.Student.firstname,
+        lastname: schema_1.Student.lastname,
+        email: schema_1.Student.email,
+        nickname: schema_1.Student.nickname,
+    })
+        .from(schema_1.Student)
+        .where((0, drizzle_orm_1.eq)(schema_1.Student.id, id));
+    if (!student) {
+        throw new NotFound_1.NotFound("student not found");
+    }
+    // إنشاء Token للـ Student
+    const impersonationToken = jsonwebtoken_1.default.sign({
+        id: student.id,
+        email: student.email,
+        name: `${student.firstname} ${student.lastname}`,
+        nickname: student.nickname,
+        role: "student",
+        isImpersonation: true,
+        impersonatedBy: adminId,
+    }, JWT_SECRET, { expiresIn: "2h" });
+    (0, response_1.SuccessResponse)(res, {
+        message: "Account opened successfully",
+        data: {
+            token: impersonationToken,
+            redirectUrl: `/student/dashboard`,
+            student: {
+                id: student.id,
+                name: `${student.firstname} ${student.lastname}`,
+                email: student.email
+            }
+        }
+    });
+};
+exports.openStudentAccount = openStudentAccount;
+// 🔥 Top Up Wallet - شحن المحفظة
+const topUpWallet = async (req, res) => {
+    const { id } = req.params;
+    const { amount, description } = req.body;
+    const adminId = req.user?.id;
+    if (!amount || Number(amount) <= 0) {
+        throw new BadRequest_1.BadRequest("Invalid amount");
+    }
+    const [student] = await connection_1.db
+        .select()
+        .from(schema_1.Student)
+        .where((0, drizzle_orm_1.eq)(schema_1.Student.id, id));
+    if (!student) {
+        throw new NotFound_1.NotFound("student not found");
+    }
+    // لو عندك جدول wallet أو walletBalance في الـ Student
+    // هنا هتضيف الـ Logic بتاع الشحن
+    // مثال: لو عندك جدول transactions
+    /*
+    await db.insert(walletTransactions).values({
+        studentId: id,
+        amount: amount,
+        type: "topup",
+        description: description || "Wallet Top Up",
+        createdBy: adminId
+    });
+    */
+    (0, response_1.SuccessResponse)(res, {
+        message: "Wallet topped up successfully",
+        data: {
+            studentId: id,
+            amount: Number(amount),
+            description: description || "Wallet Top Up"
+        }
+    });
+};
+exports.topUpWallet = topUpWallet;
+// 🔥 Payment History - سجل المدفوعات
+const getPaymentHistory = async (req, res) => {
+    const { id } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    const [student] = await connection_1.db
+        .select()
+        .from(schema_1.Student)
+        .where((0, drizzle_orm_1.eq)(schema_1.Student.id, id));
+    if (!student) {
+        throw new NotFound_1.NotFound("student not found");
+    }
+    // لو عندك جدول transactions
+    /*
+    const transactions = await db
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.studentId, id))
+        .orderBy(desc(walletTransactions.createdAt))
+        .limit(Number(limit))
+        .offset((Number(page) - 1) * Number(limit));
+    */
+    // مؤقتاً نرجع array فاضي
+    const transactions = [];
+    (0, response_1.SuccessResponse)(res, {
+        message: "Payment history retrieved successfully",
+        data: {
+            studentId: id,
+            studentName: `${student.firstname} ${student.lastname}`,
+            transactions: transactions
+        }
+    });
+};
+exports.getPaymentHistory = getPaymentHistory;

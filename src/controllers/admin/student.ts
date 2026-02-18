@@ -1,12 +1,15 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { category, parents, Student } from "../../models/schema";
-import { eq } from "drizzle-orm";
+import { eq, or, like } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
+import jwt from "jsonwebtoken";
+
+const JWT_SECRET = process.env.JWT_SECRET as string;
 
 export const createStudent = async (req: Request, res: Response) => {
     const {
@@ -43,23 +46,6 @@ export const createStudent = async (req: Request, res: Response) => {
         throw new BadRequest("category not found");
     }
 
-    const existingGrade = await db
-        .select()
-        .from(category)
-        .where(eq(category.id, categoryId));
-
-    if (existingGrade.length === 0) {
-        throw new BadRequest("grade not found");
-    }
-    // const existingParent = await db
-    //     .select()
-    //     .from(parents)
-    //     .where(eq(parents.id, parentphone));
-
-    // if (existingParent.length === 0) {
-    //     throw new BadRequest("parent not found");
-    // }
-
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = uuidv4();
 
@@ -80,7 +66,10 @@ export const createStudent = async (req: Request, res: Response) => {
 };
 
 export const getAllStudents = async (req: Request, res: Response) => {
-    const students = await db
+    const { page = 1, limit = 10, search } = req.query;
+    const offset = (Number(page) - 1) * Number(limit);
+
+    let query = db
         .select({
             id: Student.id,
             firstname: Student.firstname,
@@ -89,12 +78,46 @@ export const getAllStudents = async (req: Request, res: Response) => {
             email: Student.email,
             phone: Student.phone,
             category: Student.category,
+            categoryName: category.name,
             grade: Student.grade,
             parentphone: Student.parentphone
         })
-        .from(Student);
+        .from(Student)
+        .leftJoin(category, eq(Student.category, category.id));
 
-    SuccessResponse(res, { message: "get all students success", data: students });
+    // Search
+    if (search) {
+        const searchTerm = `%${search}%`;
+        query = query.where(
+            or(
+                like(Student.firstname, searchTerm),
+                like(Student.lastname, searchTerm),
+                like(Student.nickname, searchTerm),
+                like(Student.email, searchTerm),
+                like(Student.phone, searchTerm)
+            )
+        ) as any;
+    }
+
+    const students = await query.limit(Number(limit)).offset(offset);
+
+    // Format response like the image
+    const formattedStudents = students.map(s => ({
+        id: s.id,
+        name: `${s.firstname} ${s.lastname} (${s.nickname})`,
+        firstname: s.firstname,
+        lastname: s.lastname,
+        nickname: s.nickname,
+        email: s.email,
+        phone: s.phone,
+        parentPhone: s.parentphone,
+        category: s.category,
+        categoryName: s.categoryName,
+        grade: s.grade,
+        paymentStatus: "Free" // هتحتاج تعدلها حسب الـ Logic بتاعك
+    }));
+
+    SuccessResponse(res, { message: "get all students success", data: formattedStudents });
 };
 
 export const getStudentById = async (req: Request, res: Response) => {
@@ -104,7 +127,7 @@ export const getStudentById = async (req: Request, res: Response) => {
         throw new BadRequest("id is required");
     }
 
-    const student = await db
+    const [student] = await db
         .select({
             id: Student.id,
             firstname: Student.firstname,
@@ -113,17 +136,19 @@ export const getStudentById = async (req: Request, res: Response) => {
             email: Student.email,
             phone: Student.phone,
             category: Student.category,
+            categoryName: category.name,
             grade: Student.grade,
             parentphone: Student.parentphone
         })
         .from(Student)
+        .leftJoin(category, eq(Student.category, category.id))
         .where(eq(Student.id, id));
 
-    if (student.length === 0) {
+    if (!student) {
         throw new NotFound("student not found");
     }
 
-    SuccessResponse(res, { message: "get student success", data: student[0] });
+    SuccessResponse(res, { message: "get student success", data: student });
 };
 
 export const updateStudent = async (req: Request, res: Response) => {
@@ -134,7 +159,7 @@ export const updateStudent = async (req: Request, res: Response) => {
         nickname,
         email,
         phone,
-        category,
+        category: categoryId,
         grade,
         parentphone,
         oldPassword,
@@ -172,7 +197,7 @@ export const updateStudent = async (req: Request, res: Response) => {
     if (nickname) updateData.nickname = nickname;
     if (email) updateData.email = email;
     if (phone) updateData.phone = phone;
-    if (category) updateData.category = category;
+    if (categoryId) updateData.category = categoryId;
     if (grade) updateData.grade = grade;
     if (parentphone) updateData.parentphone = parentphone;
 
@@ -273,11 +298,141 @@ export const getStudentsByGrade = async (req: Request, res: Response) => {
     SuccessResponse(res, { message: "get students by grade success", data: students });
 };
 
-
-
-
 export const selection = async (req: Request, res: Response) => {
     const categories = await db.select().from(category);
     const grades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
     SuccessResponse(res, { message: "get all categories and grades success", data: { categories, grades } });
+};
+
+
+// ===================== NEW APIs =====================
+
+// 🔥 Open Account (Impersonation) - الدخول كـ Student
+export const openStudentAccount = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const adminId = (req as any).user?.id;
+
+    const [student] = await db
+        .select({
+            id: Student.id,
+            firstname: Student.firstname,
+            lastname: Student.lastname,
+            email: Student.email,
+            nickname: Student.nickname,
+        })
+        .from(Student)
+        .where(eq(Student.id, id));
+
+    if (!student) {
+        throw new NotFound("student not found");
+    }
+
+    // إنشاء Token للـ Student
+    const impersonationToken = jwt.sign(
+        {
+            id: student.id,
+            email: student.email,
+            name: `${student.firstname} ${student.lastname}`,
+            nickname: student.nickname,
+            role: "student",
+            isImpersonation: true,
+            impersonatedBy: adminId,
+        },
+        JWT_SECRET,
+        { expiresIn: "2h" }
+    );
+
+    SuccessResponse(res, {
+        message: "Account opened successfully",
+        data: {
+            token: impersonationToken,
+            redirectUrl: `/student/dashboard`,
+            student: {
+                id: student.id,
+                name: `${student.firstname} ${student.lastname}`,
+                email: student.email
+            }
+        }
+    });
+};
+
+// 🔥 Top Up Wallet - شحن المحفظة
+export const topUpWallet = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { amount, description } = req.body;
+    const adminId = (req as any).user?.id;
+
+    if (!amount || Number(amount) <= 0) {
+        throw new BadRequest("Invalid amount");
+    }
+
+    const [student] = await db
+        .select()
+        .from(Student)
+        .where(eq(Student.id, id));
+
+    if (!student) {
+        throw new NotFound("student not found");
+    }
+
+    // لو عندك جدول wallet أو walletBalance في الـ Student
+    // هنا هتضيف الـ Logic بتاع الشحن
+
+    // مثال: لو عندك جدول transactions
+    /*
+    await db.insert(walletTransactions).values({
+        studentId: id,
+        amount: amount,
+        type: "topup",
+        description: description || "Wallet Top Up",
+        createdBy: adminId
+    });
+    */
+
+    SuccessResponse(res, {
+        message: "Wallet topped up successfully",
+        data: {
+            studentId: id,
+            amount: Number(amount),
+            description: description || "Wallet Top Up"
+        }
+    });
+};
+
+// 🔥 Payment History - سجل المدفوعات
+export const getPaymentHistory = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+
+    const [student] = await db
+        .select()
+        .from(Student)
+        .where(eq(Student.id, id));
+
+    if (!student) {
+        throw new NotFound("student not found");
+    }
+
+    // لو عندك جدول transactions
+    /*
+    const transactions = await db
+        .select()
+        .from(walletTransactions)
+        .where(eq(walletTransactions.studentId, id))
+        .orderBy(desc(walletTransactions.createdAt))
+        .limit(Number(limit))
+        .offset((Number(page) - 1) * Number(limit));
+    */
+
+    // مؤقتاً نرجع array فاضي
+    const transactions: any[] = [];
+
+    SuccessResponse(res, {
+        message: "Payment history retrieved successfully",
+        data: {
+            studentId: id,
+            studentName: `${student.firstname} ${student.lastname}`,
+            transactions: transactions
+        }
+    });
 };
