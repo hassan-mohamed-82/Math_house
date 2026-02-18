@@ -14,6 +14,7 @@ import questionsRouter from "./questions"
 import examCodesRouter from "./examCodes"
 import adminRouter from "./admin"
 import quizRouter from "./Quiz"
+import sessionRouter from "./Session"
 import rawScoreRouter from "./rawScore"
 import diagnosticExamRouter from "./diagnosticExam"
 import groupsRouter from "./Groups"
@@ -28,6 +29,7 @@ router.use(authenticated, authorizeRoles("admin", "teacher"))
 // router.use("/", adminRouter)
 router.use("/category", categoryRouter)
 router.use("/roles", rolesRouter)
+router.use("/session", sessionRouter)
 router.use("/student", studentRouter)
 router.use("/parent", parentRouter)
 router.use("/admin", adminRouter)

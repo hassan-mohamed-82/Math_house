@@ -19,8 +19,10 @@ const questions_1 = __importDefault(require("./questions"));
 const examCodes_1 = __importDefault(require("./examCodes"));
 const admin_1 = __importDefault(require("./admin"));
 const Quiz_1 = __importDefault(require("./Quiz"));
+const Session_1 = __importDefault(require("./Session"));
 const rawScore_1 = __importDefault(require("./rawScore"));
 const diagnosticExam_1 = __importDefault(require("./diagnosticExam"));
+const Groups_1 = __importDefault(require("./Groups"));
 const authenticated_1 = require("../../middlewares/authenticated");
 const authorized_1 = require("../../middlewares/authorized");
 const auth_1 = __importDefault(require("./auth"));
@@ -30,6 +32,7 @@ router.use(authenticated_1.authenticated, (0, authorized_1.authorizeRoles)("admi
 // router.use("/", adminRouter)
 router.use("/category", category_1.default);
 router.use("/roles", roles_1.default);
+router.use("/session", Session_1.default);
 router.use("/student", student_1.default);
 router.use("/parent", parent_1.default);
 router.use("/admin", admin_1.default);
@@ -37,6 +40,7 @@ router.use("/teacher", teacher_1.default);
 router.use("/courses", courses_1.default);
 router.use("/quiz", Quiz_1.default);
 router.use("/semester", semester_1.default);
+router.use("/groups", Groups_1.default);
 router.use("/chapters", chapters_1.default);
 router.use("/lessons", lessons_1.default);
 router.use("/questions", questions_1.default);
