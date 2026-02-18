@@ -13,7 +13,7 @@ import { catchAsync } from "../../utils/catchAsync";
 const router = Router();
 
 // Select Options
-router.get("/select-options", catchAsync(selectOptions));
+router.get("/select", catchAsync(selectOptions));
 router.get("/courses/:categoryId", catchAsync(getCoursesByCategory));
 
 // Packages CRUD

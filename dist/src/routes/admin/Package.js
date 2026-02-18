@@ -6,7 +6,7 @@ const Package_1 = require("../../controllers/admin/Package");
 const catchAsync_1 = require("../../utils/catchAsync");
 const router = (0, express_1.Router)();
 // Select Options
-router.get("/select-options", (0, catchAsync_1.catchAsync)(Package_1.selectOptions));
+router.get("/select", (0, catchAsync_1.catchAsync)(Package_1.selectOptions));
 router.get("/courses/:categoryId", (0, catchAsync_1.catchAsync)(Package_1.getCoursesByCategory));
 // Packages CRUD
 router.post("/", (0, catchAsync_1.catchAsync)(Package_1.createPackage));

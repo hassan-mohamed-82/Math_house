@@ -21,6 +21,7 @@ const admin_1 = __importDefault(require("./admin"));
 const Quiz_1 = __importDefault(require("./Quiz"));
 const Session_1 = __importDefault(require("./Session"));
 const rawScore_1 = __importDefault(require("./rawScore"));
+const Package_1 = __importDefault(require("./Package"));
 const diagnosticExam_1 = __importDefault(require("./diagnosticExam"));
 const Groups_1 = __importDefault(require("./Groups"));
 const authenticated_1 = require("../../middlewares/authenticated");
@@ -33,6 +34,7 @@ router.use(authenticated_1.authenticated, (0, authorized_1.authorizeRoles)("admi
 router.use("/category", category_1.default);
 router.use("/roles", roles_1.default);
 router.use("/session", Session_1.default);
+router.use("/package", Package_1.default);
 router.use("/student", student_1.default);
 router.use("/parent", parent_1.default);
 router.use("/admin", admin_1.default);
