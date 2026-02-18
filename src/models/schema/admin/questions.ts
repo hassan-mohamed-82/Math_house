@@ -2,6 +2,7 @@ import { mysqlTable, varchar, char, timestamp, double, int, mysqlEnum, boolean, 
 import { sql } from "drizzle-orm";
 import { lessons } from "./lessons";
 import { examCodes } from "./examCodes";
+import { Sections } from "./sections";
 
 export const questions = mysqlTable("questions", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
@@ -17,7 +18,7 @@ export const questions = mysqlTable("questions", {
     // Meta
     year: year("year").notNull(),
     month: mysqlEnum("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]).notNull(),
-    section: mysqlEnum("section", ["1", "2", "3", "4"]).notNull(),
+    sectionId: char("section_id", { length: 255 }).notNull().references(() => Sections.id),
     codeId: char("code_id", { length: 255 }).notNull().references(() => examCodes.id),
 
     createdAt: timestamp("created_at").defaultNow(),

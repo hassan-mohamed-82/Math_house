@@ -1,5 +1,5 @@
 import { db } from "../models/connection";
-import { questions, questionOptions, lessons, examCodes, ParallelQuestion, ParallelQuestionOptions } from "../models/schema";
+import { questions, questionOptions, lessons, examCodes, ParallelQuestion, ParallelQuestionOptions, Sections } from "../models/schema";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
@@ -20,6 +20,14 @@ export async function seedQuestions() {
     }
     const codeId = existingCode[0].id;
 
+    // 3. Get a Section
+    const existingSection = await db.select().from(Sections).limit(1);
+    if (!existingSection || existingSection.length === 0) {
+        console.log("  ⚠️ No sections found. Skipping question seeding.");
+        return;
+    }
+    const sectionId = existingSection[0].id;
+
     console.log("  Generating 100 questions...");
     const questionsToInsert: any[] = [];
 
@@ -32,7 +40,7 @@ export async function seedQuestions() {
             lessonId: lessonId,
             year: 2024,
             month: ["Jan", "Feb", "Mar", "Apr", "May"][i % 5],
-            section: ["1", "2", "3", "4"][i % 4],
+            sectionId: sectionId,
             codeId: codeId,
         });
     }

@@ -12,7 +12,8 @@
     "seed": "tsx src/seeds/index.ts",
     "seed:fresh": "tsx src/seeds/index.ts --fresh",
     "start:prod": "node dist/src/server.js",
-    "migrate-log": "node migrate.js"
+    "migrate-log": "node migrate.js",
+    "reset-db": "tsx src/models/reset.ts"
   },
   "keywords": [],
   "author": "",
@@ -47,6 +48,7 @@
     "zod": "^3.25.74"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.3.0",
     "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.9",
     "@types/cors": "^2.8.19",

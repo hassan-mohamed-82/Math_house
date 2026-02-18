@@ -4,11 +4,21 @@ import { SuccessResponse } from "../../utils/response";
 import { extractTextFromImage } from "../../ai/services/ocr-service";
 import { BadRequest } from "../../Errors/BadRequest";
 import { db } from "../../models/connection";
-import { questions, questionOptions, questionAnswers, lessons, examCodes, ParallelQuestion, ParallelQuestionOptions } from "../../models/schema";
+import {
+    questions,
+    questionOptions,
+    questionAnswers,
+    lessons,
+    examCodes,
+    ParallelQuestion,
+    ParallelQuestionOptions,
+    Sections
+} from "../../models/schema";
 import { eq, count, desc } from "drizzle-orm";
 import { NotFound } from "../../Errors";
 import { addGenerationJob } from "../../queues/questionQueue";
 import { validateAndSaveLogo, deleteImage, handleImageUpdate } from "../../utils/handleImages";
+
 export const getTextfromImage = async (req: Request, res: Response) => {
     const imageSource = req.file?.buffer || req.body?.image;
 
@@ -23,7 +33,7 @@ export const getTextfromImage = async (req: Request, res: Response) => {
 // TODO: SAVE IMAGES TO THE DRIVE Rather than BASE64
 // Questions
 export const createQuestion = async (req: Request, res: Response) => {
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, section, codeId, answerPdf, answerVideo } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo } = req.body;
 
     if (!question
         || !answerType
@@ -32,7 +42,7 @@ export const createQuestion = async (req: Request, res: Response) => {
         || !lessonId
         || !year
         || !month
-        || !section
+        || !sectionId
         || !codeId
     ) throw new BadRequest("All fields are required");
 
@@ -46,6 +56,10 @@ export const createQuestion = async (req: Request, res: Response) => {
     const examCode = await db.select().from(examCodes).where(eq(examCodes.id, codeId)).limit(1);
     if (!examCode[0]) {
         throw new NotFound("Exam code is not found");
+    }
+    const section = await db.select().from(Sections).where(eq(Sections.id, sectionId)).limit(1);
+    if (!section[0]) {
+        throw new NotFound("Section is not found");
     }
 
     let imageUrl = image;
@@ -65,7 +79,7 @@ export const createQuestion = async (req: Request, res: Response) => {
             lessonId,
             year,
             month,
-            section,
+            sectionId,
             codeId,
         });
 
@@ -109,7 +123,7 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         lessonId: questions.lessonId,
         year: questions.year,
         month: questions.month,
-        section: questions.section,
+        sectionId: questions.sectionId,
         codeId: questions.codeId,
         lesson: {
             id: lessons.id,
@@ -120,10 +134,15 @@ export const getAllQuestions = async (req: Request, res: Response) => {
             code: examCodes.code,
         },
         type: questions.questionType,
+        section: {
+            id: Sections.id,
+            sectionName: Sections.sectionName,
+        }
     })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
         .limit(limit)
         .offset(offset)
         .orderBy(desc(questions.createdAt));
@@ -153,7 +172,7 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
         lessonId: questions.lessonId,
         year: questions.year,
         month: questions.month,
-        section: questions.section,
+        sectionId: questions.sectionId,
         codeId: questions.codeId,
         lesson: {
             id: lessons.id,
@@ -164,9 +183,14 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
             code: examCodes.code,
         },
         type: questions.questionType,
+        section: {
+            id: Sections.id,
+            sectionName: Sections.sectionName,
+        }
     }).from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
         .where(eq(questions.id, id)).limit(1);
 
     if (!question[0]) {
@@ -177,11 +201,28 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
 
 export const updateQuestion = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, section, codeId, answerPdf, answerVideo } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo } = req.body;
     if (!id) {
         throw new BadRequest("Question ID is required");
     }
-
+    if (lessonId) {
+        const lesson = await db.select().from(lessons).where(eq(lessons.id, lessonId)).limit(1);
+        if (!lesson[0]) {
+            throw new NotFound("Lesson is not found");
+        }
+    }
+    if (codeId) {
+        const examCode = await db.select().from(examCodes).where(eq(examCodes.id, codeId)).limit(1);
+        if (!examCode[0]) {
+            throw new NotFound("Exam code is not found");
+        }
+    }
+    if (sectionId) {
+        const section = await db.select().from(Sections).where(eq(Sections.id, sectionId)).limit(1);
+        if (!section[0]) {
+            throw new NotFound("Section is not found");
+        }
+    }
     await db.transaction(async (tx) => {
         const existingQuestion = await tx.select().from(questions).where(eq(questions.id, id)).limit(1);
         if (!existingQuestion[0]) {
@@ -200,7 +241,7 @@ export const updateQuestion = async (req: Request, res: Response) => {
         if (lessonId !== undefined) questionUpdateData.lessonId = lessonId;
         if (year !== undefined) questionUpdateData.year = year;
         if (month !== undefined) questionUpdateData.month = month;
-        if (section !== undefined) questionUpdateData.section = section;
+        if (sectionId !== undefined) questionUpdateData.sectionId = sectionId;
         if (codeId !== undefined) questionUpdateData.codeId = codeId;
 
         if (Object.keys(questionUpdateData).length > 0) {
@@ -359,7 +400,7 @@ export const createParallelQuestion = async (req: Request, res: Response) => {
 
 export const updateParallelQuestion = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { question, answerType, difficulty, lessonId, options } = req.body; // No image, year, month, section, codeId, answerPdf/Video for parallel questions yet based on create
+    const { question, answerType, difficulty, lessonId, options } = req.body; // No image, year, month, sectionId, codeId, answerPdf/Video for parallel questions yet based on create
 
     if (!id) {
         throw new BadRequest("Parallel Question ID is required");

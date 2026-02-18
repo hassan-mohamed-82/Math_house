@@ -10,6 +10,7 @@ import { seedStudents } from "./students";
 import { seedParents } from "./parents";
 import { seedExamCodes } from "./examCodes";
 import { seedQuestions } from "./questions";
+import { seedSections } from "./sections";
 import { seedRawScores } from "./rawScore";
 import { pool } from "../models/connection";
 
@@ -64,6 +65,10 @@ async function main() {
         console.log("\n🏷️ Seeding Exam Codes...");
         await seedExamCodes();
 
+        // 10.5 Sections
+        console.log("\n🏷️ Seeding Sections...");
+        await seedSections();
+
         // 11. Questions (depends on lessons, exam codes)
         console.log("\n❓ Seeding Questions...");
         await seedQuestions();
@@ -72,6 +77,16 @@ async function main() {
         console.log("\n📝 Seeding Diagnostic Exams...");
         const { seedDiagnosticExams } = await import("./diagnosticExam");
         await seedDiagnosticExams();
+
+        // 13. Quizzes
+        console.log("\n📝 Seeding Quizzes...");
+        const { seedQuizzes } = await import("./quizzes");
+        await seedQuizzes();
+
+        // 14. Exams
+        console.log("\n📝 Seeding Exams...");
+        const { seedExams } = await import("./exams");
+        await seedExams();
 
         console.log("\n✅ Seeding completed successfully!");
     } catch (error) {

@@ -15,3 +15,5 @@ export * from "./schema/admin/examCodes";
 export * from "./schema/admin/Quiz";
 export * from "./schema/admin/rawScore";
 export * from "./schema/admin/diagnosticExam";
+export * from "./schema/admin/sections";
+export * from "./schema/admin/exams";

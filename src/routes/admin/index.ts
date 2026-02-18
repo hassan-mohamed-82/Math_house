@@ -19,6 +19,8 @@ import rawScoreRouter from "./rawScore"
 import packageRouter from "./Package"
 import diagnosticExamRouter from "./diagnosticExam"
 import groupsRouter from "./Groups"
+import sectionsRouter from "./sections"
+import examsRouter from "./exams"
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import authRouter from "./auth"
@@ -44,7 +46,8 @@ router.use("/chapters", chaptersRouter)
 router.use("/lessons", lessonsRouter)
 router.use("/questions", questionsRouter)
 router.use("/examCodes", examCodesRouter)
-router.use("/examCodes", examCodesRouter)
 router.use("/rawScore", rawScoreRouter)
 router.use("/diagnosticExam", diagnosticExamRouter)
+router.use("/sections", sectionsRouter)
+router.use("/exams", examsRouter)
 export default router

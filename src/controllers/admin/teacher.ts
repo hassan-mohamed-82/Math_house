@@ -81,7 +81,20 @@ export const getTeacherById = async (req: Request, res: Response) => {
 }
 
 export const getAllTeachers = async (req: Request, res: Response) => {
-    const teacher = await db.select().from(teachers);
+    const teacher = await db.select({
+        id: teachers.id,
+        name: teachers.name,
+        email: teachers.email,
+        phoneNumber: teachers.phoneNumber,
+        avatar: teachers.avatar,
+        categoryId: teachers.categoryId,
+        courses: {
+            id: courses.id,
+            name: courses.name,
+        }
+    }).from(teachers)
+        .innerJoin(courseTeachers, eq(teachers.id, courseTeachers.teacherId))
+        .innerJoin(courses, eq(courses.id, courseTeachers.courseId))
     return SuccessResponse(res, { message: "Teachers fetched successfully", teacher }, 200);
 }
 

@@ -13,6 +13,7 @@ const router = Router();
 // No Authorization for roles for it -------------
 router.get("/selectionCourses", catchAsync(getAllCourses));
 router.get("/selectionCategories", catchAsync(getCategorySelection))
+router.get("/selectionTeachers", catchAsync(getAllTeachers))
 // -------------------------------------------------
 
 router.post("/", catchAsync(createTeacher));

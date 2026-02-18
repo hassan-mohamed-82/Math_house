@@ -324,7 +324,8 @@ export const getCoursesbyCategoryId = async (req: Request, res: Response) => {
     if (existingCategory.length === 0) {
         throw new BadRequest("Category not found");
     }
-    const AllcoursesWithCategory = await db.select({
+
+    const coursesData = await db.select({
         id: courses.id,
         name: courses.name,
         description: courses.description,
@@ -337,7 +338,37 @@ export const getCoursesbyCategoryId = async (req: Request, res: Response) => {
         createdAt: courses.createdAt,
         updatedAt: courses.updatedAt,
         semester: { id: semesters.id, name: semesters.name },
-        totalPrice: courses.totalPrice
-    }).from(courses).leftJoin(semesters, eq(courses.semesterId, semesters.id)).where(eq(courses.categoryId, categoryId));
-    return SuccessResponse(res, { message: "Courses fetched successfully", data: AllcoursesWithCategory }, 200);
+        totalPrice: courses.totalPrice,
+    })
+        .from(courses)
+        .leftJoin(semesters, eq(courses.semesterId, semesters.id))
+        .where(eq(courses.categoryId, categoryId));
+
+    if (coursesData.length === 0) {
+        return SuccessResponse(res, { message: "Courses fetched successfully", data: [] }, 200);
+    }
+
+    const courseIds = coursesData.map(c => c.id);
+
+    const teachersData = await db.select({
+        courseId: courseTeachers.courseId,
+        teacherId: teachers.id,
+        name: teachers.name,
+        email: teachers.email,
+        avatar: teachers.avatar,
+        role: courseTeachers.role,
+    })
+        .from(courseTeachers)
+        .innerJoin(teachers, eq(courseTeachers.teacherId, teachers.id))
+        .where(inArray(courseTeachers.courseId, courseIds));
+
+    const coursesWithTeachers = coursesData.map(course => {
+        const courseTeachersList = teachersData
+            .filter(t => t.courseId === course.id)
+            .map(({ courseId, ...teacher }) => teacher);
+
+        return { ...course, teachers: courseTeachersList };
+    });
+
+    return SuccessResponse(res, { message: "Courses fetched successfully", data: coursesWithTeachers }, 200);
 }
