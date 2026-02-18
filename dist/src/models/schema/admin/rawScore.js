@@ -11,9 +11,6 @@ exports.rawScore = (0, mysql_core_1.mysqlTable)("raw_score", {
     score: (0, mysql_core_1.int)("score").notNull(),
     is_giftingScore: (0, mysql_core_1.boolean)("is_gift").notNull().default(false),
     giftingScore: (0, mysql_core_1.int)("gifting_score").notNull().default(0),
-    numberOfQuestions: (0, mysql_core_1.int)("number_of_questions").notNull(),
-    TotalScoreCalc: (0, mysql_core_1.int)("total_score").generatedAlwaysAs((0, drizzle_orm_1.sql) `CASE WHEN is_gift = 1 THEN score - gifting_score ELSE score END`),
-    GradePerQuestion: (0, mysql_core_1.int)("grade_per_question").generatedAlwaysAs((0, drizzle_orm_1.sql) `CASE WHEN number_of_questions = 0 THEN 0 ELSE total_score / number_of_questions END`),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });
