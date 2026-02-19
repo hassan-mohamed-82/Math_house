@@ -21,6 +21,7 @@ import diagnosticExamRouter from "./diagnosticExam"
 import groupsRouter from "./Groups"
 import sectionsRouter from "./sections"
 import examsRouter from "./exams"
+import currencyRouter from "./currency"
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import authRouter from "./auth"
@@ -50,4 +51,5 @@ router.use("/rawScore", rawScoreRouter)
 router.use("/diagnosticExam", diagnosticExamRouter)
 router.use("/sections", sectionsRouter)
 router.use("/exams", examsRouter)
+router.use("/currency", currencyRouter)
 export default router

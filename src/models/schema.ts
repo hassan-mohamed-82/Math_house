@@ -17,3 +17,5 @@ export * from "./schema/admin/rawScore";
 export * from "./schema/admin/diagnosticExam";
 export * from "./schema/admin/sections";
 export * from "./schema/admin/exams";
+export * from "./schema/admin/currency";
+export * from "./schema/admin/conversionRate";

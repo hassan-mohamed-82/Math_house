@@ -13,6 +13,8 @@ import { Server } from "socket.io";
 // import { initSocket } from "./socket"; // I will uncomment this in the next step or manually add it 
 import { initSocket } from "./socket/socket";
 
+import { startCurrencyCron } from "./jobs/cronJobs";
+
 dotenv.config();
 
 const app = express();
@@ -59,8 +61,7 @@ app.use((req, res, next) => {
 
 app.use(errorHandler);
 
-// startCronJobs();
-
 httpServer.listen(3000, () => {
   console.log("Server is running on http://localhost:3000");
+  startCurrencyCron();
 });

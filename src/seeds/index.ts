@@ -12,14 +12,19 @@ import { seedExamCodes } from "./examCodes";
 import { seedQuestions } from "./questions";
 import { seedSections } from "./sections";
 import { seedRawScores } from "./rawScore";
+import { seedCurrencies } from "./currencies";
 import { pool } from "../models/connection";
 
 async function main() {
     try {
         console.log("🌱 Seeding database...\n");
 
+        // 0. Currencies (no dependencies)
+        console.log("💱 Seeding Currencies...");
+        await seedCurrencies();
+
         // 1. Roles & Admins
-        console.log("📋 Seeding Roles...");
+        console.log("\n📋 Seeding Roles...");
         const roleId = await seedRoles();
 
         console.log("\n👤 Seeding Admins...");
