@@ -41,6 +41,10 @@ export const updateStudentSchema = z.object({
 
 export const idSchema = z.string().uuid("معرف الطالب غير صالح");
 
+export const idParamsSchema = z.object({
+    id: z.string().uuid("معرف الطالب غير صالح"),
+});
+
 export const gradeSchema = z.enum(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], {
     errorMap: () => ({ message: "الصف غير صالح" })
 });
