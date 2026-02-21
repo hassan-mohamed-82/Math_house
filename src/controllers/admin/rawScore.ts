@@ -90,3 +90,15 @@ export const deleteRawScore = async (req: Request, res: Response) => {
     await db.delete(rawScore).where(eq(rawScore.id, id));
     return SuccessResponse(res, { message: "Raw Score deleted successfully" }, 200);
 }
+
+export const getRawScorebyId = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (!id) {
+        throw new BadRequest("Raw Score ID is required");
+    }
+    const existingRawScore = await db.select().from(rawScore).where(eq(rawScore.id, id));
+    if (existingRawScore.length === 0) {
+        throw new BadRequest("Raw Score not found");
+    }
+    return SuccessResponse(res, { message: "Raw Score fetched successfully", rawScore: existingRawScore[0] }, 200);
+}
