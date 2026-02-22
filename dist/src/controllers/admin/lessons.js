@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.selectChapters = exports.deleteLessonIdea = exports.updateLessonIdea = exports.swapIdeaOrder = exports.getIdeasByLessonId = exports.createLessonIdea = exports.deleteLesson = exports.updateLesson = exports.swapLessonOrder = exports.getLessonsByChapterId = exports.getAllLessons = exports.getLessonById = exports.createLesson = void 0;
+exports.selectLessons = exports.selectChapters = exports.deleteLessonIdea = exports.updateLessonIdea = exports.swapIdeaOrder = exports.getIdeasByLessonId = exports.createLessonIdea = exports.deleteLesson = exports.updateLesson = exports.swapLessonOrder = exports.getLessonsByChapterId = exports.getAllLessons = exports.getLessonById = exports.createLesson = void 0;
 const connection_1 = require("../../models/connection");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
@@ -345,3 +345,11 @@ const selectChapters = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { data: allChapters.map(c => ({ value: c.id, label: c.name })) }, 200);
 };
 exports.selectChapters = selectChapters;
+const selectLessons = async (req, res) => {
+    const allLessons = await connection_1.db.select({
+        id: schema_1.lessons.id,
+        name: schema_1.lessons.name,
+    }).from(schema_1.lessons);
+    return (0, response_1.SuccessResponse)(res, { data: allLessons.map(l => ({ value: l.id, label: l.name })) }, 200);
+};
+exports.selectLessons = selectLessons;

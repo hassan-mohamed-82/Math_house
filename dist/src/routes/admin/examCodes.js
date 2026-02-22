@@ -6,6 +6,7 @@ const examCodes_1 = require("../../controllers/admin/examCodes");
 const router = (0, express_1.Router)();
 router.post("/", (0, catchAsync_1.catchAsync)(examCodes_1.createExamCode));
 router.get("/", (0, catchAsync_1.catchAsync)(examCodes_1.getExamCodes));
+router.get("/:id", (0, catchAsync_1.catchAsync)(examCodes_1.getExamCodeById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(examCodes_1.updateExamCode));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(examCodes_1.deleteExamCode));
 exports.default = router;

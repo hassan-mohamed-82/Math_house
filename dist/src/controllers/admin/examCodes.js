@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteExamCode = exports.updateExamCode = exports.createExamCode = exports.getExamCodes = void 0;
+exports.getExamCodeById = exports.deleteExamCode = exports.updateExamCode = exports.createExamCode = exports.getExamCodes = void 0;
 const response_1 = require("../../utils/response");
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
@@ -43,3 +43,13 @@ const deleteExamCode = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Exam code deleted successfully" }, 200);
 };
 exports.deleteExamCode = deleteExamCode;
+const getExamCodeById = async (req, res) => {
+    const { id } = req.params;
+    if (!id)
+        throw new BadRequest_1.BadRequest("Id is required");
+    const examCode = await connection_1.db.query.examCodes.findFirst({ where: (0, drizzle_orm_1.eq)(schema_1.examCodes.id, id) });
+    if (!examCode)
+        throw new Errors_1.NotFound("Exam code not found");
+    return (0, response_1.SuccessResponse)(res, { message: "Exam code fetched successfully", data: examCode }, 200);
+};
+exports.getExamCodeById = getExamCodeById;
