@@ -4,6 +4,7 @@ const express_1 = require("express");
 const lessons_1 = require("../../controllers/admin/lessons");
 const catchAsync_1 = require("../../utils/catchAsync");
 const router = (0, express_1.Router)();
+router.get("/select-chapter", (0, catchAsync_1.catchAsync)(lessons_1.selectchaper));
 // ─── Lesson Routes ──────────────────────────────────────────────────────────
 router.post("/", (0, catchAsync_1.catchAsync)(lessons_1.createLesson));
 router.get("/", (0, catchAsync_1.catchAsync)(lessons_1.getAllLessons));

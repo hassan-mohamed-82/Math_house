@@ -12,11 +12,13 @@ import {
     swapIdeaOrder,
     updateLessonIdea,
     deleteLessonIdea,
+    selectchaper,
 } from "../../controllers/admin/lessons";
 import { catchAsync } from "../../utils/catchAsync";
 
 const router = Router();
 
+router.get("/select-chapter", catchAsync(selectchaper));
 // ─── Lesson Routes ──────────────────────────────────────────────────────────
 router.post("/", catchAsync(createLesson));
 router.get("/", catchAsync(getAllLessons));

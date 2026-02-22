@@ -396,3 +396,8 @@ export const deleteLessonIdea = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Lesson idea deleted successfully" }, 200);
 };
+
+export const  selectchaper =async (req: Request, res: Response) => {
+    const chapter = await db.select().from(chapters);
+    return SuccessResponse(res, { chapter }, 200);
+};
