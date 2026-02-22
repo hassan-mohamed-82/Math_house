@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.selectchaper = exports.deleteLessonIdea = exports.updateLessonIdea = exports.swapIdeaOrder = exports.getIdeasByLessonId = exports.createLessonIdea = exports.deleteLesson = exports.updateLesson = exports.swapLessonOrder = exports.getLessonsByChapterId = exports.getAllLessons = exports.getLessonById = exports.createLesson = void 0;
+exports.selectChapters = exports.deleteLessonIdea = exports.updateLessonIdea = exports.swapIdeaOrder = exports.getIdeasByLessonId = exports.createLessonIdea = exports.deleteLesson = exports.updateLesson = exports.swapLessonOrder = exports.getLessonsByChapterId = exports.getAllLessons = exports.getLessonById = exports.createLesson = void 0;
 const connection_1 = require("../../models/connection");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
@@ -336,8 +336,12 @@ const deleteLessonIdea = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Lesson idea deleted successfully" }, 200);
 };
 exports.deleteLessonIdea = deleteLessonIdea;
-const selectchaper = async (req, res) => {
-    const chapter = await connection_1.db.select().from(schema_1.chapters);
-    return (0, response_1.SuccessResponse)(res, { chapter }, 200);
+// ===================== SELECTION APIs =====================
+const selectChapters = async (req, res) => {
+    const allChapters = await connection_1.db.select({
+        id: schema_1.chapters.id,
+        name: schema_1.chapters.name,
+    }).from(schema_1.chapters);
+    return (0, response_1.SuccessResponse)(res, { data: allChapters.map(c => ({ value: c.id, label: c.name })) }, 200);
 };
-exports.selectchaper = selectchaper;
+exports.selectChapters = selectChapters;

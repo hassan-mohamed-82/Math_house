@@ -397,7 +397,16 @@ export const deleteLessonIdea = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Lesson idea deleted successfully" }, 200);
 };
 
-export const  selectchaper =async (req: Request, res: Response) => {
-    const chapter = await db.select().from(chapters);
-    return SuccessResponse(res, { chapter }, 200);
+// ===================== SELECTION APIs =====================
+
+export const selectChapters = async (req: Request, res: Response) => {
+    const allChapters = await db.select({
+        id: chapters.id,
+        name: chapters.name,
+    }).from(chapters);
+
+    return SuccessResponse(res, { data: allChapters.map(c => ({ value: c.id, label: c.name })) }, 200);
 };
+
+
+
