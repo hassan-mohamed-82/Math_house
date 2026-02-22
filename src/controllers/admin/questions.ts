@@ -14,7 +14,7 @@ import {
     ParallelQuestionOptions,
     Sections
 } from "../../models/schema";
-import { eq, count, desc } from "drizzle-orm";
+import { eq, count, desc, like, or, SQL } from "drizzle-orm";
 import { NotFound } from "../../Errors";
 import { addGenerationJob } from "../../queues/questionQueue";
 import { validateAndSaveLogo, deleteImage, handleImageUpdate } from "../../utils/handleImages";
@@ -111,7 +111,24 @@ export const getAllQuestions = async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = (page - 1) * limit;
 
-    const [totalQueries] = await db.select({ count: count() }).from(questions);
+    const search = req.query.search as string | undefined;
+
+    const searchCondition: SQL | undefined = search
+        ? or(
+            like(questions.question, `%${search}%`),
+            like(lessons.name, `%${search}%`),
+            like(examCodes.code, `%${search}%`),
+            like(Sections.sectionName, `%${search}%`)
+        )
+        : undefined;
+
+    const [totalQueries] = await db.select({ count: count() })
+        .from(questions)
+        .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .where(searchCondition);
+
     const total = totalQueries.count;
     const totalPages = Math.ceil(total / limit);
 
@@ -143,6 +160,7 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
         .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .where(searchCondition)
         .limit(limit)
         .offset(offset)
         .orderBy(desc(questions.createdAt));
