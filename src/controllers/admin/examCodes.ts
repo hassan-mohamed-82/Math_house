@@ -36,3 +36,11 @@ export const deleteExamCode = async (req: Request, res: Response) => {
     await db.delete(examCodes).where(eq(examCodes.id, id));
     return SuccessResponse(res, { message: "Exam code deleted successfully" }, 200);
 }
+
+export const getExamCodeById = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (!id) throw new BadRequest("Id is required");
+    const examCode = await db.query.examCodes.findFirst({ where: eq(examCodes.id, id) });
+    if (!examCode) throw new NotFound("Exam code not found");
+    return SuccessResponse(res, { message: "Exam code fetched successfully", data: examCode }, 200);
+}
