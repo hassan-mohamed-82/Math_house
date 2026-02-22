@@ -409,4 +409,13 @@ export const selectChapters = async (req: Request, res: Response) => {
 };
 
 
+export const selectLessons = async (req: Request, res: Response) => {
+    const allLessons = await db.select({
+        id: lessons.id,
+        name: lessons.name,
+    }).from(lessons);
+
+    return SuccessResponse(res, { data: allLessons.map(l => ({ value: l.id, label: l.name })) }, 200);
+};
+
 
