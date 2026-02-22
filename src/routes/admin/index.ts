@@ -14,6 +14,7 @@ import questionsRouter from "./questions"
 import examCodesRouter from "./examCodes"
 import adminRouter from "./admin"
 import quizRouter from "./Quiz"
+import notificationRouter from "./Notfication"
 import sessionRouter from "./Session"
 import rawScoreRouter from "./rawScore"
 import packageRouter from "./Package"
@@ -38,6 +39,7 @@ router.use("/package", packageRouter)
 router.use("/student", studentRouter)
 router.use("/parent", parentRouter)
 router.use("/admin", adminRouter)
+router.use("/notification", notificationRouter)
 router.use("/teacher", teacherRouter)
 router.use("/courses", courseRouter)
 router.use("/quiz", quizRouter)
