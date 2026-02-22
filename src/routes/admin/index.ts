@@ -6,6 +6,7 @@ import studentRouter from "./student"
 import parentRouter from "./parent"
 import categoryRouter from "./category"
 import teacherRouter from "./teacher"
+import popupRouter from "./Popup"
 import courseRouter from "./courses"
 import semesterRouter from "./semester"
 import chaptersRouter from "./chapters"
@@ -43,6 +44,7 @@ router.use("/notification", notificationRouter)
 router.use("/teacher", teacherRouter)
 router.use("/courses", courseRouter)
 router.use("/quiz", quizRouter)
+router.use("/popup", popupRouter)
 router.use("/semester", semesterRouter)
 router.use("/groups", groupsRouter)
 router.use("/chapters", chaptersRouter)
