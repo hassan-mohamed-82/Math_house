@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteRawScore = exports.updateRawScore = exports.getAllRawScores = exports.createRawScore = void 0;
+exports.getRawScorebyId = exports.deleteRawScore = exports.updateRawScore = exports.getAllRawScores = exports.createRawScore = void 0;
 const BadRequest_1 = require("../../Errors/BadRequest");
 const schema_1 = require("../../models/schema");
 const connection_1 = require("../../models/connection");
@@ -84,3 +84,15 @@ const deleteRawScore = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Raw Score deleted successfully" }, 200);
 };
 exports.deleteRawScore = deleteRawScore;
+const getRawScorebyId = async (req, res) => {
+    const { id } = req.params;
+    if (!id) {
+        throw new BadRequest_1.BadRequest("Raw Score ID is required");
+    }
+    const existingRawScore = await connection_1.db.select().from(schema_1.rawScore).where((0, drizzle_orm_1.eq)(schema_1.rawScore.id, id));
+    if (existingRawScore.length === 0) {
+        throw new BadRequest_1.BadRequest("Raw Score not found");
+    }
+    return (0, response_1.SuccessResponse)(res, { message: "Raw Score fetched successfully", rawScore: existingRawScore[0] }, 200);
+};
+exports.getRawScorebyId = getRawScorebyId;

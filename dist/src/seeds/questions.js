@@ -20,6 +20,13 @@ async function seedQuestions() {
         return;
     }
     const codeId = existingCode[0].id;
+    // 3. Get a Section
+    const existingSection = await connection_1.db.select().from(schema_1.Sections).limit(1);
+    if (!existingSection || existingSection.length === 0) {
+        console.log("  ⚠️ No sections found. Skipping question seeding.");
+        return;
+    }
+    const sectionId = existingSection[0].id;
     console.log("  Generating 100 questions...");
     const questionsToInsert = [];
     for (let i = 1; i <= 100; i++) {
@@ -31,7 +38,7 @@ async function seedQuestions() {
             lessonId: lessonId,
             year: 2024,
             month: ["Jan", "Feb", "Mar", "Apr", "May"][i % 5],
-            section: ["1", "2", "3", "4"][i % 4],
+            sectionId: sectionId,
             codeId: codeId,
         });
     }

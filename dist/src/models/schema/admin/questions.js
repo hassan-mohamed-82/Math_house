@@ -5,6 +5,7 @@ const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
 const lessons_1 = require("./lessons");
 const examCodes_1 = require("./examCodes");
+const sections_1 = require("./sections");
 exports.questions = (0, mysql_core_1.mysqlTable)("questions", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     question: (0, mysql_core_1.varchar)("question", { length: 255 }).notNull(),
@@ -17,7 +18,7 @@ exports.questions = (0, mysql_core_1.mysqlTable)("questions", {
     // Meta
     year: (0, mysql_core_1.year)("year").notNull(),
     month: (0, mysql_core_1.mysqlEnum)("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]).notNull(),
-    section: (0, mysql_core_1.mysqlEnum)("section", ["1", "2", "3", "4"]).notNull(),
+    sectionId: (0, mysql_core_1.char)("section_id", { length: 255 }).notNull().references(() => sections_1.Sections.id),
     codeId: (0, mysql_core_1.char)("code_id", { length: 255 }).notNull().references(() => examCodes_1.examCodes.id),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),

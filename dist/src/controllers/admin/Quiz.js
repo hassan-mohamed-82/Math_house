@@ -228,7 +228,7 @@ const getQuizById = async (req, res) => {
             questionType: schema_2.questions.questionType,
             year: schema_2.questions.year,
             month: schema_2.questions.month,
-            section: schema_2.questions.section,
+            section: schema_2.questions.sectionId,
         },
         chapter: {
             id: schema_5.chapters.id,
@@ -451,7 +451,7 @@ const getQuestionsBank = async (req, res) => {
     if (month)
         conditions.push((0, drizzle_orm_1.eq)(schema_2.questions.month, month));
     if (section)
-        conditions.push((0, drizzle_orm_1.eq)(schema_2.questions.section, section));
+        conditions.push((0, drizzle_orm_1.eq)(schema_2.questions.sectionId, section));
     if (codeId)
         conditions.push((0, drizzle_orm_1.eq)(schema_2.questions.codeId, codeId));
     if (difficulty)
@@ -468,7 +468,7 @@ const getQuestionsBank = async (req, res) => {
         questionType: schema_2.questions.questionType,
         year: schema_2.questions.year,
         month: schema_2.questions.month,
-        section: schema_2.questions.section,
+        section: schema_2.questions.sectionId,
         chapter: {
             id: schema_5.chapters.id,
             name: schema_5.chapters.name,

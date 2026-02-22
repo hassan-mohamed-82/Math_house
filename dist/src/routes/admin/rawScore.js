@@ -6,6 +6,7 @@ const catchAsync_1 = require("../../utils/catchAsync");
 const router = (0, express_1.Router)();
 router.post("/", (0, catchAsync_1.catchAsync)(rawScore_1.createRawScore));
 router.get("/", (0, catchAsync_1.catchAsync)(rawScore_1.getAllRawScores));
+router.get("/:id", (0, catchAsync_1.catchAsync)(rawScore_1.getRawScorebyId));
 router.put("/:id", (0, catchAsync_1.catchAsync)(rawScore_1.updateRawScore));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(rawScore_1.deleteRawScore));
 exports.default = router;

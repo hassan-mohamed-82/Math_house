@@ -1,7 +1,7 @@
 "use strict";
 // validations/student.validation.ts
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.categoryIdSchema = exports.gradeSchema = exports.idSchema = exports.updateStudentSchema = exports.studentSchema = void 0;
+exports.categoryIdSchema = exports.gradeSchema = exports.idParamsSchema = exports.idSchema = exports.updateStudentSchema = exports.studentSchema = void 0;
 const zod_1 = require("zod");
 exports.studentSchema = zod_1.z.object({
     firstname: zod_1.z.string().min(2, "firstname must be at least 2 characters").max(255),
@@ -39,6 +39,9 @@ exports.updateStudentSchema = zod_1.z.object({
     path: ["oldPassword"]
 });
 exports.idSchema = zod_1.z.string().uuid("معرف الطالب غير صالح");
+exports.idParamsSchema = zod_1.z.object({
+    id: zod_1.z.string().uuid("معرف الطالب غير صالح"),
+});
 exports.gradeSchema = zod_1.z.enum(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], {
     errorMap: () => ({ message: "الصف غير صالح" })
 });

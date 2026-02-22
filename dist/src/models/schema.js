@@ -31,3 +31,7 @@ __exportStar(require("./schema/admin/examCodes"), exports);
 __exportStar(require("./schema/admin/Quiz"), exports);
 __exportStar(require("./schema/admin/rawScore"), exports);
 __exportStar(require("./schema/admin/diagnosticExam"), exports);
+__exportStar(require("./schema/admin/sections"), exports);
+__exportStar(require("./schema/admin/exams"), exports);
+__exportStar(require("./schema/admin/currency"), exports);
+__exportStar(require("./schema/admin/conversionRate"), exports);

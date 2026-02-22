@@ -100,22 +100,57 @@ export const getAllTeachers = async (req: Request, res: Response) => {
 
 export const updateTeacher = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, email, phoneNumber, password, avatar } = req.body;
-    if (!name || !email || !phoneNumber || !password) {
-        throw new BadRequest("Name, Email, Phone Number, Password are required");
-    }
+    const { name, email, phoneNumber, password, avatar, categoryId, courseId } = req.body;
+
+    // Check if teacher exists
     const existingTeacher = await db.select().from(teachers).where(eq(teachers.id, id));
     if (existingTeacher.length === 0) {
         throw new BadRequest("Teacher not found");
     }
+
+    // Check email uniqueness if email is being changed
+    if (email && email !== existingTeacher[0].email) {
+        const emailTaken = await db.select().from(teachers).where(eq(teachers.email, email));
+        if (emailTaken.length > 0) {
+            throw new BadRequest("Email is already in use by another teacher");
+        }
+    }
+
+    // Validate categoryId if provided
+    if (categoryId) {
+        const existingCategory = await db.select().from(category).where(eq(category.id, categoryId));
+        if (existingCategory.length === 0) {
+            throw new BadRequest("Category not found");
+        }
+    }
+
+    // Handle avatar update (saves new, deletes old, or keeps existing)
     const avatarURL = await handleImageUpdate(req, existingTeacher[0].avatar, avatar, "teachers");
+
+    // Update teacher record
     await db.update(teachers).set({
-        name,
-        email,
-        phoneNumber,
-        password,
-        avatar: avatarURL,
+        ...(name && { name }),
+        ...(email && { email }),
+        ...(phoneNumber && { phoneNumber }),
+        ...(password && { password }),
+        ...(avatarURL && { avatar: avatarURL }),
+        ...(categoryId !== undefined && { categoryId }),
     }).where(eq(teachers.id, id));
+
+    // Update course assignment if courseId is provided
+    if (courseId) {
+        const existingCourse = await db.select().from(courses).where(eq(courses.id, courseId));
+        if (existingCourse.length === 0) {
+            throw new BadRequest("Course not found");
+        }
+        // Remove existing course assignments and add the new one
+        await db.delete(courseTeachers).where(eq(courseTeachers.teacherId, id));
+        await db.insert(courseTeachers).values({
+            courseId,
+            teacherId: id,
+        });
+    }
+
     return SuccessResponse(res, { message: "Teacher updated successfully" }, 200);
 }
 

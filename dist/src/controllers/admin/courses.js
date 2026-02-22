@@ -279,7 +279,7 @@ const getCoursesbyCategoryId = async (req, res) => {
     if (existingCategory.length === 0) {
         throw new BadRequest_1.BadRequest("Category not found");
     }
-    const AllcoursesWithCategory = await connection_1.db.select({
+    const coursesData = await connection_1.db.select({
         id: schema_1.courses.id,
         name: schema_1.courses.name,
         description: schema_1.courses.description,
@@ -292,8 +292,32 @@ const getCoursesbyCategoryId = async (req, res) => {
         createdAt: schema_1.courses.createdAt,
         updatedAt: schema_1.courses.updatedAt,
         semester: { id: schema_1.semesters.id, name: schema_1.semesters.name },
-        totalPrice: schema_1.courses.totalPrice
-    }).from(schema_1.courses).leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.semesterId, schema_1.semesters.id)).where((0, drizzle_orm_1.eq)(schema_1.courses.categoryId, categoryId));
-    return (0, response_1.SuccessResponse)(res, { message: "Courses fetched successfully", data: AllcoursesWithCategory }, 200);
+        totalPrice: schema_1.courses.totalPrice,
+    })
+        .from(schema_1.courses)
+        .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.semesterId, schema_1.semesters.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.courses.categoryId, categoryId));
+    if (coursesData.length === 0) {
+        return (0, response_1.SuccessResponse)(res, { message: "Courses fetched successfully", data: [] }, 200);
+    }
+    const courseIds = coursesData.map(c => c.id);
+    const teachersData = await connection_1.db.select({
+        courseId: schema_1.courseTeachers.courseId,
+        teacherId: schema_1.teachers.id,
+        name: schema_1.teachers.name,
+        email: schema_1.teachers.email,
+        avatar: schema_1.teachers.avatar,
+        role: schema_1.courseTeachers.role,
+    })
+        .from(schema_1.courseTeachers)
+        .innerJoin(schema_1.teachers, (0, drizzle_orm_1.eq)(schema_1.courseTeachers.teacherId, schema_1.teachers.id))
+        .where((0, drizzle_orm_1.inArray)(schema_1.courseTeachers.courseId, courseIds));
+    const coursesWithTeachers = coursesData.map(course => {
+        const courseTeachersList = teachersData
+            .filter(t => t.courseId === course.id)
+            .map(({ courseId, ...teacher }) => teacher);
+        return { ...course, teachers: courseTeachersList };
+    });
+    return (0, response_1.SuccessResponse)(res, { message: "Courses fetched successfully", data: coursesWithTeachers }, 200);
 };
 exports.getCoursesbyCategoryId = getCoursesbyCategoryId;

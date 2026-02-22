@@ -45,13 +45,18 @@ const students_1 = require("./students");
 const parents_1 = require("./parents");
 const examCodes_1 = require("./examCodes");
 const questions_1 = require("./questions");
+const sections_1 = require("./sections");
 const rawScore_1 = require("./rawScore");
+const currencies_1 = require("./currencies");
 const connection_1 = require("../models/connection");
 async function main() {
     try {
         console.log("🌱 Seeding database...\n");
+        // 0. Currencies (no dependencies)
+        console.log("💱 Seeding Currencies...");
+        await (0, currencies_1.seedCurrencies)();
         // 1. Roles & Admins
-        console.log("📋 Seeding Roles...");
+        console.log("\n📋 Seeding Roles...");
         const roleId = await (0, roles_1.seedRoles)();
         console.log("\n👤 Seeding Admins...");
         await (0, admins_1.seedAdmins)(roleId);
@@ -85,6 +90,9 @@ async function main() {
         // 10. Exam Codes
         console.log("\n🏷️ Seeding Exam Codes...");
         await (0, examCodes_1.seedExamCodes)();
+        // 10.5 Sections
+        console.log("\n🏷️ Seeding Sections...");
+        await (0, sections_1.seedSections)();
         // 11. Questions (depends on lessons, exam codes)
         console.log("\n❓ Seeding Questions...");
         await (0, questions_1.seedQuestions)();
@@ -92,6 +100,14 @@ async function main() {
         console.log("\n📝 Seeding Diagnostic Exams...");
         const { seedDiagnosticExams } = await Promise.resolve().then(() => __importStar(require("./diagnosticExam")));
         await seedDiagnosticExams();
+        // 13. Quizzes
+        // console.log("\n📝 Seeding Quizzes...");
+        // const { seedQuizzes } = await import("./quizzes");
+        // await seedQuizzes();
+        // 14. Exams
+        // console.log("\n📝 Seeding Exams...");
+        // const { seedExams } = await import("./exams");
+        // await seedExams();
         console.log("\n✅ Seeding completed successfully!");
     }
     catch (error) {

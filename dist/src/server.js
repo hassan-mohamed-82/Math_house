@@ -17,6 +17,7 @@ const http_1 = __importDefault(require("http"));
 const socket_io_1 = require("socket.io");
 // import { initSocket } from "./socket"; // I will uncomment this in the next step or manually add it 
 const socket_1 = require("./socket/socket");
+const cronJobs_1 = require("./jobs/cronJobs");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const httpServer = http_1.default.createServer(app);
@@ -50,7 +51,7 @@ app.use((req, res, next) => {
     throw new Errors_1.NotFound("Route not found");
 });
 app.use(errorHandler_1.errorHandler);
-// startCronJobs();
 httpServer.listen(3000, () => {
     console.log("Server is running on http://localhost:3000");
+    (0, cronJobs_1.startCurrencyCron)();
 });

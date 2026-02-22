@@ -84,14 +84,14 @@ async function main() {
         await seedDiagnosticExams();
 
         // 13. Quizzes
-        console.log("\n📝 Seeding Quizzes...");
-        const { seedQuizzes } = await import("./quizzes");
-        await seedQuizzes();
+        // console.log("\n📝 Seeding Quizzes...");
+        // const { seedQuizzes } = await import("./quizzes");
+        // await seedQuizzes();
 
         // 14. Exams
-        console.log("\n📝 Seeding Exams...");
-        const { seedExams } = await import("./exams");
-        await seedExams();
+        // console.log("\n📝 Seeding Exams...");
+        // const { seedExams } = await import("./exams");
+        // await seedExams();
 
         console.log("\n✅ Seeding completed successfully!");
     } catch (error) {

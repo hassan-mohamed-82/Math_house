@@ -24,7 +24,7 @@ exports.getTextfromImage = getTextfromImage;
 // TODO: SAVE IMAGES TO THE DRIVE Rather than BASE64
 // Questions
 const createQuestion = async (req, res) => {
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, section, codeId, answerPdf, answerVideo } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo } = req.body;
     if (!question
         || !answerType
         || !difficulty
@@ -32,7 +32,7 @@ const createQuestion = async (req, res) => {
         || !lessonId
         || !year
         || !month
-        || !section
+        || !sectionId
         || !codeId)
         throw new BadRequest_1.BadRequest("All fields are required");
     if (answerType === "MCQ" && (!options || !Array.isArray(options) || options.length === 0))
@@ -44,6 +44,10 @@ const createQuestion = async (req, res) => {
     const examCode = await connection_1.db.select().from(schema_1.examCodes).where((0, drizzle_orm_1.eq)(schema_1.examCodes.id, codeId)).limit(1);
     if (!examCode[0]) {
         throw new Errors_1.NotFound("Exam code is not found");
+    }
+    const section = await connection_1.db.select().from(schema_1.Sections).where((0, drizzle_orm_1.eq)(schema_1.Sections.id, sectionId)).limit(1);
+    if (!section[0]) {
+        throw new Errors_1.NotFound("Section is not found");
     }
     let imageUrl = image;
     if (image) {
@@ -61,7 +65,7 @@ const createQuestion = async (req, res) => {
             lessonId,
             year,
             month,
-            section,
+            sectionId,
             codeId,
         });
         if (options && Array.isArray(options) && options.length > 0) {
@@ -99,7 +103,7 @@ const getAllQuestions = async (req, res) => {
         lessonId: schema_1.questions.lessonId,
         year: schema_1.questions.year,
         month: schema_1.questions.month,
-        section: schema_1.questions.section,
+        sectionId: schema_1.questions.sectionId,
         codeId: schema_1.questions.codeId,
         lesson: {
             id: schema_1.lessons.id,
@@ -110,10 +114,15 @@ const getAllQuestions = async (req, res) => {
             code: schema_1.examCodes.code,
         },
         type: schema_1.questions.questionType,
+        section: {
+            id: schema_1.Sections.id,
+            sectionName: schema_1.Sections.sectionName,
+        }
     })
         .from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
         .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
         .limit(limit)
         .offset(offset)
         .orderBy((0, drizzle_orm_1.desc)(schema_1.questions.createdAt));
@@ -142,7 +151,7 @@ const getQuestionbyId = async (req, res) => {
         lessonId: schema_1.questions.lessonId,
         year: schema_1.questions.year,
         month: schema_1.questions.month,
-        section: schema_1.questions.section,
+        sectionId: schema_1.questions.sectionId,
         codeId: schema_1.questions.codeId,
         lesson: {
             id: schema_1.lessons.id,
@@ -153,9 +162,14 @@ const getQuestionbyId = async (req, res) => {
             code: schema_1.examCodes.code,
         },
         type: schema_1.questions.questionType,
+        section: {
+            id: schema_1.Sections.id,
+            sectionName: schema_1.Sections.sectionName,
+        }
     }).from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
         .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
         .where((0, drizzle_orm_1.eq)(schema_1.questions.id, id)).limit(1);
     if (!question[0]) {
         throw new Errors_1.NotFound("Question is not found");
@@ -165,9 +179,27 @@ const getQuestionbyId = async (req, res) => {
 exports.getQuestionbyId = getQuestionbyId;
 const updateQuestion = async (req, res) => {
     const { id } = req.params;
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, section, codeId, answerPdf, answerVideo } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo } = req.body;
     if (!id) {
         throw new BadRequest_1.BadRequest("Question ID is required");
+    }
+    if (lessonId) {
+        const lesson = await connection_1.db.select().from(schema_1.lessons).where((0, drizzle_orm_1.eq)(schema_1.lessons.id, lessonId)).limit(1);
+        if (!lesson[0]) {
+            throw new Errors_1.NotFound("Lesson is not found");
+        }
+    }
+    if (codeId) {
+        const examCode = await connection_1.db.select().from(schema_1.examCodes).where((0, drizzle_orm_1.eq)(schema_1.examCodes.id, codeId)).limit(1);
+        if (!examCode[0]) {
+            throw new Errors_1.NotFound("Exam code is not found");
+        }
+    }
+    if (sectionId) {
+        const section = await connection_1.db.select().from(schema_1.Sections).where((0, drizzle_orm_1.eq)(schema_1.Sections.id, sectionId)).limit(1);
+        if (!section[0]) {
+            throw new Errors_1.NotFound("Section is not found");
+        }
     }
     await connection_1.db.transaction(async (tx) => {
         const existingQuestion = await tx.select().from(schema_1.questions).where((0, drizzle_orm_1.eq)(schema_1.questions.id, id)).limit(1);
@@ -193,8 +225,8 @@ const updateQuestion = async (req, res) => {
             questionUpdateData.year = year;
         if (month !== undefined)
             questionUpdateData.month = month;
-        if (section !== undefined)
-            questionUpdateData.section = section;
+        if (sectionId !== undefined)
+            questionUpdateData.sectionId = sectionId;
         if (codeId !== undefined)
             questionUpdateData.codeId = codeId;
         if (Object.keys(questionUpdateData).length > 0) {
@@ -337,7 +369,7 @@ const createParallelQuestion = async (req, res) => {
 exports.createParallelQuestion = createParallelQuestion;
 const updateParallelQuestion = async (req, res) => {
     const { id } = req.params;
-    const { question, answerType, difficulty, lessonId, options } = req.body; // No image, year, month, section, codeId, answerPdf/Video for parallel questions yet based on create
+    const { question, answerType, difficulty, lessonId, options } = req.body; // No image, year, month, sectionId, codeId, answerPdf/Video for parallel questions yet based on create
     if (!id) {
         throw new BadRequest_1.BadRequest("Parallel Question ID is required");
     }

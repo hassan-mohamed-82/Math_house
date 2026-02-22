@@ -8,6 +8,7 @@ const router = (0, express_1.Router)();
 // No Authorization for roles for it -------------
 router.get("/selectionCourses", (0, catchAsync_1.catchAsync)(courses_1.getAllCourses));
 router.get("/selectionCategories", (0, catchAsync_1.catchAsync)(teacher_1.getCategorySelection));
+router.get("/selectionTeachers", (0, catchAsync_1.catchAsync)(teacher_1.getAllTeachers));
 // -------------------------------------------------
 router.post("/", (0, catchAsync_1.catchAsync)(teacher_1.createTeacher));
 router.get("/:id", (0, catchAsync_1.catchAsync)(teacher_1.getTeacherById));
