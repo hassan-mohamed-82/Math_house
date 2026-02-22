@@ -36,3 +36,4 @@ __exportStar(require("./schema/admin/exams"), exports);
 __exportStar(require("./schema/admin/currency"), exports);
 __exportStar(require("./schema/admin/conversionRate"), exports);
 __exportStar(require("./schema/admin/Popup"), exports);
+__exportStar(require("./schema/admin/SessionRating"), exports);
