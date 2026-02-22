@@ -15,7 +15,14 @@ import {
     getAllParallelQuestions,
     getParallelQuestionbyId,
 } from "../../controllers/admin/questions";
+
+import { getExamCodes } from "../../controllers/admin/examCodes";
 const router = Router();
+
+// No Permissions Required
+router.get("/selectionExamCode", catchAsync(getExamCodes));
+// ---------------------------------------------------------
+
 
 router.post("/ocr", upload.single('image'), catchAsync(getTextfromImage));
 router.post("/parallel/generate", catchAsync(sendParallelQuestionGenerate));
