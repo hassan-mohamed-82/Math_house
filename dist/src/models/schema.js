@@ -35,3 +35,4 @@ __exportStar(require("./schema/admin/sections"), exports);
 __exportStar(require("./schema/admin/exams"), exports);
 __exportStar(require("./schema/admin/currency"), exports);
 __exportStar(require("./schema/admin/conversionRate"), exports);
+__exportStar(require("./schema/admin/Popup"), exports);

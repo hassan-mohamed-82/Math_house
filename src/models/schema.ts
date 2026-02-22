@@ -19,3 +19,4 @@ export * from "./schema/admin/sections";
 export * from "./schema/admin/exams";
 export * from "./schema/admin/currency";
 export * from "./schema/admin/conversionRate";
+export * from "./schema/admin/Popup";
