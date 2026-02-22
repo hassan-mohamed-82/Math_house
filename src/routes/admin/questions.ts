@@ -17,10 +17,12 @@ import {
 } from "../../controllers/admin/questions";
 
 import { getExamCodes } from "../../controllers/admin/examCodes";
+import { getAllLessons } from "../../controllers/admin/lessons";
 const router = Router();
 
 // No Permissions Required
 router.get("/selectionExamCode", catchAsync(getExamCodes));
+router.get("/selectionLesson", catchAsync(getAllLessons));
 // ---------------------------------------------------------
 
 
