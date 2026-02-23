@@ -9,6 +9,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
+const uuid_1 = require("uuid");
 // ===================== SELECT OPTIONS =====================
 const selectOptions = async (req, res) => {
     const categoriesList = await connection_1.db.select({
@@ -28,7 +29,6 @@ const selectOptions = async (req, res) => {
     });
 };
 exports.selectOptions = selectOptions;
-// جلب الـ Courses بناءً على الـ Category
 const getCoursesByCategory = async (req, res) => {
     const { categoryId } = req.params;
     const coursesList = await connection_1.db
@@ -50,16 +50,18 @@ const createPackage = async (req, res) => {
     if (!name || !type || !categoryId || !courseId || !number || !price || !duration) {
         throw new BadRequest_1.BadRequest("All fields are required");
     }
-    const [newPackage] = await connection_1.db.insert(Package_1.packages).values({
+    const id = (0, uuid_1.v4)();
+    await connection_1.db.insert(Package_1.packages).values({
+        id,
         name,
         type,
         categoryId,
         courseId,
         number: Number(number),
-        price: price.toString(),
+        price: String(price),
         duration: Number(duration)
-    }).$returningId();
-    (0, response_1.SuccessResponse)(res, { id: newPackage.id }, 201);
+    });
+    (0, response_1.SuccessResponse)(res, { id }, 201);
 };
 exports.createPackage = createPackage;
 const getAllPackages = async (req, res) => {
@@ -125,6 +127,14 @@ exports.getPackageById = getPackageById;
 const updatePackage = async (req, res) => {
     const { id } = req.params;
     const { name, type, categoryId, courseId, number, price, duration } = req.body;
+    // تأكد من وجود الـ Package
+    const [existing] = await connection_1.db
+        .select({ id: Package_1.packages.id })
+        .from(Package_1.packages)
+        .where((0, drizzle_orm_1.eq)(Package_1.packages.id, id));
+    if (!existing) {
+        throw new Errors_1.NotFound("Package not found");
+    }
     await connection_1.db.update(Package_1.packages)
         .set({
         name,
@@ -132,7 +142,7 @@ const updatePackage = async (req, res) => {
         categoryId,
         courseId,
         number: Number(number),
-        price: price.toString(),
+        price: String(price),
         duration: Number(duration),
         updatedAt: new Date()
     })
@@ -142,6 +152,14 @@ const updatePackage = async (req, res) => {
 exports.updatePackage = updatePackage;
 const deletePackage = async (req, res) => {
     const { id } = req.params;
+    // تأكد من وجود الـ Package
+    const [existing] = await connection_1.db
+        .select({ id: Package_1.packages.id })
+        .from(Package_1.packages)
+        .where((0, drizzle_orm_1.eq)(Package_1.packages.id, id));
+    if (!existing) {
+        throw new Errors_1.NotFound("Package not found");
+    }
     await connection_1.db.delete(Package_1.packages).where((0, drizzle_orm_1.eq)(Package_1.packages.id, id));
     (0, response_1.SuccessResponse)(res, { message: "Package deleted successfully" });
 };
