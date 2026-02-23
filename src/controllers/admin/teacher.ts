@@ -16,7 +16,10 @@ export const createTeacher = async (req: Request, res: Response) => {
     if (existingTeacher.length > 0) {
         throw new BadRequest("Teacher already exists");
     }
-    const avatarURL = await validateAndSaveLogo(req, avatar, "teachers");
+    let avatarURL = null;
+    if (avatar) {
+        avatarURL = await validateAndSaveLogo(req, avatar, "teachers");
+    }
 
     if (categoryId) {
         const existingCategory = await db.select().from(category).where(eq(category.id, categoryId));

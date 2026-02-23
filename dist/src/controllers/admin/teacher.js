@@ -17,7 +17,10 @@ const createTeacher = async (req, res) => {
     if (existingTeacher.length > 0) {
         throw new BadRequest_1.BadRequest("Teacher already exists");
     }
-    const avatarURL = await (0, handleImages_1.validateAndSaveLogo)(req, avatar, "teachers");
+    let avatarURL = null;
+    if (avatar) {
+        avatarURL = await (0, handleImages_1.validateAndSaveLogo)(req, avatar, "teachers");
+    }
     if (categoryId) {
         const existingCategory = await connection_1.db.select().from(schema_1.category).where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId));
         if (existingCategory.length === 0) {

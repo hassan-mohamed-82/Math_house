@@ -27,7 +27,10 @@ export const createCategory = async (req: Request, res: Response) => {
         throw new BadRequest("Category already exists");
     }
 
-    const imageUrl = await validateAndSaveLogo(req, image, "category");
+    let imageUrl = null;
+    if (image) {
+        imageUrl = await validateAndSaveLogo(req, image, "category");
+    }
 
     await db.insert(category).values({ name, description, image: imageUrl, parentCategoryId });
 

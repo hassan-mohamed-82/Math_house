@@ -37,3 +37,7 @@ __exportStar(require("./schema/admin/currency"), exports);
 __exportStar(require("./schema/admin/conversionRate"), exports);
 __exportStar(require("./schema/admin/Popup"), exports);
 __exportStar(require("./schema/admin/SessionRating"), exports);
+__exportStar(require("./schema/admin/Session"), exports);
+__exportStar(require("./schema/admin/Groups"), exports);
+__exportStar(require("./schema/admin/Package"), exports);
+__exportStar(require("./schema/admin/Notfication"), exports);

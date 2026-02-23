@@ -89,7 +89,10 @@ export const createChapter = async (req: Request, res: Response) => {
     const [maxOrderResult] = await db.select({ maxOrder: max(chapters.order) }).from(chapters).where(eq(chapters.courseId, courseId));
     const nextOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
 
-    const imageURL = await validateAndSaveLogo(req, image, "chapters");
+    let imageURL = null;
+    if (image) {
+        imageURL = await validateAndSaveLogo(req, image, "chapters");
+    }
     await db.insert(chapters).values({
         name,
         courseId,

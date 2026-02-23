@@ -23,7 +23,10 @@ const createCategory = async (req, res) => {
     if (existingCategory.length > 0) {
         throw new BadRequest_1.BadRequest("Category already exists");
     }
-    const imageUrl = await (0, handleImages_1.validateAndSaveLogo)(req, image, "category");
+    let imageUrl = null;
+    if (image) {
+        imageUrl = await (0, handleImages_1.validateAndSaveLogo)(req, image, "category");
+    }
     await connection_1.db.insert(schema_1.category).values({ name, description, image: imageUrl, parentCategoryId });
     return (0, response_1.SuccessResponse)(res, { message: "Category created successfully" }, 200);
 };
@@ -73,7 +76,13 @@ exports.deleteCategory = deleteCategory;
 const getAllCategory = async (req, res) => {
     const categories = await connection_1.db.select().from(schema_1.category);
     const categoryMap = new Map();
-    categories.forEach(cat => categoryMap.set(cat.id, cat));
+    const parentIds = new Set();
+    categories.forEach(cat => {
+        categoryMap.set(cat.id, cat);
+        if (cat.parentCategoryId) {
+            parentIds.add(cat.parentCategoryId);
+        }
+    });
     const data = categories.map(cat => {
         const ancestors = [];
         let current = cat;
@@ -88,9 +97,11 @@ const getAllCategory = async (req, res) => {
                 break;
             }
         }
+        const isLeaf = !parentIds.has(cat.id);
         return {
             ...cat,
-            ancestors
+            ancestors,
+            isLeaf
         };
     });
     return (0, response_1.SuccessResponse)(res, { message: "Categories fetched successfully", data }, 200);
