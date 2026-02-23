@@ -66,18 +66,18 @@ async function main() {
         // 3. Teachers (depends on categories)
         console.log("\n👨‍🏫 Seeding Teachers...");
         const teacherMap = await (0, teachers_1.seedTeachers)(categoryMap);
-        // 4. Semesters (depends on categories)
-        console.log("\n📅 Seeding Semesters...");
-        const semesterMap = await (0, semesters_1.seedSemesters)(categoryMap);
-        // 5. Courses + CourseTeachers (depends on categories, semesters, teachers)
+        // 4. Courses + CourseTeachers (depends on categories, teachers)
         console.log("\n📚 Seeding Courses...");
-        const courseMap = await (0, courses_1.seedCourses)(categoryMap, semesterMap, teacherMap);
+        const courseMap = await (0, courses_1.seedCourses)(categoryMap, teacherMap);
+        // 5. Semesters (depends on courses)
+        console.log("\n📅 Seeding Semesters...");
+        const semesterMap = await (0, semesters_1.seedSemesters)(courseMap);
         // 5.5 Raw Scores (depends on courses)
         console.log("\n📊 Seeding Raw Scores...");
         await (0, rawScore_1.seedRawScores)(courseMap);
-        // 6. Chapters (depends on courses, categories, teachers)
+        // 6. Chapters (depends on courses, categories, teachers, semesters)
         console.log("\n📖 Seeding Chapters...");
-        const chapterMap = await (0, chapters_1.seedChapters)(courseMap, categoryMap, teacherMap);
+        const chapterMap = await (0, chapters_1.seedChapters)(courseMap, categoryMap, teacherMap, semesterMap);
         // 7. Lessons & Ideas (depends on chapters, courses, categories, teachers)
         console.log("\n📝 Seeding Lessons & Ideas...");
         await (0, lessons_1.seedLessons)(chapterMap, courseMap, categoryMap, teacherMap);

@@ -3,26 +3,27 @@ import { semesters } from "../models/schema";
 import { eq, and } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
-export async function seedSemesters(categoryMap: Record<string, string>) {
+export async function seedSemesters(courseMap: Record<string, string>) {
     const semesterMap: Record<string, string> = {};
 
-    // Leaf categories that should have semesters
-    const leafCategories = [
-        "Primary 1", "Primary 2", "Primary 3",
-        "Prep 1", "Prep 2", "Prep 3",
-        "Secondary 1", "Secondary 2", "Secondary 3",
-        "IG Year 1", "IG Year 2",
+    // Courses that we know have semesters based on our courses seed
+    const semesterCourses = [
+        "Primary 1",
+        "Middle 1",
+        "Middle 2",
+        "Secondary 1",
+        "IG Year 1"
     ];
 
-    for (const catName of leafCategories) {
-        const categoryId = categoryMap[catName];
-        if (!categoryId) continue;
+    for (const courseName of semesterCourses) {
+        const courseId = courseMap[courseName];
+        if (!courseId) continue;
 
         for (const semName of ["Semester 1", "Semester 2"]) {
-            const key = `${catName} - ${semName}`;
+            const key = `${courseName} - ${semName}`;
 
             const existing = await db.select().from(semesters)
-                .where(and(eq(semesters.name, semName), eq(semesters.categoryId, categoryId)));
+                .where(and(eq(semesters.name, semName), eq(semesters.courseId, courseId)));
 
             if (existing.length > 0) {
                 semesterMap[key] = existing[0].id;
@@ -35,7 +36,7 @@ export async function seedSemesters(categoryMap: Record<string, string>) {
             await db.insert(semesters).values({
                 id,
                 name: semName,
-                categoryId,
+                courseId,
             });
 
             semesterMap[key] = id;

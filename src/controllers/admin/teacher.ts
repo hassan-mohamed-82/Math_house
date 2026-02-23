@@ -59,7 +59,7 @@ export const createTeacher = async (req: Request, res: Response) => {
 
 export const getTeacherById = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const teacher = await db.select({
+    const teacherData = await db.select({
         id: teachers.id,
         name: teachers.name,
         email: teachers.email,
@@ -71,17 +71,35 @@ export const getTeacherById = async (req: Request, res: Response) => {
             name: courses.name,
         }
     }).from(teachers)
-        .innerJoin(courseTeachers, eq(teachers.id, courseTeachers.teacherId))
-        .innerJoin(courses, eq(courses.id, courseTeachers.courseId))
+        .leftJoin(courseTeachers, eq(teachers.id, courseTeachers.teacherId))
+        .leftJoin(courses, eq(courses.id, courseTeachers.courseId))
         .where(eq(teachers.id, id));
-    if (teacher.length === 0) {
+
+    if (teacherData.length === 0) {
         throw new BadRequest("Teacher not found");
     }
-    return SuccessResponse(res, { message: "Teacher fetched successfully", teacher: teacher[0] }, 200);
+
+    const teacher = {
+        id: teacherData[0].id,
+        name: teacherData[0].name,
+        email: teacherData[0].email,
+        phoneNumber: teacherData[0].phoneNumber,
+        avatar: teacherData[0].avatar,
+        categoryId: teacherData[0].categoryId,
+        courses: [] as any[]
+    };
+
+    teacherData.forEach((row) => {
+        if (row.courses && row.courses.id) {
+            teacher.courses.push(row.courses);
+        }
+    });
+
+    return SuccessResponse(res, { message: "Teacher fetched successfully", teacher }, 200);
 }
 
 export const getAllTeachers = async (req: Request, res: Response) => {
-    const teacher = await db.select({
+    const teacherData = await db.select({
         id: teachers.id,
         name: teachers.name,
         email: teachers.email,
@@ -93,8 +111,29 @@ export const getAllTeachers = async (req: Request, res: Response) => {
             name: courses.name,
         }
     }).from(teachers)
-        .innerJoin(courseTeachers, eq(teachers.id, courseTeachers.teacherId))
-        .innerJoin(courses, eq(courses.id, courseTeachers.courseId))
+        .leftJoin(courseTeachers, eq(teachers.id, courseTeachers.teacherId))
+        .leftJoin(courses, eq(courses.id, courseTeachers.courseId));
+
+    const teacherMap = new Map();
+
+    teacherData.forEach((row) => {
+        if (!teacherMap.has(row.id)) {
+            teacherMap.set(row.id, {
+                id: row.id,
+                name: row.name,
+                email: row.email,
+                phoneNumber: row.phoneNumber,
+                avatar: row.avatar,
+                categoryId: row.categoryId,
+                courses: [] as any[]
+            });
+        }
+        if (row.courses && row.courses.id) {
+            teacherMap.get(row.id).courses.push(row.courses);
+        }
+    });
+
+    const teacher = Array.from(teacherMap.values());
     return SuccessResponse(res, { message: "Teachers fetched successfully", teacher }, 200);
 }
 

@@ -6,36 +6,36 @@ import { v4 as uuidv4 } from "uuid";
 export async function seedChapters(
     courseMap: Record<string, string>,
     categoryMap: Record<string, string>,
-    teacherMap: Record<string, string>
+    teacherMap: Record<string, string>,
+    semesterMap: Record<string, string>
 ): Promise<Record<string, string>> {
     const chapterMap: Record<string, string> = {};
 
     const chaptersData = [
-        // Algebra Basics chapters
-        { name: "Numbers & Operations", course: "Algebra Basics", category: "Primary 1", teacher: "Ahmed Hassan", duration: "2 weeks", price: 50, discount: 5, order: 1 },
-        { name: "Variables & Expressions", course: "Algebra Basics", category: "Primary 1", teacher: "Ahmed Hassan", duration: "2 weeks", price: 50, discount: 5, order: 2 },
-        { name: "Simple Equations", course: "Algebra Basics", category: "Primary 1", teacher: "Ahmed Hassan", duration: "3 weeks", price: 60, discount: 0, order: 3 },
+        // Primary 1 chapters
+        { name: "Numbers & Operations", course: "Primary 1", semester: "Primary 1 - Semester 1", category: "Primary", teacher: "Ahmed Hassan", duration: "2 weeks", price: 50, discount: 5, order: 1 },
+        { name: "Variables & Expressions", course: "Primary 1", semester: "Primary 1 - Semester 1", category: "Primary", teacher: "Ahmed Hassan", duration: "2 weeks", price: 50, discount: 5, order: 2 },
+        { name: "Simple Equations", course: "Primary 1", semester: "Primary 1 - Semester 2", category: "Primary", teacher: "Ahmed Hassan", duration: "3 weeks", price: 60, discount: 0, order: 3 },
+        { name: "Lines & Angles", course: "Primary 1", semester: "Primary 1 - Semester 1", category: "Primary", teacher: "Ahmed Hassan", duration: "2 weeks", price: 60, discount: 0, order: 4 },
+        { name: "Triangles & Polygons", course: "Primary 1", semester: "Primary 1 - Semester 2", category: "Primary", teacher: "Ahmed Hassan", duration: "3 weeks", price: 70, discount: 10, order: 5 },
 
-        // Geometry Fundamentals chapters
-        { name: "Lines & Angles", course: "Geometry Fundamentals", category: "Primary 1", teacher: "Ahmed Hassan", duration: "2 weeks", price: 60, discount: 0, order: 1 },
-        { name: "Triangles & Polygons", course: "Geometry Fundamentals", category: "Primary 1", teacher: "Ahmed Hassan", duration: "3 weeks", price: 70, discount: 10, order: 2 },
+        // Middle 1 chapters
+        { name: "Linear Equations", course: "Middle 1", semester: "Middle 1 - Semester 1", category: "Middle", teacher: "Sara Mohamed", duration: "3 weeks", price: 80, discount: 10, order: 1 },
+        { name: "Quadratic Equations", course: "Middle 1", semester: "Middle 1 - Semester 2", category: "Middle", teacher: "Sara Mohamed", duration: "3 weeks", price: 90, discount: 0, order: 2 },
 
-        // Equations & Inequalities chapters
-        { name: "Linear Equations", course: "Equations & Inequalities", category: "Prep 1", teacher: "Sara Mohamed", duration: "3 weeks", price: 80, discount: 10, order: 1 },
-        { name: "Quadratic Equations", course: "Equations & Inequalities", category: "Prep 1", teacher: "Sara Mohamed", duration: "3 weeks", price: 90, discount: 0, order: 2 },
-
-        // Trigonometry chapters
-        { name: "Angle Measures", course: "Trigonometry", category: "Secondary 1", teacher: "Mohamed Ali", duration: "2 weeks", price: 100, discount: 0, order: 1 },
-        { name: "Sine, Cosine & Tangent", course: "Trigonometry", category: "Secondary 1", teacher: "Mohamed Ali", duration: "4 weeks", price: 120, discount: 20, order: 2 },
+        // Secondary 1 chapters
+        { name: "Angle Measures", course: "Secondary 1", semester: "Secondary 1 - Semester 1", category: "Secondary", teacher: "Mohamed Ali", duration: "2 weeks", price: 100, discount: 0, order: 1 },
+        { name: "Sine, Cosine & Tangent", course: "Secondary 1", semester: "Secondary 1 - Semester 2", category: "Secondary", teacher: "Mohamed Ali", duration: "4 weeks", price: 120, discount: 20, order: 2 },
 
         // IGCSE Mathematics chapters
-        { name: "Number Theory", course: "IGCSE Mathematics", category: "IG Year 1", teacher: "Fatma Ibrahim", duration: "3 weeks", price: 100, discount: 0, order: 1 },
-        { name: "Algebra & Graphs", course: "IGCSE Mathematics", category: "IG Year 1", teacher: "Fatma Ibrahim", duration: "4 weeks", price: 120, discount: 15, order: 2 },
-        { name: "Statistics & Probability", course: "IGCSE Mathematics", category: "IG Year 1", teacher: "Fatma Ibrahim", duration: "3 weeks", price: 110, discount: 0, order: 3 },
+        { name: "Number Theory", course: "IG Year 1", semester: "IG Year 1 - Semester 1", category: "IGCSE", teacher: "Fatma Ibrahim", duration: "3 weeks", price: 100, discount: 0, order: 1 },
+        { name: "Algebra & Graphs", course: "IG Year 1", semester: "IG Year 1 - Semester 1", category: "IGCSE", teacher: "Fatma Ibrahim", duration: "4 weeks", price: 120, discount: 15, order: 2 },
+        { name: "Statistics & Probability", course: "IG Year 1", semester: "IG Year 1 - Semester 2", category: "IGCSE", teacher: "Fatma Ibrahim", duration: "3 weeks", price: 110, discount: 0, order: 3 },
     ];
 
     for (const ch of chaptersData) {
         const courseId = courseMap[ch.course];
+        const semesterId = semesterMap[ch.semester];
         const categoryId = categoryMap[ch.category];
         const teacherId = teacherMap[ch.teacher];
 
@@ -59,6 +59,7 @@ export async function seedChapters(
             id,
             name: ch.name,
             courseId,
+            semesterId,
             categoryId,
             teacherId,
             duration: ch.duration,

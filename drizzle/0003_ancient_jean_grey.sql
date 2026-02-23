@@ -115,8 +115,37 @@ CREATE TABLE `conversion_rate` (
 	CONSTRAINT `conversion_rate_id` PRIMARY KEY(`id`)
 );
 --> statement-breakpoint
-ALTER TABLE `questions` RENAME COLUMN `section` TO `section_id`;--> statement-breakpoint
-ALTER TABLE `questions` MODIFY COLUMN `section_id` char(255) NOT NULL;--> statement-breakpoint
+CREATE TABLE `popups` (
+	`id` char(255) NOT NULL DEFAULT (uuid()),
+	`name` varchar(255) NOT NULL,
+	`image` text NOT NULL,
+	`destination` enum('student','parent','teacher') NOT NULL,
+	`start_date` datetime NOT NULL,
+	`end_date` datetime NOT NULL,
+	`created_at` timestamp DEFAULT (now()),
+	`updated_at` timestamp DEFAULT (now()),
+	CONSTRAINT `popups_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+CREATE TABLE `session_ratings` (
+	`id` char(36) NOT NULL DEFAULT (UUID()),
+	`session_id` char(36) NOT NULL,
+	`student_id` char(36) NOT NULL,
+	`rating` int NOT NULL,
+	`comment` text,
+	`created_at` timestamp DEFAULT (now()),
+	`updated_at` timestamp DEFAULT (now()),
+	CONSTRAINT `session_ratings_id` PRIMARY KEY(`id`)
+);
+--> statement-breakpoint
+ALTER TABLE `courses` DROP FOREIGN KEY `courses_semester_id_semesters_id_fk`;
+--> statement-breakpoint
+ALTER TABLE `semesters` DROP FOREIGN KEY `semesters_category_id_category_id_fk`;
+--> statement-breakpoint
+ALTER TABLE `courses` ADD `is_have_semester` boolean DEFAULT false;--> statement-breakpoint
+ALTER TABLE `chapters` ADD `semester_id` char(255);--> statement-breakpoint
+ALTER TABLE `semesters` ADD `course_id` char(255) NOT NULL;--> statement-breakpoint
+ALTER TABLE `questions` ADD `section_id` char(255) NOT NULL;--> statement-breakpoint
 ALTER TABLE `raw_score` ADD CONSTRAINT `raw_score_course_id_courses_id_fk` FOREIGN KEY (`course_id`) REFERENCES `courses`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `diagnostic_exam` ADD CONSTRAINT `diagnostic_exam_raw_score_id_raw_score_id_fk` FOREIGN KEY (`raw_score_id`) REFERENCES `raw_score`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `diagnostic_exam_questions` ADD CONSTRAINT `diagnostic_exam_questions_question_id_questions_id_fk` FOREIGN KEY (`question_id`) REFERENCES `questions`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -131,4 +160,11 @@ ALTER TABLE `section_questions` ADD CONSTRAINT `section_questions_section_id_exa
 ALTER TABLE `section_questions` ADD CONSTRAINT `section_questions_question_id_questions_id_fk` FOREIGN KEY (`question_id`) REFERENCES `questions`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `conversion_rate` ADD CONSTRAINT `conversion_rate_from_currency_id_currency_id_fk` FOREIGN KEY (`from_currency_id`) REFERENCES `currency`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE `conversion_rate` ADD CONSTRAINT `conversion_rate_to_currency_id_currency_id_fk` FOREIGN KEY (`to_currency_id`) REFERENCES `currency`(`id`) ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE `questions` ADD CONSTRAINT `questions_section_id_sections_id_fk` FOREIGN KEY (`section_id`) REFERENCES `sections`(`id`) ON DELETE no action ON UPDATE no action;
+ALTER TABLE `session_ratings` ADD CONSTRAINT `session_ratings_session_id_sessions_id_fk` FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `session_ratings` ADD CONSTRAINT `session_ratings_student_id_student_id_fk` FOREIGN KEY (`student_id`) REFERENCES `student`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `chapters` ADD CONSTRAINT `chapters_semester_id_semesters_id_fk` FOREIGN KEY (`semester_id`) REFERENCES `semesters`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `semesters` ADD CONSTRAINT `semesters_course_id_courses_id_fk` FOREIGN KEY (`course_id`) REFERENCES `courses`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `questions` ADD CONSTRAINT `questions_section_id_sections_id_fk` FOREIGN KEY (`section_id`) REFERENCES `sections`(`id`) ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `courses` DROP COLUMN `semester_id`;--> statement-breakpoint
+ALTER TABLE `semesters` DROP COLUMN `category_id`;--> statement-breakpoint
+ALTER TABLE `questions` DROP COLUMN `section`;

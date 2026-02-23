@@ -42,13 +42,18 @@ const chapterDetailedQuery = () => connection_1.db.select({
         email: schema_1.teachers.email,
         avatar: schema_1.teachers.avatar,
     },
+    semester: {
+        id: schema_1.semesters.id,
+        name: schema_1.semesters.name,
+    }
 })
     .from(schema_1.chapters)
     .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, schema_1.courses.id))
     .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.chapters.categoryId, schema_1.category.id))
-    .leftJoin(schema_1.teachers, (0, drizzle_orm_1.eq)(schema_1.chapters.teacherId, schema_1.teachers.id));
+    .leftJoin(schema_1.teachers, (0, drizzle_orm_1.eq)(schema_1.chapters.teacherId, schema_1.teachers.id))
+    .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.chapters.semesterId, schema_1.semesters.id));
 const createChapter = async (req, res) => {
-    const { name, courseId, description, image, teacherId, preRequisition, whatYouGain, duration, price, discount } = req.body;
+    const { name, courseId, semesterId, description, image, teacherId, preRequisition, whatYouGain, duration, price, discount } = req.body;
     if (!name || !courseId || !teacherId || !duration || !price) {
         throw new BadRequest_1.BadRequest("Name, Course ID, Teacher ID, Duration and Price are required");
     }
@@ -66,6 +71,15 @@ const createChapter = async (req, res) => {
     if (existingTeacher.length === 0) {
         throw new BadRequest_1.BadRequest("Teacher not found");
     }
+    if (semesterId) {
+        const existingSemester = await connection_1.db.select().from(schema_1.semesters).where((0, drizzle_orm_1.eq)(schema_1.semesters.id, semesterId));
+        if (existingSemester.length === 0) {
+            throw new BadRequest_1.BadRequest("Semester not found");
+        }
+        if (existingSemester[0].courseId !== courseId) {
+            throw new BadRequest_1.BadRequest("The selected semester does not belong to the selected course");
+        }
+    }
     // Auto-compute order: MAX(order) + 1 for this course
     const [maxOrderResult] = await connection_1.db.select({ maxOrder: (0, drizzle_orm_1.max)(schema_1.chapters.order) }).from(schema_1.chapters).where((0, drizzle_orm_1.eq)(schema_1.chapters.courseId, courseId));
     const nextOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
@@ -73,6 +87,7 @@ const createChapter = async (req, res) => {
     await connection_1.db.insert(schema_1.chapters).values({
         name,
         courseId,
+        semesterId,
         categoryId,
         teacherId,
         preRequisition,
@@ -130,7 +145,7 @@ const swapChapterOrder = async (req, res) => {
 exports.swapChapterOrder = swapChapterOrder;
 const updateChapter = async (req, res) => {
     const { id } = req.params;
-    const { name, courseId, description, image, teacherId, preRequisition, whatYouGain, duration, price, discount } = req.body;
+    const { name, courseId, semesterId, description, image, teacherId, preRequisition, whatYouGain, duration, price, discount } = req.body;
     const [existingChapter] = await connection_1.db.select().from(schema_1.chapters).where((0, drizzle_orm_1.eq)(schema_1.chapters.id, id));
     if (!existingChapter) {
         throw new BadRequest_1.BadRequest("Chapter not found");
@@ -158,11 +173,33 @@ const updateChapter = async (req, res) => {
             throw new BadRequest_1.BadRequest("Teacher not found");
         }
     }
+    let updatedSemesterId = existingChapter.semesterId;
+    // If semesterId is explicitly changing
+    if (semesterId !== undefined && semesterId !== existingChapter.semesterId) {
+        if (semesterId) {
+            const [semester] = await connection_1.db.select().from(schema_1.semesters).where((0, drizzle_orm_1.eq)(schema_1.semesters.id, semesterId));
+            if (!semester) {
+                throw new BadRequest_1.BadRequest("Semester not found");
+            }
+            // Use new courseId if provided, else existing
+            const targetCourseId = courseId ?? existingChapter.courseId;
+            if (semester.courseId !== targetCourseId) {
+                throw new BadRequest_1.BadRequest("The selected semester does not belong to the selected course");
+            }
+        }
+        updatedSemesterId = semesterId; // allows setting it to null
+    }
+    else if (courseId && courseId !== existingChapter.courseId) {
+        // If course changed but semesterId wasn't explicitly passed, clear the old semesterId
+        // because the old semester won't belong to the new course
+        updatedSemesterId = null;
+    }
     // Handle image update
     const updatedImage = await (0, handleImages_1.handleImageUpdate)(req, existingChapter.image, image, "chapters");
     await connection_1.db.update(schema_1.chapters).set({
         name: name ?? existingChapter.name,
         courseId: courseId ?? existingChapter.courseId,
+        semesterId: updatedSemesterId,
         categoryId,
         teacherId: teacherId ?? existingChapter.teacherId,
         description: description !== undefined ? description : existingChapter.description,

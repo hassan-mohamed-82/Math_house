@@ -5,13 +5,13 @@ const connection_1 = require("../models/connection");
 const schema_1 = require("../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const uuid_1 = require("uuid");
-async function seedCourses(categoryMap, semesterMap, teacherMap) {
+async function seedCourses(categoryMap, teacherMap) {
     const courseMap = {};
     const coursesData = [
         {
             name: "Algebra Basics",
             category: "Primary 1",
-            semester: "Primary 1 - Semester 1",
+            isHaveSemester: true,
             teacher: "Ahmed Hassan",
             duration: "3 months",
             price: 200,
@@ -23,7 +23,7 @@ async function seedCourses(categoryMap, semesterMap, teacherMap) {
         {
             name: "Geometry Fundamentals",
             category: "Primary 1",
-            semester: "Primary 1 - Semester 2",
+            isHaveSemester: true,
             teacher: "Ahmed Hassan",
             duration: "3 months",
             price: 250,
@@ -35,7 +35,7 @@ async function seedCourses(categoryMap, semesterMap, teacherMap) {
         {
             name: "Equations & Inequalities",
             category: "Prep 1",
-            semester: "Prep 1 - Semester 1",
+            isHaveSemester: true,
             teacher: "Sara Mohamed",
             duration: "4 months",
             price: 350,
@@ -47,7 +47,7 @@ async function seedCourses(categoryMap, semesterMap, teacherMap) {
         {
             name: "Trigonometry",
             category: "Secondary 1",
-            semester: "Secondary 1 - Semester 1",
+            isHaveSemester: true,
             teacher: "Mohamed Ali",
             duration: "4 months",
             price: 400,
@@ -59,7 +59,7 @@ async function seedCourses(categoryMap, semesterMap, teacherMap) {
         {
             name: "IGCSE Mathematics",
             category: "IG Year 1",
-            semester: "IG Year 1 - Semester 1",
+            isHaveSemester: true,
             teacher: "Fatma Ibrahim",
             duration: "6 months",
             price: 600,
@@ -81,7 +81,7 @@ async function seedCourses(categoryMap, semesterMap, teacherMap) {
             id,
             name: c.name,
             categoryId: categoryMap[c.category],
-            semesterId: semesterMap[c.semester] || undefined,
+            isHaveSemester: c.isHaveSemester,
             duration: c.duration,
             price: c.price,
             discount: c.discount,

@@ -5,23 +5,24 @@ const connection_1 = require("../models/connection");
 const schema_1 = require("../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const uuid_1 = require("uuid");
-async function seedSemesters(categoryMap) {
+async function seedSemesters(courseMap) {
     const semesterMap = {};
-    // Leaf categories that should have semesters
-    const leafCategories = [
-        "Primary 1", "Primary 2", "Primary 3",
-        "Prep 1", "Prep 2", "Prep 3",
-        "Secondary 1", "Secondary 2", "Secondary 3",
-        "IG Year 1", "IG Year 2",
+    // Courses that we know have semesters based on our courses seed
+    const semesterCourses = [
+        "Algebra Basics",
+        "Geometry Fundamentals",
+        "Equations & Inequalities",
+        "Trigonometry",
+        "IGCSE Mathematics"
     ];
-    for (const catName of leafCategories) {
-        const categoryId = categoryMap[catName];
-        if (!categoryId)
+    for (const courseName of semesterCourses) {
+        const courseId = courseMap[courseName];
+        if (!courseId)
             continue;
         for (const semName of ["Semester 1", "Semester 2"]) {
-            const key = `${catName} - ${semName}`;
+            const key = `${courseName} - ${semName}`;
             const existing = await connection_1.db.select().from(schema_1.semesters)
-                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.semesters.name, semName), (0, drizzle_orm_1.eq)(schema_1.semesters.categoryId, categoryId)));
+                .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.semesters.name, semName), (0, drizzle_orm_1.eq)(schema_1.semesters.courseId, courseId)));
             if (existing.length > 0) {
                 semesterMap[key] = existing[0].id;
                 console.log(`  Semester "${key}" already exists`);
@@ -31,7 +32,7 @@ async function seedSemesters(categoryMap) {
             await connection_1.db.insert(schema_1.semesters).values({
                 id,
                 name: semName,
-                categoryId,
+                courseId,
             });
             semesterMap[key] = id;
             console.log(`  ✅ Semester "${key}" created`);
