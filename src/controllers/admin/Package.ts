@@ -1,3 +1,4 @@
+// controllers/packages.controller.ts
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { packages } from "../../models/schema/admin/Package";
@@ -7,6 +8,7 @@ import { eq, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
+import { v4 as uuidv4 } from "uuid";
 
 
 // ===================== SELECT OPTIONS =====================
@@ -30,7 +32,6 @@ export const selectOptions = async (req: Request, res: Response) => {
     });
 };
 
-// جلب الـ Courses بناءً على الـ Category
 export const getCoursesByCategory = async (req: Request, res: Response) => {
     const { categoryId } = req.params;
 
@@ -66,17 +67,20 @@ export const createPackage = async (req: Request, res: Response) => {
         throw new BadRequest("All fields are required");
     }
 
-    const [newPackage] = await db.insert(packages).values({
+    const id = uuidv4();
+
+    await db.insert(packages).values({
+        id,
         name,
         type,
         categoryId,
         courseId,
         number: Number(number),
-        price: price.toString(),
+        price: String(price),
         duration: Number(duration)
-    }).$returningId() as { id: string }[];
+    });
 
-    SuccessResponse(res, { id: newPackage.id }, 201);
+    SuccessResponse(res, { id }, 201);
 };
 
 export const getAllPackages = async (req: Request, res: Response) => {
@@ -158,6 +162,16 @@ export const updatePackage = async (req: Request, res: Response) => {
         duration
     } = req.body;
 
+    // تأكد من وجود الـ Package
+    const [existing] = await db
+        .select({ id: packages.id })
+        .from(packages)
+        .where(eq(packages.id, id));
+
+    if (!existing) {
+        throw new NotFound("Package not found");
+    }
+
     await db.update(packages)
         .set({
             name,
@@ -165,7 +179,7 @@ export const updatePackage = async (req: Request, res: Response) => {
             categoryId,
             courseId,
             number: Number(number),
-            price: price.toString(),
+            price: String(price),
             duration: Number(duration),
             updatedAt: new Date()
         })
@@ -176,6 +190,16 @@ export const updatePackage = async (req: Request, res: Response) => {
 
 export const deletePackage = async (req: Request, res: Response) => {
     const { id } = req.params;
+
+    // تأكد من وجود الـ Package
+    const [existing] = await db
+        .select({ id: packages.id })
+        .from(packages)
+        .where(eq(packages.id, id));
+
+    if (!existing) {
+        throw new NotFound("Package not found");
+    }
 
     await db.delete(packages).where(eq(packages.id, id));
 
