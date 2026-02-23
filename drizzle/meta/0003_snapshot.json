@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "5e060935-5c3d-42b8-8e8a-c3a6a3f8556a",
+  "id": "f63c6d3e-dc74-462f-8578-8823d9a80487",
   "prevId": "4f005785-6c6e-4282-b007-a38c6f09a66c",
   "tables": {
     "admins": {
@@ -568,13 +568,6 @@
           "notNull": true,
           "autoincrement": false
         },
-        "semester_id": {
-          "name": "semester_id",
-          "type": "char(255)",
-          "primaryKey": false,
-          "notNull": false,
-          "autoincrement": false
-        },
         "description": {
           "name": "description",
           "type": "varchar(255)",
@@ -636,6 +629,14 @@
             "type": "virtual"
           }
         },
+        "is_have_semester": {
+          "name": "is_have_semester",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -661,19 +662,6 @@
           "tableTo": "category",
           "columnsFrom": [
             "category_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "courses_semester_id_semesters_id_fk": {
-          "name": "courses_semester_id_semesters_id_fk",
-          "tableFrom": "courses",
-          "tableTo": "semesters",
-          "columnsFrom": [
-            "semester_id"
           ],
           "columnsTo": [
             "id"
@@ -716,6 +704,13 @@
           "type": "char(255)",
           "primaryKey": false,
           "notNull": true,
+          "autoincrement": false
+        },
+        "semester_id": {
+          "name": "semester_id",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": false,
           "autoincrement": false
         },
         "course_id": {
@@ -832,6 +827,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "chapters_semester_id_semesters_id_fk": {
+          "name": "chapters_semester_id_semesters_id_fk",
+          "tableFrom": "chapters",
+          "tableTo": "semesters",
+          "columnsFrom": [
+            "semester_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "chapters_course_id_courses_id_fk": {
           "name": "chapters_course_id_courses_id_fk",
           "tableFrom": "chapters",
@@ -888,8 +896,8 @@
           "notNull": true,
           "autoincrement": false
         },
-        "category_id": {
-          "name": "category_id",
+        "course_id": {
+          "name": "course_id",
           "type": "char(255)",
           "primaryKey": false,
           "notNull": true,
@@ -915,12 +923,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "semesters_category_id_category_id_fk": {
-          "name": "semesters_category_id_category_id_fk",
+        "semesters_course_id_courses_id_fk": {
+          "name": "semesters_course_id_courses_id_fk",
           "tableFrom": "semesters",
-          "tableTo": "category",
+          "tableTo": "courses",
           "columnsFrom": [
-            "category_id"
+            "course_id"
           ],
           "columnsTo": [
             "id"
@@ -3060,15 +3068,185 @@
       },
       "uniqueConstraints": {},
       "checkConstraint": {}
+    },
+    "popups": {
+      "name": "popups",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(uuid())"
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "image": {
+          "name": "image",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "destination": {
+          "name": "destination",
+          "type": "enum('student','parent','teacher')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_date": {
+          "name": "start_date",
+          "type": "datetime",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "end_date": {
+          "name": "end_date",
+          "type": "datetime",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "popups_id": {
+          "name": "popups_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "session_ratings": {
+      "name": "session_ratings",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(UUID())"
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "student_id": {
+          "name": "student_id",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rating": {
+          "name": "rating",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "comment": {
+          "name": "comment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "(now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "session_ratings_session_id_sessions_id_fk": {
+          "name": "session_ratings_session_id_sessions_id_fk",
+          "tableFrom": "session_ratings",
+          "tableTo": "sessions",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "session_ratings_student_id_student_id_fk": {
+          "name": "session_ratings_student_id_student_id_fk",
+          "tableFrom": "session_ratings",
+          "tableTo": "student",
+          "columnsFrom": [
+            "student_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "session_ratings_id": {
+          "name": "session_ratings_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
     }
   },
   "views": {},
   "_meta": {
     "schemas": {},
     "tables": {},
-    "columns": {
-      "\"questions\".\"section\"": "\"questions\".\"section_id\""
-    }
+    "columns": {}
   },
   "internal": {
     "tables": {},

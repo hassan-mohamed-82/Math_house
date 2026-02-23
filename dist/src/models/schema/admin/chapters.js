@@ -6,10 +6,12 @@ const drizzle_orm_1 = require("drizzle-orm");
 const courses_1 = require("./courses");
 const category_1 = require("./category");
 const teacher_1 = require("./teacher");
+const semester_1 = require("./semester");
 exports.chapters = (0, mysql_core_1.mysqlTable)("chapters", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
     categoryId: (0, mysql_core_1.char)("category_id", { length: 255 }).notNull().references(() => category_1.category.id),
+    semesterId: (0, mysql_core_1.char)("semester_id", { length: 255 }).references(() => semester_1.semesters.id),
     courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).notNull().references(() => courses_1.courses.id),
     description: (0, mysql_core_1.varchar)("description", { length: 255 }),
     image: (0, mysql_core_1.varchar)("image", { length: 255 }),

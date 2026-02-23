@@ -8,9 +8,8 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const handleImages_1 = require("../../utils/handleImages");
 const crypto_1 = require("crypto");
-// ADD switch from the front end to use Semester ID if needed
 const createCourse = async (req, res) => {
-    const { name, categoryId, semesterId, teacherIds, preRequisition, whatYouGain, duration, image, description, price, discount } = req.body;
+    const { name, categoryId, isHaveSemester, semesters: courseSemesters, teacherIds, preRequisition, whatYouGain, duration, image, description, price, discount } = req.body;
     if (!name || !categoryId || !duration || !price) {
         throw new BadRequest_1.BadRequest("Name, Category, Duration, Price are required");
     }
@@ -27,10 +26,12 @@ const createCourse = async (req, res) => {
     if (childCategories.length > 0) {
         throw new BadRequest_1.BadRequest("Cannot assign a course to a non-leaf category. Please select a category with no sub-categories.");
     }
-    if (semesterId) {
-        const existingSemester = await connection_1.db.select().from(schema_1.semesters).where((0, drizzle_orm_1.eq)(schema_1.semesters.id, semesterId));
-        if (existingSemester.length === 0) {
-            throw new BadRequest_1.BadRequest("Semester not found");
+    // If the course explicitly creates semesters, validate the structure
+    if (isHaveSemester && courseSemesters && courseSemesters.length > 0) {
+        for (const sem of courseSemesters) {
+            if (!sem.name) {
+                throw new BadRequest_1.BadRequest("Semester name is required when creating a semester");
+            }
         }
     }
     // Validate teachers if provided
@@ -56,7 +57,7 @@ const createCourse = async (req, res) => {
         id: courseId,
         name,
         categoryId,
-        semesterId,
+        isHaveSemester: isHaveSemester || false,
         preRequisition,
         whatYouGain,
         duration,
@@ -72,6 +73,15 @@ const createCourse = async (req, res) => {
             teacherId,
         }));
         await connection_1.db.insert(schema_1.courseTeachers).values(courseTeacherValues);
+    }
+    // Insert semesters if the switch is on and semesters are provided
+    if (isHaveSemester && courseSemesters && courseSemesters.length > 0) {
+        const semesterValues = courseSemesters.map((sem) => ({
+            id: (0, crypto_1.randomUUID)(),
+            name: sem.name,
+            courseId: courseId,
+        }));
+        await connection_1.db.insert(schema_1.semesters).values(semesterValues);
     }
     return (0, response_1.SuccessResponse)(res, { message: "Course created successfully", courseId }, 200);
 };
@@ -91,7 +101,14 @@ const getCourseById = async (req, res) => {
         .from(schema_1.courseTeachers)
         .leftJoin(schema_1.teachers, (0, drizzle_orm_1.eq)(schema_1.courseTeachers.teacherId, schema_1.teachers.id))
         .where((0, drizzle_orm_1.eq)(schema_1.courseTeachers.courseId, id));
-    return (0, response_1.SuccessResponse)(res, { ...course[0], teachers: courseTeachersList }, 200);
+    // Get semesters for this course
+    const courseSemestersList = await connection_1.db.select({
+        id: schema_1.semesters.id,
+        name: schema_1.semesters.name,
+    })
+        .from(schema_1.semesters)
+        .where((0, drizzle_orm_1.eq)(schema_1.semesters.courseId, id));
+    return (0, response_1.SuccessResponse)(res, { ...course[0], teachers: courseTeachersList, semesters: courseSemestersList }, 200);
 };
 exports.getCourseById = getCourseById;
 const getAllCourses = async (req, res) => {
@@ -110,7 +127,7 @@ const getAllCourses = async (req, res) => {
 exports.getAllCourses = getAllCourses;
 const updateCourse = async (req, res) => {
     const { id } = req.params;
-    const { name, categoryId, semesterId, teacherIds, preRequisition, whatYouGain, duration, image, description, price, discount } = req.body;
+    const { name, categoryId, isHaveSemester, semesters: courseSemesters, teacherIds, preRequisition, whatYouGain, duration, image, description, price, discount } = req.body;
     const course = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, id));
     if (course.length === 0) {
         throw new BadRequest_1.BadRequest("Course not found");
@@ -149,7 +166,7 @@ const updateCourse = async (req, res) => {
     await connection_1.db.update(schema_1.courses).set({
         name: name || course[0].name,
         categoryId: categoryId || course[0].categoryId,
-        semesterId: semesterId || course[0].semesterId,
+        isHaveSemester: isHaveSemester !== undefined ? isHaveSemester : course[0].isHaveSemester,
         preRequisition: preRequisition || course[0].preRequisition,
         whatYouGain: whatYouGain || course[0].whatYouGain,
         duration: duration || course[0].duration,
@@ -158,6 +175,37 @@ const updateCourse = async (req, res) => {
         price: price || course[0].price,
         discount: discount || course[0].discount,
     }).where((0, drizzle_orm_1.eq)(schema_1.courses.id, id));
+    // Handle semesters array logic
+    if (isHaveSemester && courseSemesters) {
+        // Find existing semesters to coordinate updates / inserts
+        const existingSemesters = await connection_1.db.select().from(schema_1.semesters).where((0, drizzle_orm_1.eq)(schema_1.semesters.courseId, id));
+        const existingSemesterIds = existingSemesters.map(s => s.id);
+        const incomingSemesterIds = courseSemesters.map((s) => s.id).filter(Boolean);
+        // Insert new ones (those without ids)
+        const newSemesters = courseSemesters.filter((s) => !s.id);
+        if (newSemesters.length > 0) {
+            const semesterValues = newSemesters.map((sem) => ({
+                id: (0, crypto_1.randomUUID)(),
+                name: sem.name,
+                courseId: id,
+            }));
+            await connection_1.db.insert(schema_1.semesters).values(semesterValues);
+        }
+        // Update existing ones
+        const updatedSemesters = courseSemesters.filter((s) => s.id && existingSemesterIds.includes(s.id));
+        for (const sem of updatedSemesters) {
+            await connection_1.db.update(schema_1.semesters).set({ name: sem.name }).where((0, drizzle_orm_1.eq)(schema_1.semesters.id, sem.id));
+        }
+        // Optionally, if the feature implies total replacement, uncomment the below to delete old ones not in the incoming payload:
+        // const idsToRemove = existingSemesterIds.filter(id => !incomingSemesterIds.includes(id));
+        // if (idsToRemove.length > 0) {
+        //     await db.delete(semesters).where(inArray(semesters.id, idsToRemove));
+        // }
+    }
+    else if (isHaveSemester === false) {
+        // If they turn off semesters for the course, delete the existing ones
+        await connection_1.db.delete(schema_1.semesters).where((0, drizzle_orm_1.eq)(schema_1.semesters.courseId, id));
+    }
     return (0, response_1.SuccessResponse)(res, { message: "Course updated successfully" }, 200);
 };
 exports.updateCourse = updateCourse;
@@ -185,6 +233,8 @@ const deleteCourse = async (req, res) => {
     }
     // Delete all chapters under this course
     await connection_1.db.delete(schema_1.chapters).where((0, drizzle_orm_1.eq)(schema_1.chapters.courseId, id));
+    // Delete all semesters under this course
+    await connection_1.db.delete(schema_1.semesters).where((0, drizzle_orm_1.eq)(schema_1.semesters.courseId, id));
     // Delete course image
     if (course[0].image) {
         await (0, handleImages_1.deleteImage)(course[0].image);
@@ -291,11 +341,10 @@ const getCoursesbyCategoryId = async (req, res) => {
         whatYouGain: schema_1.courses.whatYouGain,
         createdAt: schema_1.courses.createdAt,
         updatedAt: schema_1.courses.updatedAt,
-        semester: { id: schema_1.semesters.id, name: schema_1.semesters.name },
+        isHaveSemester: schema_1.courses.isHaveSemester,
         totalPrice: schema_1.courses.totalPrice,
     })
         .from(schema_1.courses)
-        .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.semesterId, schema_1.semesters.id))
         .where((0, drizzle_orm_1.eq)(schema_1.courses.categoryId, categoryId));
     if (coursesData.length === 0) {
         return (0, response_1.SuccessResponse)(res, { message: "Courses fetched successfully", data: [] }, 200);
@@ -312,11 +361,19 @@ const getCoursesbyCategoryId = async (req, res) => {
         .from(schema_1.courseTeachers)
         .innerJoin(schema_1.teachers, (0, drizzle_orm_1.eq)(schema_1.courseTeachers.teacherId, schema_1.teachers.id))
         .where((0, drizzle_orm_1.inArray)(schema_1.courseTeachers.courseId, courseIds));
+    const semestersData = await connection_1.db.select({
+        id: schema_1.semesters.id,
+        name: schema_1.semesters.name,
+        courseId: schema_1.semesters.courseId,
+    }).from(schema_1.semesters).where((0, drizzle_orm_1.inArray)(schema_1.semesters.courseId, courseIds));
     const coursesWithTeachers = coursesData.map(course => {
         const courseTeachersList = teachersData
             .filter(t => t.courseId === course.id)
             .map(({ courseId, ...teacher }) => teacher);
-        return { ...course, teachers: courseTeachersList };
+        const courseSemestersList = semestersData
+            .filter(s => s.courseId === course.id)
+            .map(({ courseId, ...sem }) => sem);
+        return { ...course, teachers: courseTeachersList, semesters: courseSemestersList };
     });
     return (0, response_1.SuccessResponse)(res, { message: "Courses fetched successfully", data: coursesWithTeachers }, 200);
 };

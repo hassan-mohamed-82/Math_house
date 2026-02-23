@@ -55,7 +55,7 @@ const createTeacher = async (req, res) => {
 exports.createTeacher = createTeacher;
 const getTeacherById = async (req, res) => {
     const { id } = req.params;
-    const teacher = await connection_1.db.select({
+    const teacherData = await connection_1.db.select({
         id: schema_1.teachers.id,
         name: schema_1.teachers.name,
         email: schema_1.teachers.email,
@@ -67,17 +67,31 @@ const getTeacherById = async (req, res) => {
             name: schema_1.courses.name,
         }
     }).from(schema_1.teachers)
-        .innerJoin(schema_1.courseTeachers, (0, drizzle_orm_1.eq)(schema_1.teachers.id, schema_1.courseTeachers.teacherId))
-        .innerJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.courseTeachers.courseId))
+        .leftJoin(schema_1.courseTeachers, (0, drizzle_orm_1.eq)(schema_1.teachers.id, schema_1.courseTeachers.teacherId))
+        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.courseTeachers.courseId))
         .where((0, drizzle_orm_1.eq)(schema_1.teachers.id, id));
-    if (teacher.length === 0) {
+    if (teacherData.length === 0) {
         throw new BadRequest_1.BadRequest("Teacher not found");
     }
-    return (0, response_1.SuccessResponse)(res, { message: "Teacher fetched successfully", teacher: teacher[0] }, 200);
+    const teacher = {
+        id: teacherData[0].id,
+        name: teacherData[0].name,
+        email: teacherData[0].email,
+        phoneNumber: teacherData[0].phoneNumber,
+        avatar: teacherData[0].avatar,
+        categoryId: teacherData[0].categoryId,
+        courses: []
+    };
+    teacherData.forEach((row) => {
+        if (row.courses && row.courses.id) {
+            teacher.courses.push(row.courses);
+        }
+    });
+    return (0, response_1.SuccessResponse)(res, { message: "Teacher fetched successfully", teacher }, 200);
 };
 exports.getTeacherById = getTeacherById;
 const getAllTeachers = async (req, res) => {
-    const teacher = await connection_1.db.select({
+    const teacherData = await connection_1.db.select({
         id: schema_1.teachers.id,
         name: schema_1.teachers.name,
         email: schema_1.teachers.email,
@@ -89,8 +103,26 @@ const getAllTeachers = async (req, res) => {
             name: schema_1.courses.name,
         }
     }).from(schema_1.teachers)
-        .innerJoin(schema_1.courseTeachers, (0, drizzle_orm_1.eq)(schema_1.teachers.id, schema_1.courseTeachers.teacherId))
-        .innerJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.courseTeachers.courseId));
+        .leftJoin(schema_1.courseTeachers, (0, drizzle_orm_1.eq)(schema_1.teachers.id, schema_1.courseTeachers.teacherId))
+        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.courseTeachers.courseId));
+    const teacherMap = new Map();
+    teacherData.forEach((row) => {
+        if (!teacherMap.has(row.id)) {
+            teacherMap.set(row.id, {
+                id: row.id,
+                name: row.name,
+                email: row.email,
+                phoneNumber: row.phoneNumber,
+                avatar: row.avatar,
+                categoryId: row.categoryId,
+                courses: []
+            });
+        }
+        if (row.courses && row.courses.id) {
+            teacherMap.get(row.id).courses.push(row.courses);
+        }
+    });
+    const teacher = Array.from(teacherMap.values());
     return (0, response_1.SuccessResponse)(res, { message: "Teachers fetched successfully", teacher }, 200);
 };
 exports.getAllTeachers = getAllTeachers;

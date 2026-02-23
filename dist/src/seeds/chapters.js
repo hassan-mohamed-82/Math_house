@@ -5,29 +5,30 @@ const connection_1 = require("../models/connection");
 const schema_1 = require("../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const uuid_1 = require("uuid");
-async function seedChapters(courseMap, categoryMap, teacherMap) {
+async function seedChapters(courseMap, categoryMap, teacherMap, semesterMap) {
     const chapterMap = {};
     const chaptersData = [
         // Algebra Basics chapters
-        { name: "Numbers & Operations", course: "Algebra Basics", category: "Primary 1", teacher: "Ahmed Hassan", duration: "2 weeks", price: 50, discount: 5, order: 1 },
-        { name: "Variables & Expressions", course: "Algebra Basics", category: "Primary 1", teacher: "Ahmed Hassan", duration: "2 weeks", price: 50, discount: 5, order: 2 },
-        { name: "Simple Equations", course: "Algebra Basics", category: "Primary 1", teacher: "Ahmed Hassan", duration: "3 weeks", price: 60, discount: 0, order: 3 },
+        { name: "Numbers & Operations", course: "Algebra Basics", semester: "Algebra Basics - Semester 1", category: "Primary 1", teacher: "Ahmed Hassan", duration: "2 weeks", price: 50, discount: 5, order: 1 },
+        { name: "Variables & Expressions", course: "Algebra Basics", semester: "Algebra Basics - Semester 1", category: "Primary 1", teacher: "Ahmed Hassan", duration: "2 weeks", price: 50, discount: 5, order: 2 },
+        { name: "Simple Equations", course: "Algebra Basics", semester: "Algebra Basics - Semester 2", category: "Primary 1", teacher: "Ahmed Hassan", duration: "3 weeks", price: 60, discount: 0, order: 3 },
         // Geometry Fundamentals chapters
-        { name: "Lines & Angles", course: "Geometry Fundamentals", category: "Primary 1", teacher: "Ahmed Hassan", duration: "2 weeks", price: 60, discount: 0, order: 1 },
-        { name: "Triangles & Polygons", course: "Geometry Fundamentals", category: "Primary 1", teacher: "Ahmed Hassan", duration: "3 weeks", price: 70, discount: 10, order: 2 },
+        { name: "Lines & Angles", course: "Geometry Fundamentals", semester: "Geometry Fundamentals - Semester 1", category: "Primary 1", teacher: "Ahmed Hassan", duration: "2 weeks", price: 60, discount: 0, order: 1 },
+        { name: "Triangles & Polygons", course: "Geometry Fundamentals", semester: "Geometry Fundamentals - Semester 2", category: "Primary 1", teacher: "Ahmed Hassan", duration: "3 weeks", price: 70, discount: 10, order: 2 },
         // Equations & Inequalities chapters
-        { name: "Linear Equations", course: "Equations & Inequalities", category: "Prep 1", teacher: "Sara Mohamed", duration: "3 weeks", price: 80, discount: 10, order: 1 },
-        { name: "Quadratic Equations", course: "Equations & Inequalities", category: "Prep 1", teacher: "Sara Mohamed", duration: "3 weeks", price: 90, discount: 0, order: 2 },
+        { name: "Linear Equations", course: "Equations & Inequalities", semester: "Equations & Inequalities - Semester 1", category: "Prep 1", teacher: "Sara Mohamed", duration: "3 weeks", price: 80, discount: 10, order: 1 },
+        { name: "Quadratic Equations", course: "Equations & Inequalities", semester: "Equations & Inequalities - Semester 2", category: "Prep 1", teacher: "Sara Mohamed", duration: "3 weeks", price: 90, discount: 0, order: 2 },
         // Trigonometry chapters
-        { name: "Angle Measures", course: "Trigonometry", category: "Secondary 1", teacher: "Mohamed Ali", duration: "2 weeks", price: 100, discount: 0, order: 1 },
-        { name: "Sine, Cosine & Tangent", course: "Trigonometry", category: "Secondary 1", teacher: "Mohamed Ali", duration: "4 weeks", price: 120, discount: 20, order: 2 },
+        { name: "Angle Measures", course: "Trigonometry", semester: "Trigonometry - Semester 1", category: "Secondary 1", teacher: "Mohamed Ali", duration: "2 weeks", price: 100, discount: 0, order: 1 },
+        { name: "Sine, Cosine & Tangent", course: "Trigonometry", semester: "Trigonometry - Semester 2", category: "Secondary 1", teacher: "Mohamed Ali", duration: "4 weeks", price: 120, discount: 20, order: 2 },
         // IGCSE Mathematics chapters
-        { name: "Number Theory", course: "IGCSE Mathematics", category: "IG Year 1", teacher: "Fatma Ibrahim", duration: "3 weeks", price: 100, discount: 0, order: 1 },
-        { name: "Algebra & Graphs", course: "IGCSE Mathematics", category: "IG Year 1", teacher: "Fatma Ibrahim", duration: "4 weeks", price: 120, discount: 15, order: 2 },
-        { name: "Statistics & Probability", course: "IGCSE Mathematics", category: "IG Year 1", teacher: "Fatma Ibrahim", duration: "3 weeks", price: 110, discount: 0, order: 3 },
+        { name: "Number Theory", course: "IGCSE Mathematics", semester: "IGCSE Mathematics - Semester 1", category: "IG Year 1", teacher: "Fatma Ibrahim", duration: "3 weeks", price: 100, discount: 0, order: 1 },
+        { name: "Algebra & Graphs", course: "IGCSE Mathematics", semester: "IGCSE Mathematics - Semester 1", category: "IG Year 1", teacher: "Fatma Ibrahim", duration: "4 weeks", price: 120, discount: 15, order: 2 },
+        { name: "Statistics & Probability", course: "IGCSE Mathematics", semester: "IGCSE Mathematics - Semester 2", category: "IG Year 1", teacher: "Fatma Ibrahim", duration: "3 weeks", price: 110, discount: 0, order: 3 },
     ];
     for (const ch of chaptersData) {
         const courseId = courseMap[ch.course];
+        const semesterId = semesterMap[ch.semester];
         const categoryId = categoryMap[ch.category];
         const teacherId = teacherMap[ch.teacher];
         if (!courseId || !categoryId || !teacherId) {
@@ -47,6 +48,7 @@ async function seedChapters(courseMap, categoryMap, teacherMap) {
             id,
             name: ch.name,
             courseId,
+            semesterId,
             categoryId,
             teacherId,
             duration: ch.duration,

@@ -8,10 +8,10 @@ export async function seedTeachers(categoryMap: Record<string, string>) {
     const teacherMap: Record<string, string> = {};
 
     const teachersData = [
-        { name: "Ahmed Hassan", email: "ahmed.hassan@mathhouse.com", phone: "01001234567", category: "Primary 1" },
-        { name: "Sara Mohamed", email: "sara.mohamed@mathhouse.com", phone: "01001234568", category: "Prep 1" },
-        { name: "Mohamed Ali", email: "mohamed.ali@mathhouse.com", phone: "01001234569", category: "Secondary 1" },
-        { name: "Fatma Ibrahim", email: "fatma.ibrahim@mathhouse.com", phone: "01001234570", category: "IG Year 1" },
+        { name: "Ahmed Hassan", email: "ahmed.hassan@mathhouse.com", phone: "01001234567", category: "Primary" },
+        { name: "Sara Mohamed", email: "sara.mohamed@mathhouse.com", phone: "01001234568", category: "Middle" },
+        { name: "Mohamed Ali", email: "mohamed.ali@mathhouse.com", phone: "01001234569", category: "Secondary" },
+        { name: "Fatma Ibrahim", email: "fatma.ibrahim@mathhouse.com", phone: "01001234570", category: "IGCSE" },
     ];
 
     const hashedPassword = await bcrypt.hash("teacher123", 10);

@@ -21,3 +21,4 @@ export * from "./schema/admin/currency";
 export * from "./schema/admin/conversionRate";
 export * from "./schema/admin/Popup";
 export * from "./schema/admin/SessionRating";
+export * from "./schema/admin/Session";
