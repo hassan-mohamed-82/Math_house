@@ -106,6 +106,29 @@ Fetches all semesters, deeply populated with their parent course details.
 }
 ```
 
+### Get Semesters By Course
+`GET /admin/semester/course/:courseId`
+
+Fetches all semesters specifically belonging to a given Course ID.
+
+**Response**
+```json
+{
+  "message": "Semesters fetched successfully",
+  "data": [
+    {
+      "id": "uuid-of-semester",
+      "name": "Semester 1",
+      "courseId": "uuid-of-parent-course",
+      "course": {
+        "id": "uuid-of-parent-course",
+        "name": "Middle 1 Mathematics"
+      }
+    }
+  ]
+}
+```
+
 ---
 
 ## 3. Chapters API (`/admin/chapters`)

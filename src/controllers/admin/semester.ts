@@ -58,6 +58,30 @@ export const getSemesterbyId = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Semester fetched successfully", data: semester }, 200);
 }
 
+export const getSemestersByCourseId = async (req: Request, res: Response) => {
+    const { courseId } = req.params;
+    if (!courseId) {
+        throw new BadRequest("Course ID is required");
+    }
+
+    const exisitingCourse = await db.select().from(courses).where(eq(courses.id, courseId));
+    if (exisitingCourse.length === 0) {
+        throw new NotFound("Course not found");
+    }
+
+    const courseSemesters = await db.select({
+        id: semesters.id,
+        name: semesters.name,
+        courseId: semesters.courseId,
+        course: {
+            id: courses.id,
+            name: courses.name
+        }
+    }).from(semesters).innerJoin(courses, eq(courses.id, semesters.courseId)).where(eq(semesters.courseId, courseId));
+
+    return SuccessResponse(res, { message: "Semesters fetched successfully", data: courseSemesters }, 200);
+}
+
 export const updateSemester = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { name, courseId } = req.body;
