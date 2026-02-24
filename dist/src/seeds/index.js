@@ -48,6 +48,7 @@ const questions_1 = require("./questions");
 const sections_1 = require("./sections");
 const rawScore_1 = require("./rawScore");
 const currencies_1 = require("./currencies");
+const paymentMethods_1 = require("./paymentMethods");
 const connection_1 = require("../models/connection");
 async function main() {
     try {
@@ -55,6 +56,8 @@ async function main() {
         // 0. Currencies (no dependencies)
         console.log("💱 Seeding Currencies...");
         await (0, currencies_1.seedCurrencies)();
+        console.log("💳 Seeding Payment Methods...");
+        await (0, paymentMethods_1.seedPaymentMethods)();
         // 1. Roles & Admins
         console.log("\n📋 Seeding Roles...");
         const roleId = await (0, roles_1.seedRoles)();

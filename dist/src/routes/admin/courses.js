@@ -7,11 +7,11 @@ const router = (0, express_1.Router)();
 router.post("/", (0, catchAsync_1.catchAsync)(courses_1.createCourse));
 router.get("/", (0, catchAsync_1.catchAsync)(courses_1.getAllCourses));
 router.get("/categories", (0, catchAsync_1.catchAsync)(courses_1.getCategoriesSelection));
+router.get("/selection", (0, catchAsync_1.catchAsync)(courses_1.selectionCourses));
 router.get("/:id", (0, catchAsync_1.catchAsync)(courses_1.getCourseById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(courses_1.updateCourse));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(courses_1.deleteCourse));
 router.get("/category/:categoryId", (0, catchAsync_1.catchAsync)(courses_1.getCoursesbyCategoryId));
-router.get("/selection", (0, catchAsync_1.catchAsync)(courses_1.selectionCourses));
 // Course-Teacher management endpoints
 router.get("/:id/teachers", (0, catchAsync_1.catchAsync)(courses_1.getCourseTeachers));
 router.post("/:id/teachers", (0, catchAsync_1.catchAsync)(courses_1.addTeacherToCourse));

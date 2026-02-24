@@ -13,6 +13,7 @@ import { seedQuestions } from "./questions";
 import { seedSections } from "./sections";
 import { seedRawScores } from "./rawScore";
 import { seedCurrencies } from "./currencies";
+import { seedPaymentMethods } from "./paymentMethods";
 import { pool } from "../models/connection";
 
 async function main() {
@@ -22,6 +23,9 @@ async function main() {
         // 0. Currencies (no dependencies)
         console.log("💱 Seeding Currencies...");
         await seedCurrencies();
+
+        console.log("💳 Seeding Payment Methods...");
+        await seedPaymentMethods();
 
         // 1. Roles & Admins
         console.log("\n📋 Seeding Roles...");

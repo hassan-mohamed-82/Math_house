@@ -1,5 +1,5 @@
 {
-  "name": "first_project",
+  "name": "math_house",
   "version": "1.0.0",
   "main": "dist/src/server.js",
   "scripts": {
