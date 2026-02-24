@@ -101,13 +101,13 @@ async function main() {
         const { seedDiagnosticExams } = await Promise.resolve().then(() => __importStar(require("./diagnosticExam")));
         await seedDiagnosticExams();
         // 13. Quizzes
-        // console.log("\n📝 Seeding Quizzes...");
-        // const { seedQuizzes } = await import("./quizzes");
-        // await seedQuizzes();
+        console.log("\n📝 Seeding Quizzes...");
+        const { seedQuizzes } = await Promise.resolve().then(() => __importStar(require("./quizzes")));
+        await seedQuizzes();
         // 14. Exams
-        // console.log("\n📝 Seeding Exams...");
-        // const { seedExams } = await import("./exams");
-        // await seedExams();
+        console.log("\n📝 Seeding Exams...");
+        const { seedExams } = await Promise.resolve().then(() => __importStar(require("./exams")));
+        await seedExams();
         console.log("\n✅ Seeding completed successfully!");
     }
     catch (error) {

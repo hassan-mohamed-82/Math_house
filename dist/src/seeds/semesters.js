@@ -9,11 +9,11 @@ async function seedSemesters(courseMap) {
     const semesterMap = {};
     // Courses that we know have semesters based on our courses seed
     const semesterCourses = [
-        "Algebra Basics",
-        "Geometry Fundamentals",
-        "Equations & Inequalities",
-        "Trigonometry",
-        "IGCSE Mathematics"
+        "Primary 1",
+        "Middle 1",
+        "Middle 2",
+        "Secondary 1",
+        "IG Year 1"
     ];
     for (const courseName of semesterCourses) {
         const courseId = courseMap[courseName];

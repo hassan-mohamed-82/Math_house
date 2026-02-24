@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSemester = exports.updateSemester = exports.getSemesterbyId = exports.getSemesters = exports.createSemester = void 0;
+exports.deleteSemester = exports.updateSemester = exports.getSemestersByCourseId = exports.getSemesterbyId = exports.getSemesters = exports.createSemester = void 0;
 const connection_1 = require("../../models/connection");
 const semester_1 = require("../../models/schema/admin/semester");
 const courses_1 = require("../../models/schema/admin/courses");
@@ -55,6 +55,27 @@ const getSemesterbyId = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Semester fetched successfully", data: semester }, 200);
 };
 exports.getSemesterbyId = getSemesterbyId;
+const getSemestersByCourseId = async (req, res) => {
+    const { courseId } = req.params;
+    if (!courseId) {
+        throw new BadRequest_1.BadRequest("Course ID is required");
+    }
+    const exisitingCourse = await connection_1.db.select().from(courses_1.courses).where((0, drizzle_orm_1.eq)(courses_1.courses.id, courseId));
+    if (exisitingCourse.length === 0) {
+        throw new NotFound_1.NotFound("Course not found");
+    }
+    const courseSemesters = await connection_1.db.select({
+        id: semester_1.semesters.id,
+        name: semester_1.semesters.name,
+        courseId: semester_1.semesters.courseId,
+        course: {
+            id: courses_1.courses.id,
+            name: courses_1.courses.name
+        }
+    }).from(semester_1.semesters).innerJoin(courses_1.courses, (0, drizzle_orm_1.eq)(courses_1.courses.id, semester_1.semesters.courseId)).where((0, drizzle_orm_1.eq)(semester_1.semesters.courseId, courseId));
+    return (0, response_1.SuccessResponse)(res, { message: "Semesters fetched successfully", data: courseSemesters }, 200);
+};
+exports.getSemestersByCourseId = getSemestersByCourseId;
 const updateSemester = async (req, res) => {
     const { id } = req.params;
     const { name, courseId } = req.body;
