@@ -93,6 +93,11 @@ async function main() {
         const { seedExams } = await import("./exams");
         await seedExams();
 
+        // 15. Promo Codes
+        console.log("\n🏷️ Seeding Promo Codes...");
+        const { seedPromoCodes } = await import("./promoCodes");
+        await seedPromoCodes();
+
         console.log("\n✅ Seeding completed successfully!");
     } catch (error) {
         console.error("❌ Seeding failed:", error);

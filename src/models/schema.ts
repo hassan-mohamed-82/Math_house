@@ -25,3 +25,4 @@ export * from "./schema/admin/Session";
 export * from "./schema/admin/Groups";
 export * from "./schema/admin/Package";
 export * from "./schema/admin/Notfication";
+export * from "./schema/admin/promoCodes";

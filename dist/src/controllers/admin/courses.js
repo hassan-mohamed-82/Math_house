@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCoursesbyCategoryId = exports.getCategoriesSelection = exports.getCourseTeachers = exports.removeTeacherFromCourse = exports.addTeacherToCourse = exports.deleteCourse = exports.updateCourse = exports.getAllCourses = exports.getCourseById = exports.createCourse = void 0;
+exports.selectionCourses = exports.getCoursesbyCategoryId = exports.getCategoriesSelection = exports.getCourseTeachers = exports.removeTeacherFromCourse = exports.addTeacherToCourse = exports.deleteCourse = exports.updateCourse = exports.getAllCourses = exports.getCourseById = exports.createCourse = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -378,3 +378,17 @@ const getCoursesbyCategoryId = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Courses fetched successfully", data: coursesWithTeachers }, 200);
 };
 exports.getCoursesbyCategoryId = getCoursesbyCategoryId;
+const selectionCourses = async (req, res) => {
+    const coursesList = await connection_1.db
+        .select({
+        id: schema_1.courses.id,
+        name: schema_1.courses.name,
+    })
+        .from(schema_1.courses)
+        .orderBy((0, drizzle_orm_1.asc)(schema_1.courses.name));
+    (0, response_1.SuccessResponse)(res, coursesList.map(c => ({
+        value: c.id,
+        label: c.name
+    })));
+};
+exports.selectionCourses = selectionCourses;

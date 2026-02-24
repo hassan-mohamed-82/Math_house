@@ -108,6 +108,10 @@ async function main() {
         console.log("\n📝 Seeding Exams...");
         const { seedExams } = await Promise.resolve().then(() => __importStar(require("./exams")));
         await seedExams();
+        // 15. Promo Codes
+        console.log("\n🏷️ Seeding Promo Codes...");
+        const { seedPromoCodes } = await Promise.resolve().then(() => __importStar(require("./promoCodes")));
+        await seedPromoCodes();
         console.log("\n✅ Seeding completed successfully!");
     }
     catch (error) {

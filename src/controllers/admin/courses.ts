@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { courses, category, teachers, chapters, courseTeachers, semesters, lessons, lessonIdeas } from "../../models/schema";
-import { eq, count, inArray, and, aliasedTable, isNull } from "drizzle-orm";
+import { eq, count, inArray, and, aliasedTable, isNull, asc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { handleImageUpdate, validateAndSaveLogo, deleteImage } from "../../utils/handleImages";
@@ -437,3 +437,18 @@ export const getCoursesbyCategoryId = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Courses fetched successfully", data: coursesWithTeachers }, 200);
 }
+
+export const selectionCourses = async (req: Request, res: Response) => {
+    const coursesList = await db
+        .select({
+            id: courses.id,
+            name: courses.name,
+        })
+        .from(courses)
+        .orderBy(asc(courses.name));
+
+    SuccessResponse(res, coursesList.map(c => ({
+        value: c.id,
+        label: c.name
+    })));
+};

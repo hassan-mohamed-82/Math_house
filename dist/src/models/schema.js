@@ -41,3 +41,4 @@ __exportStar(require("./schema/admin/Session"), exports);
 __exportStar(require("./schema/admin/Groups"), exports);
 __exportStar(require("./schema/admin/Package"), exports);
 __exportStar(require("./schema/admin/Notfication"), exports);
+__exportStar(require("./schema/admin/promoCodes"), exports);

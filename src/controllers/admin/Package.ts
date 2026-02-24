@@ -49,6 +49,33 @@ export const getCoursesByCategory = async (req: Request, res: Response) => {
     })));
 };
 
+export const selectionPackages = async (req: Request, res: Response) => {
+    const { courseId } = req.query;
+
+    let query = db.select({
+        id: packages.id,
+        name: packages.name,
+        type: packages.type,
+        price: packages.price,
+        categoryId: packages.categoryId,
+        courseId: packages.courseId,
+    }).from(packages);
+
+    if (courseId) {
+        query = query.where(eq(packages.courseId, courseId as string)) as any;
+    }
+
+    const packagesList = await query;
+
+    SuccessResponse(res, packagesList.map(p => ({
+        value: p.id,
+        label: `${p.name} - ${p.price}$`,
+        type: p.type,
+        categoryId: p.categoryId,
+        courseId: p.courseId,
+        price: p.price,
+    })));
+};
 
 // ===================== PACKAGES CRUD =====================
 

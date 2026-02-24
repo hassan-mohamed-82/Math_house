@@ -3,6 +3,7 @@ import { Router } from "express";
 import {
     selectOptions,
     getCoursesByCategory,
+    selectionPackages,
     createPackage,
     getAllPackages,
     getPackageById,
@@ -14,7 +15,9 @@ const router = Router();
 
 // Select Options
 router.get("/select", catchAsync(selectOptions));
+router.get("/selection", catchAsync(selectionPackages));
 router.get("/courses/:categoryId", catchAsync(getCoursesByCategory));
+
 
 // Packages CRUD
 router.post("/", catchAsync(createPackage));

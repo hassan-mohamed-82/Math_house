@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deletePackage = exports.updatePackage = exports.getPackageById = exports.getAllPackages = exports.createPackage = exports.getCoursesByCategory = exports.selectOptions = void 0;
+exports.deletePackage = exports.updatePackage = exports.getPackageById = exports.getAllPackages = exports.createPackage = exports.selectionPackages = exports.getCoursesByCategory = exports.selectOptions = void 0;
 const connection_1 = require("../../models/connection");
 const Package_1 = require("../../models/schema/admin/Package");
 const category_1 = require("../../models/schema/admin/category");
@@ -44,6 +44,30 @@ const getCoursesByCategory = async (req, res) => {
     })));
 };
 exports.getCoursesByCategory = getCoursesByCategory;
+const selectionPackages = async (req, res) => {
+    const { courseId } = req.query;
+    let query = connection_1.db.select({
+        id: Package_1.packages.id,
+        name: Package_1.packages.name,
+        type: Package_1.packages.type,
+        price: Package_1.packages.price,
+        categoryId: Package_1.packages.categoryId,
+        courseId: Package_1.packages.courseId,
+    }).from(Package_1.packages);
+    if (courseId) {
+        query = query.where((0, drizzle_orm_1.eq)(Package_1.packages.courseId, courseId));
+    }
+    const packagesList = await query;
+    (0, response_1.SuccessResponse)(res, packagesList.map(p => ({
+        value: p.id,
+        label: `${p.name} - ${p.price}$`,
+        type: p.type,
+        categoryId: p.categoryId,
+        courseId: p.courseId,
+        price: p.price,
+    })));
+};
+exports.selectionPackages = selectionPackages;
 // ===================== PACKAGES CRUD =====================
 const createPackage = async (req, res) => {
     const { name, type, categoryId, courseId, number, price, duration } = req.body;
