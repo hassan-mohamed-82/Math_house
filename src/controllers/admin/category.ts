@@ -27,7 +27,10 @@ export const createCategory = async (req: Request, res: Response) => {
         throw new BadRequest("Category already exists");
     }
 
-    const imageUrl = await validateAndSaveLogo(req, image, "category");
+    let imageUrl = null;
+    if (image) {
+        imageUrl = await validateAndSaveLogo(req, image, "category");
+    }
 
     await db.insert(category).values({ name, description, image: imageUrl, parentCategoryId });
 
@@ -90,7 +93,14 @@ export const getAllCategory = async (req: Request, res: Response) => {
     const categories = await db.select().from(category);
 
     const categoryMap = new Map<string, typeof categories[0]>();
-    categories.forEach(cat => categoryMap.set(cat.id, cat));
+    const parentIds = new Set<string>();
+
+    categories.forEach(cat => {
+        categoryMap.set(cat.id, cat);
+        if (cat.parentCategoryId) {
+            parentIds.add(cat.parentCategoryId);
+        }
+    });
 
     const data = categories.map(cat => {
         const ancestors: { id: string, name: string, level: number }[] = [];
@@ -106,9 +116,13 @@ export const getAllCategory = async (req: Request, res: Response) => {
                 break;
             }
         }
+
+        const isLeaf = !parentIds.has(cat.id);
+
         return {
             ...cat,
-            ancestors
+            ancestors,
+            isLeaf
         };
     });
 

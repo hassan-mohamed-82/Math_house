@@ -8,8 +8,12 @@ import {
     updateChapter,
     deleteChapter
 } from "../../controllers/admin/chapters";
+import { getSemestersByCourseId } from "../../controllers/admin/semester";
 import { catchAsync } from "../../utils/catchAsync";
 const router = Router();
+// No Authorization for this
+router.get("/selectionSemester/:courseId", catchAsync(getSemestersByCourseId));
+// ---------------------------
 
 router.post("/", catchAsync(createChapter));
 router.get("/", catchAsync(getAllChapters));

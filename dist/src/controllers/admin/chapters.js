@@ -83,7 +83,10 @@ const createChapter = async (req, res) => {
     // Auto-compute order: MAX(order) + 1 for this course
     const [maxOrderResult] = await connection_1.db.select({ maxOrder: (0, drizzle_orm_1.max)(schema_1.chapters.order) }).from(schema_1.chapters).where((0, drizzle_orm_1.eq)(schema_1.chapters.courseId, courseId));
     const nextOrder = (maxOrderResult?.maxOrder ?? 0) + 1;
-    const imageURL = await (0, handleImages_1.validateAndSaveLogo)(req, image, "chapters");
+    let imageURL = null;
+    if (image) {
+        imageURL = await (0, handleImages_1.validateAndSaveLogo)(req, image, "chapters");
+    }
     await connection_1.db.insert(schema_1.chapters).values({
         name,
         courseId,
