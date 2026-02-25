@@ -9,7 +9,9 @@ import {
 import { catchAsync } from "../../utils/catchAsync";
 
 const router = Router();
-
+// No Authorization
+router.get("/selectionSections", catchAsync(getAllSections));
+//---------------------------
 router.post("/", catchAsync(createSection));
 router.get("/", catchAsync(getAllSections));
 router.get("/:id", catchAsync(getSectionById));
