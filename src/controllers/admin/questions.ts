@@ -186,6 +186,7 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
     const question = await db.select({
         id: questions.id,
         question: questions.question,
+        image: questions.image,
         answerType: questions.answerType,
         difficulty: questions.difficulty,
         questionType: questions.questionType,
@@ -206,17 +207,28 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
         section: {
             id: Sections.id,
             sectionName: Sections.sectionName,
-        }
+        },
+        pdf: questionAnswers.pdf,
+        video: questionAnswers.video,
     }).from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
         .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(questionAnswers, eq(questionAnswers.questionId, questions.id))
         .where(eq(questions.id, id)).limit(1);
 
     if (!question[0]) {
         throw new NotFound("Question is not found");
     }
-    return SuccessResponse(res, { message: "Question fetched successfully", data: question[0] }, 200);
+
+    const options = await db.select({
+        id: questionOptions.id,
+        answer: questionOptions.answer,
+        isCorrect: questionOptions.isCorrect,
+        order: questionOptions.order,
+    }).from(questionOptions).where(eq(questionOptions.questionId, id));
+
+    return SuccessResponse(res, { message: "Question fetched successfully", data: { ...question[0], options } }, 200);
 };
 
 export const updateQuestion = async (req: Request, res: Response) => {
