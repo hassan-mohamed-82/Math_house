@@ -14,5 +14,5 @@ exports.Student = (0, mysql_core_1.mysqlTable)("student", {
     phone: (0, mysql_core_1.varchar)("phone", { length: 255 }).notNull(),
     category: (0, mysql_core_1.char)("category", { length: 36 }).notNull().references(() => category_1.category.id),
     grade: (0, mysql_core_1.mysqlEnum)("grade", ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"]).notNull(),
-    parentphone: (0, mysql_core_1.varchar)("parent_phone", { length: 255 }).notNull(),
+    parentphone: (0, mysql_core_1.varchar)("parent_phone", { length: 255 }),
 });

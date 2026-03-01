@@ -11,7 +11,7 @@ export const Student = mysqlTable("student", {
     phone:varchar("phone",{length:255}).notNull(),
     category:char("category",{length:36}).notNull().references(()=>category.id),
     grade:mysqlEnum("grade",["1","2","3","4","5","6","7","8","9","10","11","12","13"]).notNull(),
-    parentphone:varchar("parent_phone",{length:255}).notNull(),
+    parentphone:varchar("parent_phone",{length:255}),
     
     
 

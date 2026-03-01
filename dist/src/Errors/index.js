@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UnauthorizedError = exports.UniqueConstrainError = exports.NotNullConstrainError = exports.ForeignKeyConstrainError = exports.DatabaseError = exports.AppError = exports.ForbiddenError = exports.ConflictError = exports.ValidationError = exports.NotFound = void 0;
+exports.UnauthorizedError = exports.UniqueConstrainError = exports.NotNullConstrainError = exports.ForeignKeyConstrainError = exports.DatabaseError = exports.AppError = exports.BadRequest = exports.ForbiddenError = exports.ConflictError = exports.ValidationError = exports.NotFound = void 0;
 const NotFound_1 = require("./NotFound");
 Object.defineProperty(exports, "NotFound", { enumerable: true, get: function () { return NotFound_1.NotFound; } });
 const validationError_1 = require("./validationError");
@@ -21,3 +21,5 @@ const uniqueConstrainError_1 = require("./uniqueConstrainError");
 Object.defineProperty(exports, "UniqueConstrainError", { enumerable: true, get: function () { return uniqueConstrainError_1.UniqueConstrainError; } });
 const unauthorizedError_1 = require("./unauthorizedError");
 Object.defineProperty(exports, "UnauthorizedError", { enumerable: true, get: function () { return unauthorizedError_1.UnauthorizedError; } });
+const BadRequest_1 = require("./BadRequest");
+Object.defineProperty(exports, "BadRequest", { enumerable: true, get: function () { return BadRequest_1.BadRequest; } });

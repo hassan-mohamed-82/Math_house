@@ -8,11 +8,13 @@ import { ForeignKeyConstrainError } from "./foreignKeyConstrainError";
 import { NotNullConstrainError } from "./notNullConstrainError";
 import { UniqueConstrainError } from "./uniqueConstrainError";
 import { UnauthorizedError } from "./unauthorizedError";
+import { BadRequest } from "./BadRequest";
 export {
   NotFound,
   ValidationError,
   ConflictError,
   ForbiddenError,
+  BadRequest,
   AppError,
   DatabaseError,
   ForeignKeyConstrainError,
