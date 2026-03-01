@@ -65,10 +65,10 @@ const getGroupUsers = async (req, res) => {
 exports.getGroupUsers = getGroupUsers;
 const searchUsers = async (req, res) => {
     const { q, excludeIds } = req.query;
-    const searchValue = (q ?? "").toString().trim().toLowerCase(); // نستخدم LOWER على قيمة البحث فقط
+    const searchValue = (q ?? "").toString().trim().toLowerCase();
     const searchTerm = `%${searchValue}%`;
     let excludeIdsList = [];
-    if (excludeIds) {
+    if (excludeIds && typeof excludeIds === "string" && excludeIds.trim() !== "") {
         excludeIdsList = excludeIds.split(",");
     }
     let users = await connection_1.db
@@ -81,7 +81,7 @@ const searchUsers = async (req, res) => {
         phone: Student_1.Student.phone,
     })
         .from(Student_1.Student)
-        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.firstname}) LIKE ${searchTerm}`, (0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.lastname}) LIKE ${searchTerm}`, (0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.nickname}) LIKE ${searchTerm}`, (0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.email}) LIKE ${searchTerm}`, (0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.phone}) LIKE ${searchTerm}`))
+        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(CONCAT(${Student_1.Student.firstname}, ' ', ${Student_1.Student.lastname}))`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.nickname})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.email})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.phone})`, searchTerm)))
         .limit(20);
     if (excludeIdsList.length > 0) {
         users = users.filter(u => !excludeIdsList.includes(u.id));

@@ -74,12 +74,12 @@ export const getGroupUsers = async (req: Request, res: Response) => {
 export const searchUsers = async (req: Request, res: Response) => {
     const { q, excludeIds } = req.query;
 
-    const searchValue = (q ?? "").toString().trim().toLowerCase(); // نستخدم LOWER على قيمة البحث فقط
+    const searchValue = (q ?? "").toString().trim().toLowerCase();
     const searchTerm = `%${searchValue}%`;
 
     let excludeIdsList: string[] = [];
-    if (excludeIds) {
-        excludeIdsList = (excludeIds as string).split(",");
+    if (excludeIds && typeof excludeIds === "string" && excludeIds.trim() !== "") {
+        excludeIdsList = excludeIds.split(",");
     }
 
     let users = await db
@@ -94,11 +94,10 @@ export const searchUsers = async (req: Request, res: Response) => {
         .from(Student)
         .where(
             or(
-                sql`LOWER(${Student.firstname}) LIKE ${searchTerm}`,
-                sql`LOWER(${Student.lastname}) LIKE ${searchTerm}`,
-                sql`LOWER(${Student.nickname}) LIKE ${searchTerm}`,
-                sql`LOWER(${Student.email}) LIKE ${searchTerm}`,
-                sql`LOWER(${Student.phone}) LIKE ${searchTerm}`
+                like(sql`LOWER(CONCAT(${Student.firstname}, ' ', ${Student.lastname}))`, searchTerm),
+                like(sql`LOWER(${Student.nickname})`, searchTerm),
+                like(sql`LOWER(${Student.email})`, searchTerm),
+                like(sql`LOWER(${Student.phone})`, searchTerm)
             )
         )
         .limit(20);
