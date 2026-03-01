@@ -94,10 +94,11 @@ export const searchUsers = async (req: Request, res: Response) => {
         .from(Student)
         .where(
             or(
-                like(sql`LOWER(CONCAT(${Student.firstname}, ' ', ${Student.lastname}))`, searchTerm),
-                like(sql`LOWER(${Student.nickname})`, searchTerm),
-                like(sql`LOWER(${Student.email})`, searchTerm),
-                like(sql`LOWER(${Student.phone})`, searchTerm)
+                like(Student.firstname, searchTerm),
+                like(Student.lastname, searchTerm),
+                like(Student.nickname, searchTerm),
+                like(Student.email, searchTerm),
+                like(Student.phone, searchTerm)
             )
         )
         .limit(20);

@@ -81,7 +81,7 @@ const searchUsers = async (req, res) => {
         phone: Student_1.Student.phone,
     })
         .from(Student_1.Student)
-        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(CONCAT(${Student_1.Student.firstname}, ' ', ${Student_1.Student.lastname}))`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.nickname})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.email})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.phone})`, searchTerm)))
+        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(Student_1.Student.firstname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.lastname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.nickname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.email, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.phone, searchTerm)))
         .limit(20);
     if (excludeIdsList.length > 0) {
         users = users.filter(u => !excludeIdsList.includes(u.id));
