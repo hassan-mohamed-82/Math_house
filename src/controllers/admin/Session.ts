@@ -1,5 +1,6 @@
 // controllers/sessions.controller.ts
 import { Request, Response } from "express";
+import { randomUUID } from "crypto";
 import { db } from "../../models/connection";
 import { sessions, sessionUsers } from "../../models/schema/admin/Session";
 import { groups, groupStudents } from "../../models/schema/admin/Groups";
@@ -137,7 +138,10 @@ export const createSession = async (req: Request, res: Response) => {
         throw new BadRequest("Missing required fields");
     }
 
-    const [newSession] = await db.insert(sessions).values({
+    const sessionId = randomUUID();
+
+    await db.insert(sessions).values({
+        id: sessionId,
         name,
         sessionDate,
         timeFrom,
@@ -149,7 +153,7 @@ export const createSession = async (req: Request, res: Response) => {
         type,
         groupId: type === "group" ? groupId : null,
         teacherId
-    }).$returningId() as { id: string }[];
+    });
 
     let finalUserIds: string[] = userIds || [];
 
@@ -165,14 +169,14 @@ export const createSession = async (req: Request, res: Response) => {
 
     if (finalUserIds.length > 0) {
         const sessionUserRecords = finalUserIds.map((userId: string) => ({
-            sessionId: newSession.id,
+            sessionId: sessionId,
             studentId: userId
         }));
 
         await db.insert(sessionUsers).values(sessionUserRecords);
     }
 
-    SuccessResponse(res, { id: newSession.id }, 201);
+    SuccessResponse(res, { id: sessionId }, 201);
 };
 
 // جلب كل الـ Sessions مع Filter

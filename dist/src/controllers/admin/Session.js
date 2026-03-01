@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteSession = exports.updateSession = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.searchUsers = exports.getGroupUsers = exports.selectOptions = void 0;
+const crypto_1 = require("crypto");
 const connection_1 = require("../../models/connection");
 const Session_1 = require("../../models/schema/admin/Session");
 const Groups_1 = require("../../models/schema/admin/Groups");
@@ -100,7 +101,9 @@ const createSession = async (req, res) => {
     if (!name || !sessionDate || !timeFrom || !timeTo || !categoryId || !courseId || !type || !teacherId) {
         throw new BadRequest_1.BadRequest("Missing required fields");
     }
-    const [newSession] = await connection_1.db.insert(Session_1.sessions).values({
+    const sessionId = (0, crypto_1.randomUUID)();
+    await connection_1.db.insert(Session_1.sessions).values({
+        id: sessionId,
         name,
         sessionDate,
         timeFrom,
@@ -112,7 +115,7 @@ const createSession = async (req, res) => {
         type,
         groupId: type === "group" ? groupId : null,
         teacherId
-    }).$returningId();
+    });
     let finalUserIds = userIds || [];
     // لو Type = group و مفيش userIds، نجيب Users الـ Group تلقائياً
     if (type === "group" && groupId && (!userIds || userIds.length === 0)) {
@@ -124,12 +127,12 @@ const createSession = async (req, res) => {
     }
     if (finalUserIds.length > 0) {
         const sessionUserRecords = finalUserIds.map((userId) => ({
-            sessionId: newSession.id,
+            sessionId: sessionId,
             studentId: userId
         }));
         await connection_1.db.insert(Session_1.sessionUsers).values(sessionUserRecords);
     }
-    (0, response_1.SuccessResponse)(res, { id: newSession.id }, 201);
+    (0, response_1.SuccessResponse)(res, { id: sessionId }, 201);
 };
 exports.createSession = createSession;
 // جلب كل الـ Sessions مع Filter
