@@ -74,7 +74,10 @@ export const getGroupUsers = async (req: Request, res: Response) => {
 // البحث في الـ Users (لإضافة user جديد)
 export const searchUsers = async (req: Request, res: Response) => {
     const { q, excludeIds } = req.query;
-    const searchTerm = `%${q || ""}%`;
+
+    // Check if q exists. If q is undefined or empty string, search will match everything implicitly
+    // If q exists, use wildcard %q%
+    const searchTerm = q ? `%${q}%` : `%%`;
 
     let excludeIdsList: string[] = [];
     if (excludeIds) {
