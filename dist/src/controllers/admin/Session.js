@@ -65,15 +65,12 @@ const getGroupUsers = async (req, res) => {
 exports.getGroupUsers = getGroupUsers;
 const searchUsers = async (req, res) => {
     const { q, excludeIds } = req.query;
-    // تهيئة قيمة البحث
-    const searchValue = (q ?? "").toString().trim().toLowerCase();
+    const searchValue = (q ?? "").toString().trim().toLowerCase(); // نستخدم LOWER على قيمة البحث فقط
     const searchTerm = `%${searchValue}%`;
-    // قائمة الـ IDs المستبعدة
     let excludeIdsList = [];
     if (excludeIds) {
         excludeIdsList = excludeIds.split(",");
     }
-    // الاستعلام
     let users = await connection_1.db
         .select({
         id: Student_1.Student.id,
@@ -84,13 +81,11 @@ const searchUsers = async (req, res) => {
         phone: Student_1.Student.phone,
     })
         .from(Student_1.Student)
-        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.firstname})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.lastname})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.nickname})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.email})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.phone})`, searchTerm)))
+        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.firstname}) LIKE ${searchTerm}`, (0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.lastname}) LIKE ${searchTerm}`, (0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.nickname}) LIKE ${searchTerm}`, (0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.email}) LIKE ${searchTerm}`, (0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.phone}) LIKE ${searchTerm}`))
         .limit(20);
-    // استبعاد الـ IDs لو موجودة
     if (excludeIdsList.length > 0) {
         users = users.filter(u => !excludeIdsList.includes(u.id));
     }
-    // الإخراج النهائي
     (0, response_1.SuccessResponse)(res, users.map(u => ({
         value: u.id,
         label: `${u.firstname} ${u.lastname}`,
