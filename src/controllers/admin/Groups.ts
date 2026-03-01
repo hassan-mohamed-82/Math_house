@@ -136,7 +136,7 @@ export const getAllGroups = async (req: Request, res: Response) => {
         .limit(Number(limit))
         .offset(offset);
 
-    // جلب الـ Students لكل Group
+    // جلب الـ Students لكل Group ومراعاة نوع الـ days
     const groupsWithStudents = await Promise.all(
         groupsList.map(async (group) => {
             const students = await db
@@ -148,7 +148,11 @@ export const getAllGroups = async (req: Request, res: Response) => {
                 .innerJoin(Student, eq(groupStudents.studentId, Student.id))
                 .where(eq(groupStudents.groupId, group.id));
 
-            return { ...group, students };
+            return {
+                ...group,
+                days: typeof group.days === "string" ? JSON.parse(group.days) : group.days,
+                students
+            };
         })
     );
 
@@ -190,7 +194,11 @@ export const getGroupById = async (req: Request, res: Response) => {
         .innerJoin(Student, eq(groupStudents.studentId, Student.id))
         .where(eq(groupStudents.groupId, id));
 
-    SuccessResponse(res, { ...group, students });
+    SuccessResponse(res, {
+        ...group,
+        days: typeof group.days === "string" ? JSON.parse(group.days as string) : group.days,
+        students
+    });
 
 };
 

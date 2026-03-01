@@ -112,7 +112,7 @@ const getAllGroups = async (req, res) => {
         .leftJoin(teacher_1.teachers, (0, drizzle_orm_1.eq)(Groups_1.groups.teacherId, teacher_1.teachers.id))
         .limit(Number(limit))
         .offset(offset);
-    // جلب الـ Students لكل Group
+    // جلب الـ Students لكل Group ومراعاة نوع الـ days
     const groupsWithStudents = await Promise.all(groupsList.map(async (group) => {
         const students = await connection_1.db
             .select({
@@ -122,7 +122,11 @@ const getAllGroups = async (req, res) => {
             .from(Groups_1.groupStudents)
             .innerJoin(Student_1.Student, (0, drizzle_orm_1.eq)(Groups_1.groupStudents.studentId, Student_1.Student.id))
             .where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.groupId, group.id));
-        return { ...group, students };
+        return {
+            ...group,
+            days: typeof group.days === "string" ? JSON.parse(group.days) : group.days,
+            students
+        };
     }));
     (0, response_1.SuccessResponse)(res, groupsWithStudents);
 };
@@ -157,7 +161,11 @@ const getGroupById = async (req, res) => {
         .from(Groups_1.groupStudents)
         .innerJoin(Student_1.Student, (0, drizzle_orm_1.eq)(Groups_1.groupStudents.studentId, Student_1.Student.id))
         .where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.groupId, id));
-    (0, response_1.SuccessResponse)(res, { ...group, students });
+    (0, response_1.SuccessResponse)(res, {
+        ...group,
+        days: typeof group.days === "string" ? JSON.parse(group.days) : group.days,
+        students
+    });
 };
 exports.getGroupById = getGroupById;
 // تحديث Group
