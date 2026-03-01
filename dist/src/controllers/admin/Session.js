@@ -63,12 +63,10 @@ const getGroupUsers = async (req, res) => {
     })));
 };
 exports.getGroupUsers = getGroupUsers;
-// البحث في الـ Users (لإضافة user جديد)
 const searchUsers = async (req, res) => {
     const { q, excludeIds } = req.query;
-    // Check if q exists. If q is undefined or empty string, search will match everything implicitly
-    // If q exists, use wildcard %q%
-    const searchTerm = q ? `%${q}%` : `%%`;
+    const searchValue = (q ?? "").toString().trim().toLowerCase();
+    const searchTerm = `%${searchValue}%`;
     let excludeIdsList = [];
     if (excludeIds) {
         excludeIdsList = excludeIds.split(",");
@@ -83,7 +81,7 @@ const searchUsers = async (req, res) => {
         phone: Student_1.Student.phone,
     })
         .from(Student_1.Student)
-        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(Student_1.Student.firstname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.lastname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.nickname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.email, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.phone, searchTerm)))
+        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.firstname})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.lastname})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.nickname})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.email})`, searchTerm), (0, drizzle_orm_1.like)((0, drizzle_orm_1.sql) `LOWER(${Student_1.Student.phone})`, searchTerm)))
         .limit(20);
     if (excludeIdsList.length > 0) {
         users = users.filter(u => !excludeIdsList.includes(u.id));

@@ -71,13 +71,11 @@ export const getGroupUsers = async (req: Request, res: Response) => {
     })));
 };
 
-// البحث في الـ Users (لإضافة user جديد)
 export const searchUsers = async (req: Request, res: Response) => {
     const { q, excludeIds } = req.query;
 
-    // Check if q exists. If q is undefined or empty string, search will match everything implicitly
-    // If q exists, use wildcard %q%
-    const searchTerm = q ? `%${q}%` : `%%`;
+    const searchValue = (q ?? "").toString().trim().toLowerCase();
+    const searchTerm = `%${searchValue}%`;
 
     let excludeIdsList: string[] = [];
     if (excludeIds) {
@@ -96,11 +94,11 @@ export const searchUsers = async (req: Request, res: Response) => {
         .from(Student)
         .where(
             or(
-                like(Student.firstname, searchTerm),
-                like(Student.lastname, searchTerm),
-                like(Student.nickname, searchTerm),
-                like(Student.email, searchTerm),
-                like(Student.phone, searchTerm)
+                like(sql`LOWER(${Student.firstname})`, searchTerm),
+                like(sql`LOWER(${Student.lastname})`, searchTerm),
+                like(sql`LOWER(${Student.nickname})`, searchTerm),
+                like(sql`LOWER(${Student.email})`, searchTerm),
+                like(sql`LOWER(${Student.phone})`, searchTerm)
             )
         )
         .limit(20);
