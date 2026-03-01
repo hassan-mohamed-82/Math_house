@@ -71,17 +71,21 @@ export const getGroupUsers = async (req: Request, res: Response) => {
     })));
 };
 
+
 export const searchUsers = async (req: Request, res: Response) => {
     const { q, excludeIds } = req.query;
 
-    const searchValue = (q ?? "").toString().trim();
+    // تهيئة قيمة البحث
+    const searchValue = (q ?? "").toString().trim().toLowerCase();
     const searchTerm = `%${searchValue}%`;
 
+    // قائمة الـ IDs المستبعدة
     let excludeIdsList: string[] = [];
     if (excludeIds) {
         excludeIdsList = (excludeIds as string).split(",");
     }
 
+    // الاستعلام
     let users = await db
         .select({
             id: Student.id,
@@ -94,19 +98,21 @@ export const searchUsers = async (req: Request, res: Response) => {
         .from(Student)
         .where(
             or(
-                like(sql`${Student.firstname} COLLATE NOCASE`, searchTerm),
-                like(sql`${Student.lastname} COLLATE NOCASE`, searchTerm),
-                like(sql`${Student.nickname} COLLATE NOCASE`, searchTerm),
-                like(sql`${Student.email} COLLATE NOCASE`, searchTerm),
-                like(sql`${Student.phone} COLLATE NOCASE`, searchTerm)
+                like(sql`LOWER(${Student.firstname})`, searchTerm),
+                like(sql`LOWER(${Student.lastname})`, searchTerm),
+                like(sql`LOWER(${Student.nickname})`, searchTerm),
+                like(sql`LOWER(${Student.email})`, searchTerm),
+                like(sql`LOWER(${Student.phone})`, searchTerm)
             )
         )
         .limit(20);
 
+    // استبعاد الـ IDs لو موجودة
     if (excludeIdsList.length > 0) {
         users = users.filter(u => !excludeIdsList.includes(u.id));
     }
 
+    // الإخراج النهائي
     SuccessResponse(res, users.map(u => ({
         value: u.id,
         label: `${u.firstname} ${u.lastname}`,
