@@ -74,7 +74,7 @@ export const getGroupUsers = async (req: Request, res: Response) => {
 export const searchUsers = async (req: Request, res: Response) => {
     const { q, excludeIds } = req.query;
 
-    const searchValue = (q ?? "").toString().trim().toLowerCase();
+    const searchValue = (q ?? "").toString().trim();
     const searchTerm = `%${searchValue}%`;
 
     let excludeIdsList: string[] = [];
@@ -94,11 +94,11 @@ export const searchUsers = async (req: Request, res: Response) => {
         .from(Student)
         .where(
             or(
-                like(sql`LOWER(${Student.firstname})`, searchTerm),
-                like(sql`LOWER(${Student.lastname})`, searchTerm),
-                like(sql`LOWER(${Student.nickname})`, searchTerm),
-                like(sql`LOWER(${Student.email})`, searchTerm),
-                like(sql`LOWER(${Student.phone})`, searchTerm)
+                like(sql`${Student.firstname} COLLATE NOCASE`, searchTerm),
+                like(sql`${Student.lastname} COLLATE NOCASE`, searchTerm),
+                like(sql`${Student.nickname} COLLATE NOCASE`, searchTerm),
+                like(sql`${Student.email} COLLATE NOCASE`, searchTerm),
+                like(sql`${Student.phone} COLLATE NOCASE`, searchTerm)
             )
         )
         .limit(20);
@@ -114,7 +114,6 @@ export const searchUsers = async (req: Request, res: Response) => {
         email: u.email
     })));
 };
-
 
 // ===================== SESSIONS CRUD =====================
 
