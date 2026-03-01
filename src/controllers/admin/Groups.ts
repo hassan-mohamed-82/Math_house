@@ -1,5 +1,6 @@
 // controllers/groups.controller.ts
 import { Request, Response } from "express";
+import { randomUUID } from "crypto";
 import { db } from "../../models/connection";
 import { groups, groupStudents } from "../../models/schema/admin/Groups";
 import { Student } from "../../models/schema/admin/Student";
@@ -86,27 +87,30 @@ export const createGroup = async (req: Request, res: Response) => {
         throw new BadRequest("Missing required fields");
     }
 
+    const groupId = randomUUID();
+
     // إنشاء الـ Group
-    const [newGroup] = await db.insert(groups).values({
+    await db.insert(groups).values({
+        id: groupId,
         name,
         teacherId,
         days: days, // ["Sun", "Mon", etc.]
         timeFrom,
         timeTo,
         isActive
-    }).$returningId() as { id: string }[];
+    });
 
     // إضافة الـ Students للـ Group
     if (studentIds && studentIds.length > 0) {
         const groupStudentRecords = studentIds.map((studentId: string) => ({
-            groupId: newGroup.id,
+            groupId: groupId,
             studentId
         }));
 
         await db.insert(groupStudents).values(groupStudentRecords);
     }
 
-    SuccessResponse(res, { id: newGroup.id }, 201);
+    SuccessResponse(res, { id: groupId }, 201);
 
 };
 

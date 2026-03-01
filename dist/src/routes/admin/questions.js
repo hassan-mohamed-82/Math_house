@@ -21,6 +21,7 @@ router.get("/parallel/:id", (0, catchAsync_1.catchAsync)(questions_2.getParallel
 router.get("/parallel", (0, catchAsync_1.catchAsync)(questions_2.getAllParallelQuestions));
 router.post("/", (0, catchAsync_1.catchAsync)(questions_2.createQuestion));
 router.get("/", (0, catchAsync_1.catchAsync)(questions_2.getAllQuestions));
+router.get("/lesson/:id", (0, catchAsync_1.catchAsync)(questions_2.getQuestionsbyLessonId));
 router.get("/:id", (0, catchAsync_1.catchAsync)(questions_2.getQuestionbyId));
 router.put("/:id", (0, catchAsync_1.catchAsync)(questions_2.updateQuestion));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(questions_2.deleteQuestion));

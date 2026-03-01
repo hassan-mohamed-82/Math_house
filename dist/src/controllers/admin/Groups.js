@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteGroup = exports.updateGroup = exports.getGroupById = exports.getAllGroups = exports.createGroup = exports.searchStudents = exports.selectOptions = void 0;
+const crypto_1 = require("crypto");
 const connection_1 = require("../../models/connection");
 const Groups_1 = require("../../models/schema/admin/Groups");
 const Student_1 = require("../../models/schema/admin/Student");
@@ -69,24 +70,26 @@ const createGroup = async (req, res) => {
     if (!name || !teacherId || !days || !timeFrom || !timeTo) {
         throw new BadRequest_1.BadRequest("Missing required fields");
     }
+    const groupId = (0, crypto_1.randomUUID)();
     // إنشاء الـ Group
-    const [newGroup] = await connection_1.db.insert(Groups_1.groups).values({
+    await connection_1.db.insert(Groups_1.groups).values({
+        id: groupId,
         name,
         teacherId,
         days: days, // ["Sun", "Mon", etc.]
         timeFrom,
         timeTo,
         isActive
-    }).$returningId();
+    });
     // إضافة الـ Students للـ Group
     if (studentIds && studentIds.length > 0) {
         const groupStudentRecords = studentIds.map((studentId) => ({
-            groupId: newGroup.id,
+            groupId: groupId,
             studentId
         }));
         await connection_1.db.insert(Groups_1.groupStudents).values(groupStudentRecords);
     }
-    (0, response_1.SuccessResponse)(res, { id: newGroup.id }, 201);
+    (0, response_1.SuccessResponse)(res, { id: groupId }, 201);
 };
 exports.createGroup = createGroup;
 // جلب كل الـ Groups
