@@ -14,7 +14,7 @@ import {
     ParallelQuestionOptions,
     Sections
 } from "../../models/schema";
-import { eq, count, desc, like, or, SQL } from "drizzle-orm";
+import { eq, count, desc, like, or, SQL, and } from "drizzle-orm";
 import { NotFound } from "../../Errors";
 import { addGenerationJob } from "../../queues/questionQueue";
 import { validateAndSaveLogo, deleteImage, handleImageUpdate } from "../../utils/handleImages";
@@ -133,6 +133,7 @@ export const getAllQuestions = async (req: Request, res: Response) => {
     const totalPages = Math.ceil(total / limit);
 
     const Allquestions = await db.select({
+        id: questions.id,
         question: questions.question,
         answerType: questions.answerType,
         difficulty: questions.difficulty,
@@ -183,7 +184,9 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
         throw new BadRequest("Question ID is required");
     }
     const question = await db.select({
+        id: questions.id,
         question: questions.question,
+        image: questions.image,
         answerType: questions.answerType,
         difficulty: questions.difficulty,
         questionType: questions.questionType,
@@ -204,17 +207,28 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
         section: {
             id: Sections.id,
             sectionName: Sections.sectionName,
-        }
+        },
+        pdf: questionAnswers.pdf,
+        video: questionAnswers.video,
     }).from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
         .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(questionAnswers, eq(questionAnswers.questionId, questions.id))
         .where(eq(questions.id, id)).limit(1);
 
     if (!question[0]) {
         throw new NotFound("Question is not found");
     }
-    return SuccessResponse(res, { message: "Question fetched successfully", data: question[0] }, 200);
+
+    const options = await db.select({
+        id: questionOptions.id,
+        answer: questionOptions.answer,
+        isCorrect: questionOptions.isCorrect,
+        order: questionOptions.order,
+    }).from(questionOptions).where(eq(questionOptions.questionId, id));
+
+    return SuccessResponse(res, { message: "Question fetched successfully", data: { ...question[0], options } }, 200);
 };
 
 export const updateQuestion = async (req: Request, res: Response) => {
@@ -340,6 +354,85 @@ export const deleteQuestion = async (req: Request, res: Response) => {
     }
 
     return SuccessResponse(res, { message: "Question deleted successfully" }, 200);
+};
+
+export const getQuestionsbyLessonId = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (!id) {
+        throw new BadRequest("Lesson ID is required");
+    }
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+
+    const search = req.query.search as string | undefined;
+
+    const searchCondition: SQL | undefined = search
+        ? or(
+            like(questions.question, `%${search}%`),
+            like(examCodes.code, `%${search}%`),
+            like(Sections.sectionName, `%${search}%`)
+        )
+        : undefined;
+
+    const finalCondition = searchCondition
+        ? and(eq(questions.lessonId, id), searchCondition)
+        : eq(questions.lessonId, id);
+
+    const [totalQueries] = await db.select({ count: count() })
+        .from(questions)
+        .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .where(finalCondition);
+
+    const total = totalQueries.count;
+    const totalPages = Math.ceil(total / limit);
+
+    const Allquestions = await db.select({
+        id: questions.id,
+        question: questions.question,
+        answerType: questions.answerType,
+        difficulty: questions.difficulty,
+        questionType: questions.questionType,
+        lessonId: questions.lessonId,
+        year: questions.year,
+        month: questions.month,
+        sectionId: questions.sectionId,
+        codeId: questions.codeId,
+        lesson: {
+            id: lessons.id,
+            name: lessons.name,
+        },
+        examCode: {
+            id: examCodes.id,
+            code: examCodes.code,
+        },
+        type: questions.questionType,
+        section: {
+            id: Sections.id,
+            sectionName: Sections.sectionName,
+        }
+    })
+        .from(questions)
+        .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .where(finalCondition)
+        .limit(limit)
+        .offset(offset)
+        .orderBy(desc(questions.createdAt));
+
+    return SuccessResponse(res, {
+        message: "Questions fetched successfully",
+        data: Allquestions,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages
+        }
+    }, 200);
 };
 // Parallel Questions
 export const sendParallelQuestionGenerate = async (req: Request, res: Response) => {
