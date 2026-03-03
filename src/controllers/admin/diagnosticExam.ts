@@ -248,3 +248,5 @@ export const deleteDiagnosticExam = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Diagnostic Exam deleted successfully" }, 200);
 };
+
+
