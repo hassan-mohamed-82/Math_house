@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getParallelQuestionbyId = exports.getAllParallelQuestions = exports.deleteParallelQuestion = exports.updateParallelQuestion = exports.createParallelQuestion = exports.sendParallelQuestionGenerate = exports.getQuestionsbyLessonId = exports.deleteQuestion = exports.updateQuestion = exports.getQuestionbyId = exports.getAllQuestions = exports.createQuestion = exports.getTextfromImage = void 0;
+exports.getParallelQuestionsByOriginalId = exports.getParallelQuestionbyId = exports.getAllParallelQuestions = exports.deleteParallelQuestion = exports.updateParallelQuestion = exports.createParallelQuestion = exports.sendParallelQuestionGenerate = exports.getQuestionsbyLessonId = exports.deleteQuestion = exports.updateQuestion = exports.getQuestionbyId = exports.getAllQuestions = exports.createQuestion = exports.getTextfromImage = void 0;
 const uuid_1 = require("uuid");
 const response_1 = require("../../utils/response");
 const ocr_service_1 = require("../../ai/services/ocr-service");
@@ -518,7 +518,15 @@ const getAllParallelQuestions = async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
-    const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() }).from(schema_1.ParallelQuestion);
+    const search = req.query.search;
+    const searchCondition = search
+        ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.ParallelQuestion.question, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.lessons.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.questions.question, `%${search}%`))
+        : undefined;
+    const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() })
+        .from(schema_1.ParallelQuestion)
+        .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.ParallelQuestion.lessonId))
+        .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.questions.id, schema_1.ParallelQuestion.origianlQuestionId))
+        .where(searchCondition);
     const total = totalQueries.count;
     const totalPages = Math.ceil(total / limit);
     const allParallelQuestions = await connection_1.db.select({
@@ -541,6 +549,7 @@ const getAllParallelQuestions = async (req, res) => {
     }).from(schema_1.ParallelQuestion)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.ParallelQuestion.lessonId))
         .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.questions.id, schema_1.ParallelQuestion.origianlQuestionId))
+        .where(searchCondition)
         .limit(limit)
         .offset(offset)
         .orderBy((0, drizzle_orm_1.desc)(schema_1.ParallelQuestion.createdAt));
@@ -584,3 +593,60 @@ const getParallelQuestionbyId = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { data: parallelQuestion }, 200);
 };
 exports.getParallelQuestionbyId = getParallelQuestionbyId;
+const getParallelQuestionsByOriginalId = async (req, res) => {
+    const { id } = req.params;
+    if (!id) {
+        throw new BadRequest_1.BadRequest("Original Question ID is required");
+    }
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const search = req.query.search;
+    const searchCondition = search
+        ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.ParallelQuestion.question, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.lessons.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.questions.question, `%${search}%`))
+        : undefined;
+    const finalCondition = searchCondition
+        ? (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.origianlQuestionId, id), searchCondition)
+        : (0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.origianlQuestionId, id);
+    const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() })
+        .from(schema_1.ParallelQuestion)
+        .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.ParallelQuestion.lessonId))
+        .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.questions.id, schema_1.ParallelQuestion.origianlQuestionId))
+        .where(finalCondition);
+    const total = totalQueries.count;
+    const totalPages = Math.ceil(total / limit);
+    const allParallelQuestions = await connection_1.db.select({
+        id: schema_1.ParallelQuestion.id,
+        question: schema_1.ParallelQuestion.question,
+        answerType: schema_1.ParallelQuestion.answerType,
+        difficulty: schema_1.ParallelQuestion.difficulty,
+        lessonId: schema_1.ParallelQuestion.lessonId,
+        origianlQuestionId: schema_1.ParallelQuestion.origianlQuestionId,
+        createdAt: schema_1.ParallelQuestion.createdAt,
+        updatedAt: schema_1.ParallelQuestion.updatedAt,
+        lesson: {
+            id: schema_1.lessons.id,
+            name: schema_1.lessons.name,
+        },
+        originalQuestion: {
+            id: schema_1.questions.id,
+            question: schema_1.questions.question,
+        },
+    }).from(schema_1.ParallelQuestion)
+        .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.ParallelQuestion.lessonId))
+        .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.questions.id, schema_1.ParallelQuestion.origianlQuestionId))
+        .where(finalCondition)
+        .limit(limit)
+        .offset(offset)
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.ParallelQuestion.createdAt));
+    return (0, response_1.SuccessResponse)(res, {
+        data: allParallelQuestions,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages
+        }
+    }, 200);
+};
+exports.getParallelQuestionsByOriginalId = getParallelQuestionsByOriginalId;

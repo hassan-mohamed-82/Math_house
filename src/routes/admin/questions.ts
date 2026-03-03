@@ -14,6 +14,7 @@ import {
     deleteParallelQuestion,
     getAllParallelQuestions,
     getParallelQuestionbyId,
+    getParallelQuestionsByOriginalId,
     getQuestionsbyLessonId,
 } from "../../controllers/admin/questions";
 
@@ -32,6 +33,7 @@ router.post("/parallel/generate", catchAsync(sendParallelQuestionGenerate));
 router.post("/parallel", catchAsync(createParallelQuestion));
 router.put("/parallel/:id", catchAsync(updateParallelQuestion));
 router.delete("/parallel/:id", catchAsync(deleteParallelQuestion));
+router.get("/parallel/original/:id", catchAsync(getParallelQuestionsByOriginalId));
 router.get("/parallel/:id", catchAsync(getParallelQuestionbyId));
 router.get("/parallel", catchAsync(getAllParallelQuestions));
 router.post("/", catchAsync(createQuestion));

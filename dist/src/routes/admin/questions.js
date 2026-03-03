@@ -17,6 +17,7 @@ router.post("/parallel/generate", (0, catchAsync_1.catchAsync)(questions_2.sendP
 router.post("/parallel", (0, catchAsync_1.catchAsync)(questions_2.createParallelQuestion));
 router.put("/parallel/:id", (0, catchAsync_1.catchAsync)(questions_2.updateParallelQuestion));
 router.delete("/parallel/:id", (0, catchAsync_1.catchAsync)(questions_2.deleteParallelQuestion));
+router.get("/parallel/original/:id", (0, catchAsync_1.catchAsync)(questions_2.getParallelQuestionsByOriginalId));
 router.get("/parallel/:id", (0, catchAsync_1.catchAsync)(questions_2.getParallelQuestionbyId));
 router.get("/parallel", (0, catchAsync_1.catchAsync)(questions_2.getAllParallelQuestions));
 router.post("/", (0, catchAsync_1.catchAsync)(questions_2.createQuestion));
