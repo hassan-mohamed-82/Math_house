@@ -13,6 +13,7 @@ router.get("/questions/filters", (0, catchAsync_1.catchAsync)(Quiz_1.getFilterOp
 // Quiz CRUD
 router.post("/", (0, catchAsync_1.catchAsync)(Quiz_1.createQuiz));
 router.get("/", (0, catchAsync_1.catchAsync)(Quiz_1.getAllQuizzes));
+router.get("/lesson/:id", (0, catchAsync_1.catchAsync)(Quiz_1.getQuizzesByLessonId));
 router.get("/:id", (0, catchAsync_1.catchAsync)(Quiz_1.getQuizById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(Quiz_1.updateQuiz));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(Quiz_1.deleteQuiz));

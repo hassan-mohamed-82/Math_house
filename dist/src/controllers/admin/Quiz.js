@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSelection = exports.getFilterOptions = exports.getQuestionsBank = exports.toggleQuizActive = exports.deleteQuiz = exports.updateQuiz = exports.getQuizById = exports.getAllQuizzes = exports.createQuiz = void 0;
+exports.getQuizzesByLessonId = exports.getSelection = exports.getFilterOptions = exports.getQuestionsBank = exports.toggleQuizActive = exports.deleteQuiz = exports.updateQuiz = exports.getQuizById = exports.getAllQuizzes = exports.createQuiz = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const schema_2 = require("../../models/schema");
@@ -576,3 +576,66 @@ const getSelection = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { data });
 };
 exports.getSelection = getSelection;
+const getQuizzesByLessonId = async (req, res) => {
+    const { id } = req.params;
+    const lesson = await connection_1.db
+        .select()
+        .from(schema_6.lessons)
+        .where((0, drizzle_orm_1.eq)(schema_6.lessons.id, id))
+        .limit(1);
+    if (!lesson[0]) {
+        throw new NotFound_1.NotFound("Lesson not found");
+    }
+    const quizzesList = await connection_1.db
+        .select({
+        id: schema_1.quizzes.id,
+        title: schema_1.quizzes.title,
+        description: schema_1.quizzes.description,
+        durationHours: schema_1.quizzes.durationHours,
+        durationMinutes: schema_1.quizzes.durationMinutes,
+        totalScore: schema_1.quizzes.totalScore,
+        passScore: schema_1.quizzes.passScore,
+        quizOrder: schema_1.quizzes.quizOrder,
+        isActive: schema_1.quizzes.isActive,
+        createdAt: schema_1.quizzes.createdAt,
+        updatedAt: schema_1.quizzes.updatedAt,
+        category: {
+            id: schema_3.category.id,
+            name: schema_3.category.name,
+        },
+        course: {
+            id: schema_4.courses.id,
+            name: schema_4.courses.name,
+        },
+        chapter: {
+            id: schema_5.chapters.id,
+            name: schema_5.chapters.name,
+        },
+        lesson: {
+            id: schema_6.lessons.id,
+            name: schema_6.lessons.name,
+        },
+    })
+        .from(schema_1.quizzes)
+        .leftJoin(schema_3.category, (0, drizzle_orm_1.eq)(schema_1.quizzes.categoryId, schema_3.category.id))
+        .leftJoin(schema_4.courses, (0, drizzle_orm_1.eq)(schema_1.quizzes.courseId, schema_4.courses.id))
+        .leftJoin(schema_5.chapters, (0, drizzle_orm_1.eq)(schema_1.quizzes.chapterId, schema_5.chapters.id))
+        .leftJoin(schema_6.lessons, (0, drizzle_orm_1.eq)(schema_1.quizzes.lessonId, schema_6.lessons.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.quizzes.lessonId, id))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.quizzes.createdAt));
+    const quizzesWithCount = await Promise.all(quizzesList.map(async (quiz) => {
+        const questionsCount = await connection_1.db
+            .select()
+            .from(schema_1.quizQuestions)
+            .where((0, drizzle_orm_1.eq)(schema_1.quizQuestions.quizId, quiz.id));
+        return {
+            ...quiz,
+            questionsCount: questionsCount.length,
+        };
+    }));
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Get quizzes by lesson ID success",
+        data: quizzesWithCount
+    });
+};
+exports.getQuizzesByLessonId = getQuizzesByLessonId;

@@ -245,8 +245,36 @@ export const deleteDiagnosticExam = async (req: Request, res: Response) => {
     // Optionally check if questions are linked or other dependencies
     await db.delete(diagnosticExamQuestions).where(eq(diagnosticExamQuestions.diagnosticExamId, id));
     await db.delete(diagnosticExam).where(eq(diagnosticExam.id, id));
-
     return SuccessResponse(res, { message: "Diagnostic Exam deleted successfully" }, 200);
+};
+
+export const getSelection = async (req: Request, res: Response) => {
+    // 1. Fetch Raw Scores
+    const rawScoresData = await db
+        .select({
+            id: rawScore.id,
+            name: rawScore.name,
+            score: rawScore.score,
+        })
+        .from(rawScore);
+
+    // 2. Fetch Questions (Basic info for selection)
+    const questionsData = await db
+        .select({
+            id: questions.id,
+            questionText: questions.question,
+            questionType: questions.questionType,
+            difficulty: questions.difficulty,
+        })
+        .from(questions);
+
+    return SuccessResponse(res, {
+        message: "Selection options fetched successfully",
+        data: {
+            rawScores: rawScoresData,
+            questions: questionsData,
+        }
+    }, 200);
 };
 
 

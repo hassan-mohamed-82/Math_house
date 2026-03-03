@@ -10,7 +10,8 @@ import {
     toggleQuizActive,
     getQuestionsBank,
     getFilterOptions,
-    getSelection
+    getSelection,
+    getQuizzesByLessonId
 } from "../../controllers/admin/Quiz";
 import { catchAsync } from "../../utils/catchAsync";
 
@@ -26,6 +27,7 @@ router.get("/questions/filters", catchAsync(getFilterOptions));
 // Quiz CRUD
 router.post("/", catchAsync(createQuiz));
 router.get("/", catchAsync(getAllQuizzes));
+router.get("/lesson/:id", catchAsync(getQuizzesByLessonId));
 router.get("/:id", catchAsync(getQuizById));
 router.put("/:id", catchAsync(updateQuiz));
 router.delete("/:id", catchAsync(deleteQuiz));

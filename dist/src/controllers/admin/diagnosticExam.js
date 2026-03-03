@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteDiagnosticExam = exports.updateDiagnosticExam = exports.getDiagnosticExamById = exports.getAllDiagnosticExams = exports.createDiagnosticExam = void 0;
+exports.getSelection = exports.deleteDiagnosticExam = exports.updateDiagnosticExam = exports.getDiagnosticExamById = exports.getAllDiagnosticExams = exports.createDiagnosticExam = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -222,3 +222,30 @@ const deleteDiagnosticExam = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Diagnostic Exam deleted successfully" }, 200);
 };
 exports.deleteDiagnosticExam = deleteDiagnosticExam;
+const getSelection = async (req, res) => {
+    // 1. Fetch Raw Scores
+    const rawScoresData = await connection_1.db
+        .select({
+        id: schema_1.rawScore.id,
+        name: schema_1.rawScore.name,
+        score: schema_1.rawScore.score,
+    })
+        .from(schema_1.rawScore);
+    // 2. Fetch Questions (Basic info for selection)
+    const questionsData = await connection_1.db
+        .select({
+        id: schema_1.questions.id,
+        questionText: schema_1.questions.question,
+        questionType: schema_1.questions.questionType,
+        difficulty: schema_1.questions.difficulty,
+    })
+        .from(schema_1.questions);
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Selection options fetched successfully",
+        data: {
+            rawScores: rawScoresData,
+            questions: questionsData,
+        }
+    }, 200);
+};
+exports.getSelection = getSelection;

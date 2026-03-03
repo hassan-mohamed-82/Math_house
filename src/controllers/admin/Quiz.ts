@@ -683,3 +683,76 @@ export const getSelection = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { data });
 };
+
+export const getQuizzesByLessonId = async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    const lesson = await db
+        .select()
+        .from(lessons)
+        .where(eq(lessons.id, id))
+        .limit(1);
+
+    if (!lesson[0]) {
+        throw new NotFound("Lesson not found");
+    }
+
+    const quizzesList = await db
+        .select({
+            id: quizzes.id,
+            title: quizzes.title,
+            description: quizzes.description,
+            durationHours: quizzes.durationHours,
+            durationMinutes: quizzes.durationMinutes,
+            totalScore: quizzes.totalScore,
+            passScore: quizzes.passScore,
+            quizOrder: quizzes.quizOrder,
+            isActive: quizzes.isActive,
+            createdAt: quizzes.createdAt,
+            updatedAt: quizzes.updatedAt,
+            category: {
+                id: category.id,
+                name: category.name,
+            },
+            course: {
+                id: courses.id,
+                name: courses.name,
+            },
+            chapter: {
+                id: chapters.id,
+                name: chapters.name,
+            },
+            lesson: {
+                id: lessons.id,
+                name: lessons.name,
+            },
+        })
+        .from(quizzes)
+        .leftJoin(category, eq(quizzes.categoryId, category.id))
+        .leftJoin(courses, eq(quizzes.courseId, courses.id))
+        .leftJoin(chapters, eq(quizzes.chapterId, chapters.id))
+        .leftJoin(lessons, eq(quizzes.lessonId, lessons.id))
+        .where(eq(quizzes.lessonId, id))
+        .orderBy(desc(quizzes.createdAt));
+
+    const quizzesWithCount = await Promise.all(
+        quizzesList.map(async (quiz) => {
+            const questionsCount = await db
+                .select()
+                .from(quizQuestions)
+                .where(eq(quizQuestions.quizId, quiz.id));
+
+            return {
+                ...quiz,
+                questionsCount: questionsCount.length,
+            };
+        })
+    );
+
+    return SuccessResponse(res, {
+        message: "Get quizzes by lesson ID success",
+        data: quizzesWithCount
+    });
+};
+
+
