@@ -577,7 +577,22 @@ export const getAllParallelQuestions = async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 10;
     const offset = (page - 1) * limit;
 
-    const [totalQueries] = await db.select({ count: count() }).from(ParallelQuestion);
+    const search = req.query.search as string | undefined;
+
+    const searchCondition: SQL | undefined = search
+        ? or(
+            like(ParallelQuestion.question, `%${search}%`),
+            like(lessons.name, `%${search}%`),
+            like(questions.question, `%${search}%`)
+        )
+        : undefined;
+
+    const [totalQueries] = await db.select({ count: count() })
+        .from(ParallelQuestion)
+        .innerJoin(lessons, eq(lessons.id, ParallelQuestion.lessonId))
+        .innerJoin(questions, eq(questions.id, ParallelQuestion.origianlQuestionId))
+        .where(searchCondition);
+
     const total = totalQueries.count;
     const totalPages = Math.ceil(total / limit);
 
@@ -601,6 +616,7 @@ export const getAllParallelQuestions = async (req: Request, res: Response) => {
     }).from(ParallelQuestion)
         .innerJoin(lessons, eq(lessons.id, ParallelQuestion.lessonId))
         .innerJoin(questions, eq(questions.id, ParallelQuestion.origianlQuestionId))
+        .where(searchCondition)
         .limit(limit)
         .offset(offset)
         .orderBy(desc(ParallelQuestion.createdAt));
@@ -647,3 +663,73 @@ export const getParallelQuestionbyId = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { data: parallelQuestion }, 200);
 };
+
+export const getParallelQuestionsByOriginalId = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    if (!id) {
+        throw new BadRequest("Original Question ID is required");
+    }
+
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+
+    const search = req.query.search as string | undefined;
+
+    const searchCondition: SQL | undefined = search
+        ? or(
+            like(ParallelQuestion.question, `%${search}%`),
+            like(lessons.name, `%${search}%`),
+            like(questions.question, `%${search}%`)
+        )
+        : undefined;
+
+    const finalCondition = searchCondition
+        ? and(eq(ParallelQuestion.origianlQuestionId, id), searchCondition)
+        : eq(ParallelQuestion.origianlQuestionId, id);
+
+    const [totalQueries] = await db.select({ count: count() })
+        .from(ParallelQuestion)
+        .innerJoin(lessons, eq(lessons.id, ParallelQuestion.lessonId))
+        .innerJoin(questions, eq(questions.id, ParallelQuestion.origianlQuestionId))
+        .where(finalCondition);
+
+    const total = totalQueries.count;
+    const totalPages = Math.ceil(total / limit);
+
+    const allParallelQuestions = await db.select({
+        id: ParallelQuestion.id,
+        question: ParallelQuestion.question,
+        answerType: ParallelQuestion.answerType,
+        difficulty: ParallelQuestion.difficulty,
+        lessonId: ParallelQuestion.lessonId,
+        origianlQuestionId: ParallelQuestion.origianlQuestionId,
+        createdAt: ParallelQuestion.createdAt,
+        updatedAt: ParallelQuestion.updatedAt,
+        lesson: {
+            id: lessons.id,
+            name: lessons.name,
+        },
+        originalQuestion: {
+            id: questions.id,
+            question: questions.question,
+        },
+    }).from(ParallelQuestion)
+        .innerJoin(lessons, eq(lessons.id, ParallelQuestion.lessonId))
+        .innerJoin(questions, eq(questions.id, ParallelQuestion.origianlQuestionId))
+        .where(finalCondition)
+        .limit(limit)
+        .offset(offset)
+        .orderBy(desc(ParallelQuestion.createdAt));
+
+    return SuccessResponse(res, {
+        data: allParallelQuestions,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages
+        }
+    }, 200);
+};
+
