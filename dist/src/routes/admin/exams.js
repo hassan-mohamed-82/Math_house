@@ -6,6 +6,7 @@ const exams_1 = require("../../controllers/admin/exams");
 const router = (0, express_1.Router)();
 router.post("/", (0, catchAsync_1.catchAsync)(exams_1.createExam));
 router.get("/", (0, catchAsync_1.catchAsync)(exams_1.getAllExams));
+router.get("/course/:courseId", (0, catchAsync_1.catchAsync)(exams_1.getExamsByCourseId));
 router.get("/:id", (0, catchAsync_1.catchAsync)(exams_1.getExamById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(exams_1.updateExam));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(exams_1.deleteExam));

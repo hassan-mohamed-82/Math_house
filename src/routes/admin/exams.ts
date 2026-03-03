@@ -5,12 +5,14 @@ import {
     getAllExams,
     getExamById,
     updateExam,
-    deleteExam
+    deleteExam,
+    getExamsByCourseId
 } from "../../controllers/admin/exams";
 const router = Router();
 
 router.post("/", catchAsync(createExam));
 router.get("/", catchAsync(getAllExams));
+router.get("/course/:courseId", catchAsync(getExamsByCourseId));
 router.get("/:id", catchAsync(getExamById));
 router.put("/:id", catchAsync(updateExam));
 router.delete("/:id", catchAsync(deleteExam));

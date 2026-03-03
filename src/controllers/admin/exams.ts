@@ -421,3 +421,50 @@ export const deleteExam = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Exam deleted successfully" }, 200);
 }
+
+export const getExamsByCourseId = async (req: Request, res: Response) => {
+    const { courseId } = req.params;
+
+    const course = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+    if (course.length === 0) {
+        throw new BadRequest("Course not found");
+    }
+
+    const courseExams = await db.select({
+        id: Exams.id,
+        title: Exams.title,
+        description: Exams.description,
+        duration: Exams.duration,
+        totalScore: Exams.totalScore,
+        passScore: Exams.passScore,
+        examType: Exams.examType,
+        year: Exams.year,
+        Month: Exams.Month,
+        isActive: Exams.isActive,
+        createdAt: Exams.createdAt,
+        updatedAt: Exams.updatedAt,
+        // Joins
+        courseName: courses.name,
+        codeName: examCodes.code,
+        rawScoreName: rawScore.name,
+    })
+        .from(Exams)
+        .leftJoin(courses, eq(Exams.courseId, courses.id))
+        .leftJoin(examCodes, eq(Exams.codeId, examCodes.id))
+        .leftJoin(rawScore, eq(Exams.rawScoreId, rawScore.id))
+        .where(eq(Exams.courseId, courseId));
+
+    const staticExams = courseExams.filter(e => e.examType === "static");
+    const adaptiveExams = courseExams.filter(e => e.examType === "adaptive");
+
+    return SuccessResponse(res, {
+        message: "Course exams fetched successfully",
+        data: {
+            course: course[0],
+            exams: {
+                static: staticExams,
+                adaptive: adaptiveExams
+            }
+        }
+    }, 200);
+}

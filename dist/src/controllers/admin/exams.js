@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteExam = exports.getExamById = exports.getAllExams = exports.updateExam = exports.createExam = void 0;
+exports.getExamsByCourseId = exports.deleteExam = exports.getExamById = exports.getAllExams = exports.updateExam = exports.createExam = void 0;
 const connection_1 = require("../../models/connection");
 const exams_1 = require("../../models/schema/admin/exams");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -377,3 +377,46 @@ const deleteExam = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Exam deleted successfully" }, 200);
 };
 exports.deleteExam = deleteExam;
+const getExamsByCourseId = async (req, res) => {
+    const { courseId } = req.params;
+    const course = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, courseId)).limit(1);
+    if (course.length === 0) {
+        throw new BadRequest_1.BadRequest("Course not found");
+    }
+    const courseExams = await connection_1.db.select({
+        id: exams_1.Exams.id,
+        title: exams_1.Exams.title,
+        description: exams_1.Exams.description,
+        duration: exams_1.Exams.duration,
+        totalScore: exams_1.Exams.totalScore,
+        passScore: exams_1.Exams.passScore,
+        examType: exams_1.Exams.examType,
+        year: exams_1.Exams.year,
+        Month: exams_1.Exams.Month,
+        isActive: exams_1.Exams.isActive,
+        createdAt: exams_1.Exams.createdAt,
+        updatedAt: exams_1.Exams.updatedAt,
+        // Joins
+        courseName: schema_1.courses.name,
+        codeName: schema_1.examCodes.code,
+        rawScoreName: schema_1.rawScore.name,
+    })
+        .from(exams_1.Exams)
+        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(exams_1.Exams.courseId, schema_1.courses.id))
+        .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(exams_1.Exams.codeId, schema_1.examCodes.id))
+        .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(exams_1.Exams.rawScoreId, schema_1.rawScore.id))
+        .where((0, drizzle_orm_1.eq)(exams_1.Exams.courseId, courseId));
+    const staticExams = courseExams.filter(e => e.examType === "static");
+    const adaptiveExams = courseExams.filter(e => e.examType === "adaptive");
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Course exams fetched successfully",
+        data: {
+            course: course[0],
+            exams: {
+                static: staticExams,
+                adaptive: adaptiveExams
+            }
+        }
+    }, 200);
+};
+exports.getExamsByCourseId = getExamsByCourseId;
