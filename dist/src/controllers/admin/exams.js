@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getExamsByCourseId = exports.deleteExam = exports.getExamById = exports.getAllExams = exports.updateExam = exports.createExam = void 0;
+exports.getExamsByCourseId = exports.deleteExam = exports.getExamById = exports.getAllExams = exports.updateExam = exports.createExam = exports.selectionOptions = void 0;
 const connection_1 = require("../../models/connection");
 const exams_1 = require("../../models/schema/admin/exams");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -8,6 +8,13 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const crypto_1 = require("crypto");
 const schema_1 = require("../../models/schema");
+const selectionOptions = async (req, res) => {
+    const All_examCodes = await connection_1.db.select({ id: schema_1.examCodes.id, code: schema_1.examCodes.code }).from(schema_1.examCodes);
+    const All_sections = await connection_1.db.select({ id: schema_1.Sections.id, sectionName: schema_1.Sections.sectionName }).from(schema_1.Sections);
+    const All_rawScores = await connection_1.db.select({ id: schema_1.rawScore.id, score: schema_1.rawScore.score }).from(schema_1.rawScore);
+    return (0, response_1.SuccessResponse)(res, { message: "Selection options fetched successfully", data: { examCodes: All_examCodes, sections: All_sections, rawScores: All_rawScores } }, 200);
+};
+exports.selectionOptions = selectionOptions;
 const createExam = async (req, res) => {
     const { examType } = req.body;
     switch (examType) {

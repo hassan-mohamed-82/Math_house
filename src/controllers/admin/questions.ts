@@ -439,6 +439,35 @@ export const getQuestionsbyCourseId = async (req: Request, res: Response) => {
     if (!courseId) {
         throw new BadRequest("Course ID is required");
     }
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+
+    const search = req.query.search as string | undefined;
+
+    const searchCondition: SQL | undefined = search
+        ? or(
+            like(questions.question, `%${search}%`),
+            like(lessons.name, `%${search}%`),
+            like(examCodes.code, `%${search}%`),
+            like(Sections.sectionName, `%${search}%`)
+        )
+        : undefined;
+
+    const finalCondition = searchCondition
+        ? and(eq(lessons.courseId, courseId), searchCondition)
+        : eq(lessons.courseId, courseId);
+
+    const [totalQueries] = await db.select({ count: count() })
+        .from(questions)
+        .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .where(finalCondition);
+
+    const total = totalQueries.count;
+    const totalPages = Math.ceil(total / limit);
+
     const Allquestions = await db.select({
         id: questions.id,
         question: questions.question,
@@ -468,8 +497,21 @@ export const getQuestionsbyCourseId = async (req: Request, res: Response) => {
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
         .innerJoin(Sections, eq(Sections.id, questions.sectionId))
-        .where(eq(lessons.courseId, courseId));
-    return SuccessResponse(res, { message: "Questions fetched successfully", data: Allquestions }, 200);
+        .where(finalCondition)
+        .limit(limit)
+        .offset(offset)
+        .orderBy(desc(questions.createdAt));
+
+    return SuccessResponse(res, {
+        message: "Questions fetched successfully",
+        data: Allquestions,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages
+        }
+    }, 200);
 };
 // Parallel Questions
 export const sendParallelQuestionGenerate = async (req: Request, res: Response) => {

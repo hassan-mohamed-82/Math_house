@@ -7,6 +7,14 @@ import { BadRequest } from "../../Errors/BadRequest";
 import { randomUUID } from "crypto";
 import { examCodes, questions, Sections, rawScore, courses } from "../../models/schema";
 
+
+export const selectionOptions = async (req: Request, res: Response) => {
+    const All_examCodes = await db.select({ id: examCodes.id, code: examCodes.code }).from(examCodes);
+    const All_sections = await db.select({ id: Sections.id, sectionName: Sections.sectionName }).from(Sections);
+    const All_rawScores = await db.select({ id: rawScore.id, score: rawScore.score }).from(rawScore);
+    return SuccessResponse(res, { message: "Selection options fetched successfully", data: { examCodes: All_examCodes, sections: All_sections, rawScores: All_rawScores } }, 200);
+};
+
 export const createExam = async (req: Request, res: Response) => {
     const { examType } = req.body;
     switch (examType) {
