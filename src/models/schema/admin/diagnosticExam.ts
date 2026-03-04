@@ -2,6 +2,7 @@ import { mysqlTable, char, varchar, timestamp, int, boolean, foreignKey } from "
 import { sql } from "drizzle-orm";
 import { questions } from "./questions";
 import { rawScore } from "./rawScore";
+import { courses } from "./courses";
 export const diagnosticExam = mysqlTable("diagnostic_exam", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     title: varchar("title", { length: 255 }).notNull(),
@@ -12,6 +13,7 @@ export const diagnosticExam = mysqlTable("diagnostic_exam", {
     rawScoreId: char("raw_score_id", { length: 255 }).notNull().references(() => rawScore.id),
     numberOfQuestions: int("number_of_questions").notNull(),
     isActive: boolean("is_active").notNull().default(true),
+    courseId: char("course_id", { length: 255 }).notNull().references(() => courses.id),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });

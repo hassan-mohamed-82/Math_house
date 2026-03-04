@@ -102,7 +102,7 @@ async function main() {
         // 12. Diagnostic Exams (depends on Raw Scores)
         console.log("\n📝 Seeding Diagnostic Exams...");
         const { seedDiagnosticExams } = await Promise.resolve().then(() => __importStar(require("./diagnosticExam")));
-        await seedDiagnosticExams();
+        await seedDiagnosticExams(courseMap);
         // 13. Quizzes
         console.log("\n📝 Seeding Quizzes...");
         const { seedQuizzes } = await Promise.resolve().then(() => __importStar(require("./quizzes")));

@@ -3,7 +3,7 @@ import { diagnosticExam, rawScore, questions } from "../models/schema";
 import { eq } from "drizzle-orm";
 import { v4 as uuidv4 } from "uuid";
 
-export async function seedDiagnosticExams() {
+export async function seedDiagnosticExams(courseMap: Record<string, string>) {
     console.log("  Fetching Raw Scores for reference...");
     const rawScores = await db.select().from(rawScore);
     const rawScoreMap: Record<string, string> = {};
@@ -20,6 +20,7 @@ export async function seedDiagnosticExams() {
             numberOfQuestions: 20,
             passScore: 70,
             isActive: true,
+            courseName: "Primary 1",
         },
         {
             title: "Middle 1 Assessment",
@@ -29,6 +30,7 @@ export async function seedDiagnosticExams() {
             numberOfQuestions: 25,
             passScore: 65,
             isActive: true,
+            courseName: "Middle 1",
         },
         {
             title: "Secondary 1 Readiness",
@@ -38,6 +40,7 @@ export async function seedDiagnosticExams() {
             numberOfQuestions: 15,
             passScore: 60,
             isActive: true,
+            courseName: "Secondary 1",
         }
     ];
 
@@ -53,6 +56,11 @@ export async function seedDiagnosticExams() {
     for (const data of diagnosticExamsData) {
         if (!rawScoreMap[data.rawScoreName]) {
             console.log(`  ⚠️ Raw Score "${data.rawScoreName}" not found, skipping exam "${data.title}".`);
+            continue;
+        }
+
+        if (!courseMap[data.courseName]) {
+            console.log(`  ⚠️ Course "${data.courseName}" not found, skipping exam "${data.title}".`);
             continue;
         }
 
@@ -73,6 +81,7 @@ export async function seedDiagnosticExams() {
         const gradePerQuestion = data.numberOfQuestions > 0 ? calculatedTotalScore / data.numberOfQuestions : 0;
 
         const examId = uuidv4();
+        const courseId = courseMap[data.courseName];
 
         await db.insert(diagnosticExam).values({
             id: examId,
@@ -84,6 +93,7 @@ export async function seedDiagnosticExams() {
             rawScoreId: rawScoreId,
             numberOfQuestions: data.numberOfQuestions,
             isActive: data.isActive,
+            courseId: courseId,
         });
 
         console.log(`  ✅ Diagnostic Exam "${data.title}" created`);

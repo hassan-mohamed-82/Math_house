@@ -5,7 +5,8 @@ import {
     getDiagnosticExamById,
     updateDiagnosticExam,
     deleteDiagnosticExam,
-    getSelection
+    getSelection,
+    getAllDiagnosticExamsbyCourseId
 } from "../../controllers/admin/diagnosticExam";
 import { catchAsync } from "../../utils/catchAsync";
 
@@ -17,5 +18,6 @@ router.get("/selection", catchAsync(getSelection));
 router.get("/:id", catchAsync(getDiagnosticExamById));
 router.put("/:id", catchAsync(updateDiagnosticExam));
 router.delete("/:id", catchAsync(deleteDiagnosticExam));
+router.get("/course/:courseId", catchAsync(getAllDiagnosticExamsbyCourseId));
 
 export default router;

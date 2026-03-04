@@ -38,7 +38,7 @@ const connection_1 = require("../models/connection");
 const schema_1 = require("../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const uuid_1 = require("uuid");
-async function seedDiagnosticExams() {
+async function seedDiagnosticExams(courseMap) {
     console.log("  Fetching Raw Scores for reference...");
     const rawScores = await connection_1.db.select().from(schema_1.rawScore);
     const rawScoreMap = {};
@@ -54,6 +54,7 @@ async function seedDiagnosticExams() {
             numberOfQuestions: 20,
             passScore: 70,
             isActive: true,
+            courseName: "Primary 1",
         },
         {
             title: "Middle 1 Assessment",
@@ -63,6 +64,7 @@ async function seedDiagnosticExams() {
             numberOfQuestions: 25,
             passScore: 65,
             isActive: true,
+            courseName: "Middle 1",
         },
         {
             title: "Secondary 1 Readiness",
@@ -72,6 +74,7 @@ async function seedDiagnosticExams() {
             numberOfQuestions: 15,
             passScore: 60,
             isActive: true,
+            courseName: "Secondary 1",
         }
     ];
     console.log("  Fetching Questions for linking...");
@@ -83,6 +86,10 @@ async function seedDiagnosticExams() {
     for (const data of diagnosticExamsData) {
         if (!rawScoreMap[data.rawScoreName]) {
             console.log(`  ⚠️ Raw Score "${data.rawScoreName}" not found, skipping exam "${data.title}".`);
+            continue;
+        }
+        if (!courseMap[data.courseName]) {
+            console.log(`  ⚠️ Course "${data.courseName}" not found, skipping exam "${data.title}".`);
             continue;
         }
         const existing = await connection_1.db.select().from(schema_1.diagnosticExam).where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.title, data.title));
@@ -99,6 +106,7 @@ async function seedDiagnosticExams() {
         const calculatedTotalScore = totalScore - (selectedRawScore?.is_giftingScore ? selectedRawScore.giftingScore : 0);
         const gradePerQuestion = data.numberOfQuestions > 0 ? calculatedTotalScore / data.numberOfQuestions : 0;
         const examId = (0, uuid_1.v4)();
+        const courseId = courseMap[data.courseName];
         await connection_1.db.insert(schema_1.diagnosticExam).values({
             id: examId,
             title: data.title,
@@ -109,6 +117,7 @@ async function seedDiagnosticExams() {
             rawScoreId: rawScoreId,
             numberOfQuestions: data.numberOfQuestions,
             isActive: data.isActive,
+            courseId: courseId,
         });
         console.log(`  ✅ Diagnostic Exam "${data.title}" created`);
         // Link Questions

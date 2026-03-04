@@ -434,6 +434,43 @@ export const getQuestionsbyLessonId = async (req: Request, res: Response) => {
         }
     }, 200);
 };
+export const getQuestionsbyCourseId = async (req: Request, res: Response) => {
+    const { courseId } = req.params;
+    if (!courseId) {
+        throw new BadRequest("Course ID is required");
+    }
+    const Allquestions = await db.select({
+        id: questions.id,
+        question: questions.question,
+        answerType: questions.answerType,
+        difficulty: questions.difficulty,
+        questionType: questions.questionType,
+        lessonId: questions.lessonId,
+        year: questions.year,
+        month: questions.month,
+        sectionId: questions.sectionId,
+        codeId: questions.codeId,
+        lesson: {
+            id: lessons.id,
+            name: lessons.name,
+        },
+        examCode: {
+            id: examCodes.id,
+            code: examCodes.code,
+        },
+        type: questions.questionType,
+        section: {
+            id: Sections.id,
+            sectionName: Sections.sectionName,
+        }
+    })
+        .from(questions)
+        .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .where(eq(lessons.courseId, courseId));
+    return SuccessResponse(res, { message: "Questions fetched successfully", data: Allquestions }, 200);
+};
 // Parallel Questions
 export const sendParallelQuestionGenerate = async (req: Request, res: Response) => {
     const { origianlQuestionId } = req.body;
@@ -651,13 +688,20 @@ export const getParallelQuestionbyId = async (req: Request, res: Response) => {
             id: lessons.id,
             name: lessons.name,
         },
+        options: {
+            id: ParallelQuestionOptions.id,
+            answer: ParallelQuestionOptions.answer,
+            isCorrect: ParallelQuestionOptions.isCorrect,
+            order: ParallelQuestionOptions.order,
+        },
         originalQuestion: {
             id: questions.id,
             question: questions.question,
-        },
+        }
     }).from(ParallelQuestion)
         .innerJoin(lessons, eq(lessons.id, ParallelQuestion.lessonId))
         .innerJoin(questions, eq(questions.id, ParallelQuestion.origianlQuestionId))
+        .leftJoin(ParallelQuestionOptions, eq(ParallelQuestionOptions.questionId, ParallelQuestion.id))
         .where(eq(ParallelQuestion.id, id));
 
 

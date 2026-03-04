@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { diagnosticExam, rawScore, diagnosticExamQuestions, questions } from "../../models/schema";
+import { diagnosticExam, rawScore, diagnosticExamQuestions, questions, courses } from "../../models/schema";
 import { eq, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -26,7 +26,7 @@ const calculateDynamicScores = (exam: any, rawScoreData: any) => {
 };
 
 export const createDiagnosticExam = async (req: Request, res: Response) => {
-    const { title, description, duration, rawScoreId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
+    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
 
     if (!title || !duration || !rawScoreId || !numberOfQuestions || !passScore) {
         throw new BadRequest("Title, Duration, Raw Score ID, Number of Questions, and Pass Score are required");
@@ -36,7 +36,10 @@ export const createDiagnosticExam = async (req: Request, res: Response) => {
     if (!existingRawScore[0]) {
         throw new BadRequest("Raw Score not found");
     }
-
+    const existingCourse = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+    if (!existingCourse[0]) {
+        throw new BadRequest("Course not found");
+    }
     const id = uuidv4();
 
     await db.insert(diagnosticExam).values({
@@ -44,6 +47,7 @@ export const createDiagnosticExam = async (req: Request, res: Response) => {
         title,
         description,
         duration,
+        courseId,
         totalScore: existingRawScore[0].score,
         passScore,
         rawScoreId,
@@ -79,6 +83,7 @@ export const createDiagnosticExam = async (req: Request, res: Response) => {
         isActive: isActive !== undefined ? isActive : true,
         // Mocking/Using the raw score data we already have
         rawScore: existingRawScore[0],
+        course: existingCourse[0],
     };
 
     const responseData = calculateDynamicScores(createdExam, existingRawScore[0]);
@@ -105,9 +110,14 @@ export const getAllDiagnosticExams = async (req: Request, res: Response) => {
                 is_giftingScore: rawScore.is_giftingScore,
                 giftingScore: rawScore.giftingScore,
             },
+            course: {
+                id: courses.id,
+                name: courses.name,
+            }
         })
         .from(diagnosticExam)
         .leftJoin(rawScore, eq(diagnosticExam.rawScoreId, rawScore.id))
+        .leftJoin(courses, eq(diagnosticExam.courseId, courses.id))
         .orderBy(desc(diagnosticExam.createdAt));
 
     const processedExams = exams.map(exam => {
@@ -140,10 +150,15 @@ export const getDiagnosticExamById = async (req: Request, res: Response) => {
                 score: rawScore.score,
                 is_giftingScore: rawScore.is_giftingScore,
                 giftingScore: rawScore.giftingScore,
+            },
+            course: {
+                id: courses.id,
+                name: courses.name,
             }
         })
         .from(diagnosticExam)
         .leftJoin(rawScore, eq(diagnosticExam.rawScoreId, rawScore.id))
+        .leftJoin(courses, eq(diagnosticExam.courseId, courses.id))
         .where(eq(diagnosticExam.id, id))
         .limit(1);
 
@@ -170,11 +185,15 @@ export const getDiagnosticExamById = async (req: Request, res: Response) => {
 
 export const updateDiagnosticExam = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { title, description, duration, rawScoreId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
+    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
 
     const existingExam = await db.select().from(diagnosticExam).where(eq(diagnosticExam.id, id)).limit(1);
     if (!existingExam[0]) {
         throw new NotFound("Diagnostic Exam not found");
+    }
+    const existingCourse = await db.select().from(courses).where(eq(courses.id, courseId)).limit(1);
+    if (!existingCourse[0]) {
+        throw new BadRequest("Course not found");
     }
 
     let rawScoreData = null;
@@ -195,6 +214,7 @@ export const updateDiagnosticExam = async (req: Request, res: Response) => {
         totalScore: rawScoreData ? rawScoreData.score : existingExam[0].totalScore,
         passScore: passScore !== undefined ? passScore : existingExam[0].passScore,
         rawScoreId: rawScoreId !== undefined ? rawScoreId : existingExam[0].rawScoreId,
+        courseId: courseId !== undefined ? courseId : existingExam[0].courseId,
         numberOfQuestions: numberOfQuestions !== undefined ? numberOfQuestions : existingExam[0].numberOfQuestions,
         isActive: isActive !== undefined ? isActive : existingExam[0].isActive,
     }).where(eq(diagnosticExam.id, id));
@@ -258,23 +278,46 @@ export const getSelection = async (req: Request, res: Response) => {
         })
         .from(rawScore);
 
-    // 2. Fetch Questions (Basic info for selection)
-    const questionsData = await db
-        .select({
-            id: questions.id,
-            questionText: questions.question,
-            questionType: questions.questionType,
-            difficulty: questions.difficulty,
-        })
-        .from(questions);
-
     return SuccessResponse(res, {
         message: "Selection options fetched successfully",
         data: {
             rawScores: rawScoresData,
-            questions: questionsData,
         }
     }, 200);
 };
 
+export const getAllDiagnosticExamsbyCourseId = async (req: Request, res: Response) => {
+    const { courseId } = req.params;
+    const exams = await db
+        .select({
+            id: diagnosticExam.id,
+            title: diagnosticExam.title,
+            description: diagnosticExam.description,
+            duration: diagnosticExam.duration,
+            totalScore: diagnosticExam.totalScore,
+            passScore: diagnosticExam.passScore,
+            numberOfQuestions: diagnosticExam.numberOfQuestions,
+            isActive: diagnosticExam.isActive,
+            createdAt: diagnosticExam.createdAt,
+            rawScore: {
+                id: rawScore.id,
+                name: rawScore.name,
+                score: rawScore.score,
+                is_giftingScore: rawScore.is_giftingScore,
+                giftingScore: rawScore.giftingScore,
+            },
+        })
+        .from(diagnosticExam)
+        .leftJoin(rawScore, eq(diagnosticExam.rawScoreId, rawScore.id))
+        .where(eq(diagnosticExam.courseId, courseId))
+        .orderBy(desc(diagnosticExam.createdAt));
 
+    const processedExams = exams.map(exam => {
+        if (exam.rawScore) {
+            return calculateDynamicScores(exam, exam.rawScore);
+        }
+        return exam;
+    });
+
+    return SuccessResponse(res, { message: "Diagnostic Exams fetched successfully", data: processedExams }, 200);
+};

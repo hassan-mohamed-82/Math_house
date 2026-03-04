@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getParallelQuestionsByOriginalId = exports.getParallelQuestionbyId = exports.getAllParallelQuestions = exports.deleteParallelQuestion = exports.updateParallelQuestion = exports.createParallelQuestion = exports.sendParallelQuestionGenerate = exports.getQuestionsbyLessonId = exports.deleteQuestion = exports.updateQuestion = exports.getQuestionbyId = exports.getAllQuestions = exports.createQuestion = exports.getTextfromImage = void 0;
+exports.getParallelQuestionsByOriginalId = exports.getParallelQuestionbyId = exports.getAllParallelQuestions = exports.deleteParallelQuestion = exports.updateParallelQuestion = exports.createParallelQuestion = exports.sendParallelQuestionGenerate = exports.getQuestionsbyCourseId = exports.getQuestionsbyLessonId = exports.deleteQuestion = exports.updateQuestion = exports.getQuestionbyId = exports.getAllQuestions = exports.createQuestion = exports.getTextfromImage = void 0;
 const uuid_1 = require("uuid");
 const response_1 = require("../../utils/response");
 const ocr_service_1 = require("../../ai/services/ocr-service");
@@ -390,6 +390,44 @@ const getQuestionsbyLessonId = async (req, res) => {
     }, 200);
 };
 exports.getQuestionsbyLessonId = getQuestionsbyLessonId;
+const getQuestionsbyCourseId = async (req, res) => {
+    const { courseId } = req.params;
+    if (!courseId) {
+        throw new BadRequest_1.BadRequest("Course ID is required");
+    }
+    const Allquestions = await connection_1.db.select({
+        id: schema_1.questions.id,
+        question: schema_1.questions.question,
+        answerType: schema_1.questions.answerType,
+        difficulty: schema_1.questions.difficulty,
+        questionType: schema_1.questions.questionType,
+        lessonId: schema_1.questions.lessonId,
+        year: schema_1.questions.year,
+        month: schema_1.questions.month,
+        sectionId: schema_1.questions.sectionId,
+        codeId: schema_1.questions.codeId,
+        lesson: {
+            id: schema_1.lessons.id,
+            name: schema_1.lessons.name,
+        },
+        examCode: {
+            id: schema_1.examCodes.id,
+            code: schema_1.examCodes.code,
+        },
+        type: schema_1.questions.questionType,
+        section: {
+            id: schema_1.Sections.id,
+            sectionName: schema_1.Sections.sectionName,
+        }
+    })
+        .from(schema_1.questions)
+        .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
+        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
+        .where((0, drizzle_orm_1.eq)(schema_1.lessons.courseId, courseId));
+    return (0, response_1.SuccessResponse)(res, { message: "Questions fetched successfully", data: Allquestions }, 200);
+};
+exports.getQuestionsbyCourseId = getQuestionsbyCourseId;
 // Parallel Questions
 const sendParallelQuestionGenerate = async (req, res) => {
     const { origianlQuestionId } = req.body;
@@ -582,13 +620,20 @@ const getParallelQuestionbyId = async (req, res) => {
             id: schema_1.lessons.id,
             name: schema_1.lessons.name,
         },
+        options: {
+            id: schema_1.ParallelQuestionOptions.id,
+            answer: schema_1.ParallelQuestionOptions.answer,
+            isCorrect: schema_1.ParallelQuestionOptions.isCorrect,
+            order: schema_1.ParallelQuestionOptions.order,
+        },
         originalQuestion: {
             id: schema_1.questions.id,
             question: schema_1.questions.question,
-        },
+        }
     }).from(schema_1.ParallelQuestion)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.ParallelQuestion.lessonId))
         .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.questions.id, schema_1.ParallelQuestion.origianlQuestionId))
+        .leftJoin(schema_1.ParallelQuestionOptions, (0, drizzle_orm_1.eq)(schema_1.ParallelQuestionOptions.questionId, schema_1.ParallelQuestion.id))
         .where((0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.id, id));
     return (0, response_1.SuccessResponse)(res, { data: parallelQuestion }, 200);
 };

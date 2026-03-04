@@ -5,6 +5,7 @@ const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
 const questions_1 = require("./questions");
 const rawScore_1 = require("./rawScore");
+const courses_1 = require("./courses");
 exports.diagnosticExam = (0, mysql_core_1.mysqlTable)("diagnostic_exam", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     title: (0, mysql_core_1.varchar)("title", { length: 255 }).notNull(),
@@ -15,6 +16,7 @@ exports.diagnosticExam = (0, mysql_core_1.mysqlTable)("diagnostic_exam", {
     rawScoreId: (0, mysql_core_1.char)("raw_score_id", { length: 255 }).notNull().references(() => rawScore_1.rawScore.id),
     numberOfQuestions: (0, mysql_core_1.int)("number_of_questions").notNull(),
     isActive: (0, mysql_core_1.boolean)("is_active").notNull().default(true),
+    courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).notNull().references(() => courses_1.courses.id),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

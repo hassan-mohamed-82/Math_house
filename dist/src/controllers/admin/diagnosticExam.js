@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getSelection = exports.deleteDiagnosticExam = exports.updateDiagnosticExam = exports.getDiagnosticExamById = exports.getAllDiagnosticExams = exports.createDiagnosticExam = void 0;
+exports.getAllDiagnosticExamsbyCourseId = exports.getSelection = exports.deleteDiagnosticExam = exports.updateDiagnosticExam = exports.getDiagnosticExamById = exports.getAllDiagnosticExams = exports.createDiagnosticExam = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -24,7 +24,7 @@ const calculateDynamicScores = (exam, rawScoreData) => {
     };
 };
 const createDiagnosticExam = async (req, res) => {
-    const { title, description, duration, rawScoreId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
+    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
     if (!title || !duration || !rawScoreId || !numberOfQuestions || !passScore) {
         throw new BadRequest_1.BadRequest("Title, Duration, Raw Score ID, Number of Questions, and Pass Score are required");
     }
@@ -32,12 +32,17 @@ const createDiagnosticExam = async (req, res) => {
     if (!existingRawScore[0]) {
         throw new BadRequest_1.BadRequest("Raw Score not found");
     }
+    const existingCourse = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, courseId)).limit(1);
+    if (!existingCourse[0]) {
+        throw new BadRequest_1.BadRequest("Course not found");
+    }
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.diagnosticExam).values({
         id,
         title,
         description,
         duration,
+        courseId,
         totalScore: existingRawScore[0].score,
         passScore,
         rawScoreId,
@@ -70,6 +75,7 @@ const createDiagnosticExam = async (req, res) => {
         isActive: isActive !== undefined ? isActive : true,
         // Mocking/Using the raw score data we already have
         rawScore: existingRawScore[0],
+        course: existingCourse[0],
     };
     const responseData = calculateDynamicScores(createdExam, existingRawScore[0]);
     return (0, response_1.SuccessResponse)(res, { message: "Diagnostic Exam created successfully", data: { ...responseData, questionsCount: questionIds?.length || 0 } }, 201);
@@ -94,9 +100,14 @@ const getAllDiagnosticExams = async (req, res) => {
             is_giftingScore: schema_1.rawScore.is_giftingScore,
             giftingScore: schema_1.rawScore.giftingScore,
         },
+        course: {
+            id: schema_1.courses.id,
+            name: schema_1.courses.name,
+        }
     })
         .from(schema_1.diagnosticExam)
         .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.rawScoreId, schema_1.rawScore.id))
+        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, schema_1.courses.id))
         .orderBy((0, drizzle_orm_1.desc)(schema_1.diagnosticExam.createdAt));
     const processedExams = exams.map(exam => {
         if (exam.rawScore) {
@@ -126,10 +137,15 @@ const getDiagnosticExamById = async (req, res) => {
             score: schema_1.rawScore.score,
             is_giftingScore: schema_1.rawScore.is_giftingScore,
             giftingScore: schema_1.rawScore.giftingScore,
+        },
+        course: {
+            id: schema_1.courses.id,
+            name: schema_1.courses.name,
         }
     })
         .from(schema_1.diagnosticExam)
         .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.rawScoreId, schema_1.rawScore.id))
+        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, schema_1.courses.id))
         .where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.id, id))
         .limit(1);
     if (!exam[0]) {
@@ -152,10 +168,14 @@ const getDiagnosticExamById = async (req, res) => {
 exports.getDiagnosticExamById = getDiagnosticExamById;
 const updateDiagnosticExam = async (req, res) => {
     const { id } = req.params;
-    const { title, description, duration, rawScoreId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
+    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
     const existingExam = await connection_1.db.select().from(schema_1.diagnosticExam).where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.id, id)).limit(1);
     if (!existingExam[0]) {
         throw new NotFound_1.NotFound("Diagnostic Exam not found");
+    }
+    const existingCourse = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, courseId)).limit(1);
+    if (!existingCourse[0]) {
+        throw new BadRequest_1.BadRequest("Course not found");
     }
     let rawScoreData = null;
     if (rawScoreId) {
@@ -174,6 +194,7 @@ const updateDiagnosticExam = async (req, res) => {
         totalScore: rawScoreData ? rawScoreData.score : existingExam[0].totalScore,
         passScore: passScore !== undefined ? passScore : existingExam[0].passScore,
         rawScoreId: rawScoreId !== undefined ? rawScoreId : existingExam[0].rawScoreId,
+        courseId: courseId !== undefined ? courseId : existingExam[0].courseId,
         numberOfQuestions: numberOfQuestions !== undefined ? numberOfQuestions : existingExam[0].numberOfQuestions,
         isActive: isActive !== undefined ? isActive : existingExam[0].isActive,
     }).where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.id, id));
@@ -231,21 +252,45 @@ const getSelection = async (req, res) => {
         score: schema_1.rawScore.score,
     })
         .from(schema_1.rawScore);
-    // 2. Fetch Questions (Basic info for selection)
-    const questionsData = await connection_1.db
-        .select({
-        id: schema_1.questions.id,
-        questionText: schema_1.questions.question,
-        questionType: schema_1.questions.questionType,
-        difficulty: schema_1.questions.difficulty,
-    })
-        .from(schema_1.questions);
     return (0, response_1.SuccessResponse)(res, {
         message: "Selection options fetched successfully",
         data: {
             rawScores: rawScoresData,
-            questions: questionsData,
         }
     }, 200);
 };
 exports.getSelection = getSelection;
+const getAllDiagnosticExamsbyCourseId = async (req, res) => {
+    const { courseId } = req.params;
+    const exams = await connection_1.db
+        .select({
+        id: schema_1.diagnosticExam.id,
+        title: schema_1.diagnosticExam.title,
+        description: schema_1.diagnosticExam.description,
+        duration: schema_1.diagnosticExam.duration,
+        totalScore: schema_1.diagnosticExam.totalScore,
+        passScore: schema_1.diagnosticExam.passScore,
+        numberOfQuestions: schema_1.diagnosticExam.numberOfQuestions,
+        isActive: schema_1.diagnosticExam.isActive,
+        createdAt: schema_1.diagnosticExam.createdAt,
+        rawScore: {
+            id: schema_1.rawScore.id,
+            name: schema_1.rawScore.name,
+            score: schema_1.rawScore.score,
+            is_giftingScore: schema_1.rawScore.is_giftingScore,
+            giftingScore: schema_1.rawScore.giftingScore,
+        },
+    })
+        .from(schema_1.diagnosticExam)
+        .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.rawScoreId, schema_1.rawScore.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, courseId))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.diagnosticExam.createdAt));
+    const processedExams = exams.map(exam => {
+        if (exam.rawScore) {
+            return calculateDynamicScores(exam, exam.rawScore);
+        }
+        return exam;
+    });
+    return (0, response_1.SuccessResponse)(res, { message: "Diagnostic Exams fetched successfully", data: processedExams }, 200);
+};
+exports.getAllDiagnosticExamsbyCourseId = getAllDiagnosticExamsbyCourseId;

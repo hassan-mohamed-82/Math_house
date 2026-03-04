@@ -10,4 +10,5 @@ router.get("/selection", (0, catchAsync_1.catchAsync)(diagnosticExam_1.getSelect
 router.get("/:id", (0, catchAsync_1.catchAsync)(diagnosticExam_1.getDiagnosticExamById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(diagnosticExam_1.updateDiagnosticExam));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(diagnosticExam_1.deleteDiagnosticExam));
+router.get("/course/:courseId", (0, catchAsync_1.catchAsync)(diagnosticExam_1.getAllDiagnosticExamsbyCourseId));
 exports.default = router;
