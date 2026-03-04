@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getParallelQuestionsByOriginalId = exports.getParallelQuestionbyId = exports.getAllParallelQuestions = exports.deleteParallelQuestion = exports.updateParallelQuestion = exports.createParallelQuestion = exports.sendParallelQuestionGenerate = exports.getQuestionsbyCourseId = exports.getQuestionsbyLessonId = exports.deleteQuestion = exports.updateQuestion = exports.getQuestionbyId = exports.getAllQuestions = exports.createQuestion = exports.getTextfromImage = void 0;
+exports.getParallelQuestionsByOriginalId = exports.getParallelQuestionbyId = exports.getAllParallelQuestions = exports.deleteParallelQuestion = exports.updateParallelQuestion = exports.createParallelQuestion = exports.sendParallelQuestionGenerate = exports.getQuestionsbySectiondId = exports.getQuestionsbyCourseId = exports.getQuestionsbyLessonId = exports.deleteQuestion = exports.updateQuestion = exports.getQuestionbyId = exports.getAllQuestions = exports.createQuestion = exports.getTextfromImage = void 0;
 const uuid_1 = require("uuid");
 const response_1 = require("../../utils/response");
 const ocr_service_1 = require("../../ai/services/ocr-service");
@@ -458,6 +458,74 @@ const getQuestionsbyCourseId = async (req, res) => {
     }, 200);
 };
 exports.getQuestionsbyCourseId = getQuestionsbyCourseId;
+const getQuestionsbySectiondId = async (req, res) => {
+    const { sectionId } = req.params;
+    if (!sectionId) {
+        throw new BadRequest_1.BadRequest("Section ID is required");
+    }
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const search = req.query.search;
+    const searchCondition = search
+        ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.questions.question, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.lessons.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.examCodes.code, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.Sections.sectionName, `%${search}%`))
+        : undefined;
+    const finalCondition = searchCondition
+        ? (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.Sections.id, sectionId), searchCondition)
+        : (0, drizzle_orm_1.eq)(schema_1.Sections.id, sectionId);
+    const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() })
+        .from(schema_1.questions)
+        .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
+        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
+        .where(finalCondition);
+    const total = totalQueries.count;
+    const totalPages = Math.ceil(total / limit);
+    const Allquestions = await connection_1.db.select({
+        id: schema_1.questions.id,
+        question: schema_1.questions.question,
+        answerType: schema_1.questions.answerType,
+        difficulty: schema_1.questions.difficulty,
+        questionType: schema_1.questions.questionType,
+        lessonId: schema_1.questions.lessonId,
+        year: schema_1.questions.year,
+        month: schema_1.questions.month,
+        sectionId: schema_1.questions.sectionId,
+        codeId: schema_1.questions.codeId,
+        lesson: {
+            id: schema_1.lessons.id,
+            name: schema_1.lessons.name,
+        },
+        examCode: {
+            id: schema_1.examCodes.id,
+            code: schema_1.examCodes.code,
+        },
+        type: schema_1.questions.questionType,
+        section: {
+            id: schema_1.Sections.id,
+            sectionName: schema_1.Sections.sectionName,
+        }
+    })
+        .from(schema_1.questions)
+        .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
+        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
+        .where(finalCondition)
+        .limit(limit)
+        .offset(offset)
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.questions.createdAt));
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Questions fetched successfully",
+        data: Allquestions,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages
+        }
+    }, 200);
+};
+exports.getQuestionsbySectiondId = getQuestionsbySectiondId;
 // Parallel Questions
 const sendParallelQuestionGenerate = async (req, res) => {
     const { origianlQuestionId } = req.body;

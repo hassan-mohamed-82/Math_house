@@ -434,6 +434,7 @@ export const getQuestionsbyLessonId = async (req: Request, res: Response) => {
         }
     }, 200);
 };
+
 export const getQuestionsbyCourseId = async (req: Request, res: Response) => {
     const { courseId } = req.params;
     if (!courseId) {
@@ -457,6 +458,86 @@ export const getQuestionsbyCourseId = async (req: Request, res: Response) => {
     const finalCondition = searchCondition
         ? and(eq(lessons.courseId, courseId), searchCondition)
         : eq(lessons.courseId, courseId);
+
+    const [totalQueries] = await db.select({ count: count() })
+        .from(questions)
+        .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .where(finalCondition);
+
+    const total = totalQueries.count;
+    const totalPages = Math.ceil(total / limit);
+
+    const Allquestions = await db.select({
+        id: questions.id,
+        question: questions.question,
+        answerType: questions.answerType,
+        difficulty: questions.difficulty,
+        questionType: questions.questionType,
+        lessonId: questions.lessonId,
+        year: questions.year,
+        month: questions.month,
+        sectionId: questions.sectionId,
+        codeId: questions.codeId,
+        lesson: {
+            id: lessons.id,
+            name: lessons.name,
+        },
+        examCode: {
+            id: examCodes.id,
+            code: examCodes.code,
+        },
+        type: questions.questionType,
+        section: {
+            id: Sections.id,
+            sectionName: Sections.sectionName,
+        }
+    })
+        .from(questions)
+        .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .where(finalCondition)
+        .limit(limit)
+        .offset(offset)
+        .orderBy(desc(questions.createdAt));
+
+    return SuccessResponse(res, {
+        message: "Questions fetched successfully",
+        data: Allquestions,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages
+        }
+    }, 200);
+};
+
+export const getQuestionsbySectiondId = async (req: Request , res: Response) =>{
+    const {sectionId} = req.params;
+    if(!sectionId){
+        throw new BadRequest("Section ID is required");
+    }
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+
+    const search = req.query.search as string | undefined;
+
+    const searchCondition: SQL | undefined = search
+        ? or(
+            like(questions.question, `%${search}%`),
+            like(lessons.name, `%${search}%`),
+            like(examCodes.code, `%${search}%`),
+            like(Sections.sectionName, `%${search}%`)
+        )
+        : undefined;
+
+    const finalCondition = searchCondition
+        ? and(eq(Sections.id, sectionId), searchCondition)
+        : eq(Sections.id, sectionId);
 
     const [totalQueries] = await db.select({ count: count() })
         .from(questions)
