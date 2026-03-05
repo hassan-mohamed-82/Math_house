@@ -32,9 +32,11 @@ export async function seedQuestions() {
     const questionsToInsert: any[] = [];
 
     for (let i = 1; i <= 100; i++) {
+        const isGridIn = i % 10 === 0;
+
         questionsToInsert.push({
             question: `Question ${i}: Solve for x in ${i}x + 10 = 20`,
-            answerType: "MCQ",
+            answerType: isGridIn ? "Grid in" : "MCQ",
             difficulty: ["A", "B", "C", "D", "E"][i % 5],
             questionType: i % 2 === 0 ? "Trail" : "Extra",
             lessonId: lessonId,
@@ -59,29 +61,42 @@ export async function seedQuestions() {
         } as any);
 
         // 2. Insert Options
-        const options = [
-            { questionId, answer: "5", isCorrect: true, order: "A" },
-            { questionId, answer: "10", isCorrect: false, order: "B" },
-            { questionId, answer: "15", isCorrect: false, order: "C" },
-            { questionId, answer: "20", isCorrect: false, order: "D" },
-        ];
+        let options;
+        if (q.answerType === "Grid in") {
+            options = [
+                { questionId, answer: "10/i", isCorrect: true, order: null },
+            ];
+        } else {
+            options = [
+                { questionId, answer: "5", isCorrect: true, order: "A" },
+                { questionId, answer: "10", isCorrect: false, order: "B" },
+                { questionId, answer: "15", isCorrect: false, order: "C" },
+                { questionId, answer: "20", isCorrect: false, order: "D" },
+            ];
+        }
         await db.insert(questionOptions).values(options);
 
-        // 3. Create a Parallel Question
         const parallelQuestionId = uuidv4();
         await db.insert(ParallelQuestion).values({
             id: parallelQuestionId,
             origianlQuestionId: questionId,
             question: `Parallel to Q${q.question}: What is ${q.question}?`,
-            answerType: "MCQ",
+            answerType: q.answerType,
             difficulty: q.difficulty,
             lessonId: q.lessonId,
         } as any);
 
-        const parallelOptions = [
-            { questionId: parallelQuestionId, answer: "5", isCorrect: true, order: "A" },
-            { questionId: parallelQuestionId, answer: "10", isCorrect: false, order: "B" },
-        ];
+        let parallelOptions;
+        if (q.answerType === "Grid in") {
+            parallelOptions = [
+                { questionId: parallelQuestionId, answer: "10/i", isCorrect: true, order: null },
+            ];
+        } else {
+            parallelOptions = [
+                { questionId: parallelQuestionId, answer: "5", isCorrect: true, order: "A" },
+                { questionId: parallelQuestionId, answer: "10", isCorrect: false, order: "B" },
+            ];
+        }
         await db.insert(ParallelQuestionOptions).values(parallelOptions);
     }
 

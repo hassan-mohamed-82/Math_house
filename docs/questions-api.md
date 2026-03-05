@@ -29,11 +29,12 @@ Creates a new question.
 | `month`        | enum   | ✅        | `Jan`, `Feb`, `Mar`, ...             |
 | `section`      | enum   | ✅        | `1`, `2`, `3`, `4`                   |
 | `codeId`       | string | ✅        | Exam Code UUID                       |
-| `options`      | array  | ⚠️        | Required if `answerType` is `MCQ`    |
+| `options`      | array  | ⚠️        | Required if `answerType` is `MCQ` or `Grid in` |
 | `answerPdf`    | string | ❌        | PDF URL for the answer explanation   |
 | `answerVideo`  | string | ❌        | Video URL for the answer explanation |
 
 **Options Array Item:**
+
 ```json
 {
   "answer": "Option text",
@@ -58,7 +59,7 @@ Creates a new question.
 | Status | Condition                     |
 | ------ | ----------------------------- |
 | 400    | Missing required fields       |
-| 400    | Options missing for MCQ       |
+| 400    | Options missing for MCQ or Grid in       |
 | 404    | Lesson or Exam code not found |
 
 ---
@@ -223,7 +224,7 @@ Manually creates a parallel question.
 | `answerType`         | enum   | ✅        | `MCQ` or `Grid in`                |
 | `difficulty`         | enum   | ✅        | `A`, `B`, `C`, `D`, `E`           |
 | `lessonId`           | string | ✅        | Lesson UUID                       |
-| `options`            | array  | ⚠️        | Required if `answerType` is `MCQ` |
+| `options`            | array  | ⚠️        | Required if `answerType` is `MCQ` or `Grid in` |
 
 **Success Response (201):**
 
@@ -328,6 +329,7 @@ Deletes a parallel question.
 Extracts text from an uploaded image.
 
 **Request Body:**
+
 - `image`: File (multipart/form-data)
 
 **Success Response (200):**
