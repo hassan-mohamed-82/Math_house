@@ -7,10 +7,10 @@ import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
-// import { startCronJobs } from "./jobs/cronJobs";
+import rateLimit from "express-rate-limit";
+const xss = require("xss-clean");
 import http from "http";
 import { Server } from "socket.io";
-// import { initSocket } from "./socket"; // I will uncomment this in the next step or manually add it 
 import { initSocket } from "./socket/socket";
 
 import { startCurrencyCron } from "./jobs/cronJobs";
@@ -30,7 +30,6 @@ const io = new Server(httpServer, {
 
 initSocket(io);
 
-// ✅ CORS بدون app.options
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -44,9 +43,27 @@ app.use(
     crossOriginResourcePolicy: false,
   })
 );
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+  message: {
+    success: false,
+    message: "Too many requests from this IP, please try again after an 15 minutes"
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+app.use(apiLimiter);
+
 app.use(cookieParser());
 app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
+
+// Data Sanitization against XSS
+app.use(xss());
+
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
 
 app.get("/api/test", (req, res, next) => {
