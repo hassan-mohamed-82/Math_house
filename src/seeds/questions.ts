@@ -33,6 +33,7 @@ export async function seedQuestions() {
 
     for (let i = 1; i <= 100; i++) {
         const isGridIn = i % 10 === 0;
+        const correctAnswer = isGridIn ? (10 / i).toString() : null;
 
         questionsToInsert.push({
             question: `Question ${i}: Solve for x in ${i}x + 10 = 20`,
@@ -44,6 +45,7 @@ export async function seedQuestions() {
             month: ["Jan", "Feb", "Mar", "Apr", "May"][i % 5],
             sectionId: sectionId,
             codeId: codeId,
+            correctAnswer: correctAnswer
         });
     }
 
@@ -54,17 +56,17 @@ export async function seedQuestions() {
         const existing = await db.select().from(questions).where(eq(questions.question, q.question));
         if (existing.length > 0) continue;
 
+        const { correctAnswer, ...dbInsertData } = q;
         // 1. Insert Question
         await db.insert(questions).values({
             id: questionId,
-            ...q
+            ...dbInsertData
         } as any);
 
-        // 2. Insert Options
         let options;
         if (q.answerType === "Grid in") {
             options = [
-                { questionId, answer: "10/i", isCorrect: true, order: null },
+                { questionId, answer: correctAnswer, isCorrect: true, order: null },
             ];
         } else {
             options = [
@@ -89,7 +91,7 @@ export async function seedQuestions() {
         let parallelOptions;
         if (q.answerType === "Grid in") {
             parallelOptions = [
-                { questionId: parallelQuestionId, answer: "10/i", isCorrect: true, order: null },
+                { questionId: parallelQuestionId, answer: correctAnswer, isCorrect: true, order: null },
             ];
         } else {
             parallelOptions = [

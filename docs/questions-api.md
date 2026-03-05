@@ -33,7 +33,7 @@ Creates a new question.
 | `answerPdf`    | string | ❌        | PDF URL for the answer explanation   |
 | `answerVideo`  | string | ❌        | Video URL for the answer explanation |
 
-**Options Array Item:**
+**Options Array Item (MCQ):**
 
 ```json
 {
@@ -41,6 +41,18 @@ Creates a new question.
   "isCorrect": true,
   "order": "A"
 }
+```
+
+**Options Array Item (Grid in):**
+
+For `Grid in` questions, the `options` array must contain all acceptable correct text answers. Properties like `isCorrect` and `order` will be ignored by the backend, and all submitted strings will be saved as valid correct answers.
+
+```json
+[
+  { "answer": "1/2" },
+  { "answer": "0.5" },
+  { "answer": ".5" }
+]
 ```
 
 **Success Response (201):**
