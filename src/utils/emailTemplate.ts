@@ -227,6 +227,59 @@ export const resendVerificationTemplate = (name: string, code: string) => {
   `;
 };
 
+export const emailVerificationLinkTemplate = (
+  name: string,
+  verificationUrl: string,
+  expiresInText: string = "1 hour"
+) => {
+  const logoMarkup = `<img src="${mathsHouseLogoUrl}" alt="Maths House" style="max-width: 240px; width: 100%; height: auto; display: block; margin: 0 auto;" />`;
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f6f6f6;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background: linear-gradient(180deg, #fff5f5 0%, #ffffff 100%); padding: 36px 16px;">
+    <tr>
+      <td align="center">
+        <table width="640" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 640px; background: #ffffff; border-radius: 28px; overflow: hidden; border: 1px solid #f2d6d9; box-shadow: 0 18px 60px rgba(215, 25, 40, 0.14);">
+          <tr>
+            <td style="background: linear-gradient(135deg, #d71928 0%, #ef233c 55%, #b91c1c 100%); padding: 32px 28px 18px; text-align: center;">
+              <div style="max-width: 360px; margin: 0 auto; background: #ffffff; border-radius: 22px; padding: 12px 18px 14px; box-shadow: 0 10px 30px rgba(127, 29, 29, 0.18); border: 1px solid rgba(255,255,255,0.65);">
+                <div style="height: 3px; width: 100%; border-radius: 999px; background: linear-gradient(90deg, rgba(215,25,40,0) 0%, #d71928 18%, #ef233c 50%, #d71928 82%, rgba(215,25,40,0) 100%);"></div>
+                <div style="padding: 12px 8px 10px;">${logoMarkup}</div>
+                <div style="height: 3px; width: 100%; border-radius: 999px; background: linear-gradient(90deg, rgba(215,25,40,0) 0%, #d71928 18%, #ef233c 50%, #d71928 82%, rgba(215,25,40,0) 100%);"></div>
+              </div>
+              <div style="margin-top: 18px; color: rgba(255,255,255,0.82); font-size: 13px; line-height: 1.8; letter-spacing: 0.8px;">x² + y² = z² &nbsp;&nbsp; • &nbsp;&nbsp; π &nbsp;&nbsp; • &nbsp;&nbsp; ∑ n &nbsp;&nbsp; • &nbsp;&nbsp; Δ = b² - 4ac</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 28px 34px 34px; text-align: center;">
+              <div style="display: inline-block; padding: 10px 16px; border-radius: 999px; background: #fff1f2; color: #d71928; font-size: 13px; font-weight: 700; letter-spacing: 0.6px; border: 1px solid #fecdd3;">VERIFY YOUR EMAIL</div>
+              <h1 style="margin: 18px 0 10px; color: #202124; font-size: 32px; line-height: 1.2; font-weight: 800;">Confirm your email address</h1>
+              <p style="margin: 0 0 24px; color: #5f6368; font-size: 16px; line-height: 1.8;">Hi ${name}, click the button below to verify your email and activate your Maths House account.</p>
+              <div style="margin: 0 0 20px;">
+                <a href="${verificationUrl}" style="display: inline-block; background: linear-gradient(135deg, #d71928 0%, #ef233c 100%); color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 700; padding: 16px 28px; border-radius: 14px;">Verify Email</a>
+              </div>
+              <table width="100%" cellpadding="0" cellspacing="0" style="border-radius: 18px; background: #fff5f5; border: 1px dashed #f3a6ad; margin-bottom: 18px;">
+                <tr>
+                  <td style="padding: 16px 18px; text-align: center; color: #7f1d1d; font-size: 15px; line-height: 1.7;">⏱️ This verification link expires in <strong>${expiresInText}</strong>.</td>
+                </tr>
+              </table>
+              <p style="margin: 0; color: #6b7280; font-size: 13px; line-height: 1.8; word-break: break-all;">If the button does not work, copy and paste this link into your browser:<br /><span style="color: #d71928;">${verificationUrl}</span></p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+};
+
 // ===================================
 // Password Reset Template
 // ===================================

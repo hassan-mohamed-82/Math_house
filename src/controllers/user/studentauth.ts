@@ -6,7 +6,7 @@ import { compare, hash } from "bcrypt";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors";
 import { eq, isNull } from "drizzle-orm";
-import { consumePasswordResetCode, sendPasswordResetEmail, verifyPasswordResetCode } from "../../utils/sendEmails";
+import { consumePasswordResetCode, sendPasswordResetEmail, sendStudentVerificationEmail, verifyEmailVerificationToken, verifyPasswordResetCode } from "../../utils/sendEmails";
 
 export const studentSignup = async (req: Request, res: Response) => {
     const {
@@ -44,6 +44,8 @@ export const studentSignup = async (req: Request, res: Response) => {
 
     const hashedPassword = await hash(password, 10);
 
+    let createdStudentId = "";
+
     await db.transaction(async (tx) => {
         await tx.insert(Student).values({
             firstname,
@@ -54,6 +56,7 @@ export const studentSignup = async (req: Request, res: Response) => {
             phone,
             category: categoryId,
             grade,
+            isVerified: false,
         });
 
         const [createdStudent] = await tx
@@ -65,14 +68,31 @@ export const studentSignup = async (req: Request, res: Response) => {
             throw new BadRequest("Student could not be created");
         }
 
+        createdStudentId = createdStudent.id;
+
         await tx.insert(wallet).values({
             studentId: createdStudent.id,
             balance: 0,
         });
     });
 
+    try {
+        await sendStudentVerificationEmail({
+            studentId: createdStudentId,
+            email,
+            name: `${firstname} ${lastname}`,
+        });
+    } catch (error) {
+        await db.transaction(async (tx) => {
+            await tx.delete(wallet).where(eq(wallet.studentId, createdStudentId));
+            await tx.delete(Student).where(eq(Student.id, createdStudentId));
+        });
+
+        throw error;
+    }
+
     return SuccessResponse(res, {
-        message: "Student registered successfully"
+        message: "Student registered successfully. Please verify your email before logging in."
     }, 201);
 };
 
@@ -90,6 +110,7 @@ export const studentLogin = async (req: Request, res: Response) => {
             lastname: Student.lastname,
             email: Student.email,
             password: Student.password,
+            isVerified: Student.isVerified,
             phone: Student.phone,
             category: Student.category,
             categoryName: category.name,
@@ -106,6 +127,10 @@ export const studentLogin = async (req: Request, res: Response) => {
     const isPasswordValid = await compare(password, student.password);
     if (!isPasswordValid) {
         throw new BadRequest("Invalid Credentials");
+    }
+
+    if (!student.isVerified) {
+        throw new BadRequest("Please verify your email before logging in");
     }
 
     const token = generateToken({
@@ -233,3 +258,40 @@ export const resetPassword = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Password reset successfully" });
 }
+
+export const verifyStudentEmail = async (req: Request, res: Response) => {
+    const token = String(req.query.token || "").trim();
+
+    if (!token) {
+        throw new BadRequest("Verification token is required");
+    }
+
+    let payload;
+    try {
+        payload = verifyEmailVerificationToken(token);
+    } catch {
+        throw new BadRequest("Invalid or expired verification token");
+    }
+
+    const [student] = await db
+        .select({
+            id: Student.id,
+            email: Student.email,
+            isVerified: Student.isVerified,
+        })
+        .from(Student)
+        .where(eq(Student.id, payload.studentId));
+
+    if (!student || student.email !== payload.email) {
+        throw new BadRequest("Invalid or expired verification token");
+    }
+
+    if (!student.isVerified) {
+        await db
+            .update(Student)
+            .set({ isVerified: true })
+            .where(eq(Student.id, student.id));
+    }
+
+    res.status(200).send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Email verified</title></head><body style="font-family: Segoe UI, Arial, sans-serif; background:#fff5f5; margin:0; padding:40px 16px;"><div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #f2d6d9; border-radius:24px; padding:32px; text-align:center; box-shadow:0 18px 60px rgba(215, 25, 40, 0.14);"><h1 style="color:#d71928; margin:0 0 12px;">Email verified successfully</h1><p style="color:#4b5563; margin:0; font-size:16px; line-height:1.7;">Your Maths House account is now verified. You can return to the app and log in.</p></div></body></html>`);
+};

@@ -12,5 +12,6 @@ router.post("/login", (0, catchAsync_1.catchAsync)(studentauth_1.studentLogin));
 router.post("/forgot-password", (0, catchAsync_1.catchAsync)(studentauth_1.forgetPassword));
 router.post("/validate-reset-code", (0, catchAsync_1.catchAsync)(studentauth_1.validatePasswordResetCode));
 router.post("/reset-password", (0, catchAsync_1.catchAsync)(studentauth_1.resetPassword));
+router.get("/verify-email", (0, catchAsync_1.catchAsync)(studentauth_1.verifyStudentEmail));
 router.get("/select", (0, catchAsync_1.catchAsync)(studentauth_1.selectcategoryandgrade));
 exports.default = router;

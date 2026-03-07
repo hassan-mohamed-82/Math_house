@@ -21,13 +21,13 @@ export async function seedStudents(categoryMap: Record<string, string>) {
         const existing = await db.select().from(Student).where(eq(Student.email, s.email));
 
         if (existing.length > 0) {
-            if (existing[0].category !== targetCategoryId) {
+            if (existing[0].category !== targetCategoryId || !existing[0].isVerified) {
                 await db
                     .update(Student)
-                    .set({ category: targetCategoryId, grade: s.grade, parentphone: s.parentphone, phone: s.phone })
+                    .set({ category: targetCategoryId, grade: s.grade, parentphone: s.parentphone, phone: s.phone, isVerified: true })
                     .where(eq(Student.id, existing[0].id));
 
-                console.log(`  ✅ Updated category for existing student "${s.firstname} ${s.lastname}"`);
+                console.log(`  ✅ Updated data for existing student "${s.firstname} ${s.lastname}"`);
             }
 
             const existingWallet = await db
@@ -63,6 +63,7 @@ export async function seedStudents(categoryMap: Record<string, string>) {
                 category: targetCategoryId,
                 grade: s.grade,
                 parentphone: s.parentphone,
+                isVerified: true,
             });
 
             await tx.insert(wallet).values({

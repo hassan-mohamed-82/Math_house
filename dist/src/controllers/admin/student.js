@@ -49,7 +49,8 @@ const createStudent = async (req, res) => {
             phone,
             category: categoryId,
             grade,
-            parentphone
+            parentphone,
+            isVerified: true
         });
         await tx.insert(schema_1.wallet).values({
             studentId: id,

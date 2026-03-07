@@ -1,12 +1,15 @@
 import bcrypt from "bcrypt";
 import nodemailer from "nodemailer";
+import jwt from "jsonwebtoken";
 import { Resend } from "resend";
 import { firestore } from "./firebase";
-import { passwordResetTemplate } from "./emailTemplate";
+import { emailVerificationLinkTemplate, passwordResetTemplate } from "./emailTemplate";
 
 const PASSWORD_RESET_COLLECTION = "password_reset_codes";
 const PASSWORD_RESET_CODE_LENGTH = 6;
 const PASSWORD_RESET_LIFETIME_MINUTES = 5;
+const EMAIL_VERIFICATION_LIFETIME_HOURS = 1;
+const EMAIL_VERIFICATION_SECRET = process.env.EMAIL_VERIFICATION_SECRET || process.env.JWT_SECRET || "";
 
 type PasswordResetRecord = {
 	email: string;
@@ -161,3 +164,55 @@ export const sendPasswordResetEmail = async (email: string, name: string = "ther
 };
 
 export const PASSWORD_RESET_CODE_TTL_MINUTES = PASSWORD_RESET_LIFETIME_MINUTES;
+
+type EmailVerificationPayload = {
+	studentId: string;
+	email: string;
+	purpose: "student-email-verification";
+};
+
+export const generateEmailVerificationToken = (studentId: string, email: string) => {
+	if (!EMAIL_VERIFICATION_SECRET) {
+		throw new Error("Missing EMAIL_VERIFICATION_SECRET or JWT_SECRET for email verification.");
+	}
+
+	return jwt.sign(
+		{
+			studentId,
+			email,
+			purpose: "student-email-verification",
+		} satisfies EmailVerificationPayload,
+		EMAIL_VERIFICATION_SECRET,
+		{ expiresIn: `${EMAIL_VERIFICATION_LIFETIME_HOURS}h` }
+	);
+};
+
+export const verifyEmailVerificationToken = (token: string) => {
+	if (!EMAIL_VERIFICATION_SECRET) {
+		throw new Error("Missing EMAIL_VERIFICATION_SECRET or JWT_SECRET for email verification.");
+	}
+
+	return jwt.verify(token, EMAIL_VERIFICATION_SECRET) as EmailVerificationPayload;
+};
+
+export const sendStudentVerificationEmail = async (params: {
+	studentId: string;
+	email: string;
+	name: string;
+}) => {
+	const token = generateEmailVerificationToken(params.studentId, params.email);
+	const publicAppUrl = (process.env.PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+	const verificationUrl = `${publicAppUrl}/api/user/auth/verify-email?token=${encodeURIComponent(token)}`;
+
+	await sendEmail({
+		to: params.email,
+		subject: "Verify your Maths House email",
+		html: emailVerificationLinkTemplate(params.name, verificationUrl, `${EMAIL_VERIFICATION_LIFETIME_HOURS} hour`),
+	});
+
+	return {
+		token,
+		verificationUrl,
+		expiresInHours: EMAIL_VERIFICATION_LIFETIME_HOURS,
+	};
+};

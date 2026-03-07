@@ -64,7 +64,8 @@ export const createStudent = async (req: Request, res: Response) => {
             phone,
             category: categoryId,
             grade,
-            parentphone
+            parentphone,
+            isVerified: true
         });
 
         await tx.insert(wallet).values({

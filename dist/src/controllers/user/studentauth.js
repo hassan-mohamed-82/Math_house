@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.resetPassword = exports.validatePasswordResetCode = exports.forgetPassword = exports.selectcategoryandgrade = exports.studentLogin = exports.studentSignup = void 0;
+exports.verifyStudentEmail = exports.resetPassword = exports.validatePasswordResetCode = exports.forgetPassword = exports.selectcategoryandgrade = exports.studentLogin = exports.studentSignup = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const auth_1 = require("../../utils/auth");
@@ -29,6 +29,7 @@ const studentSignup = async (req, res) => {
         throw new Errors_1.BadRequest("Student must be assigned to a main category only");
     }
     const hashedPassword = await (0, bcrypt_1.hash)(password, 10);
+    let createdStudentId = "";
     await connection_1.db.transaction(async (tx) => {
         await tx.insert(schema_1.Student).values({
             firstname,
@@ -39,6 +40,7 @@ const studentSignup = async (req, res) => {
             phone,
             category: categoryId,
             grade,
+            isVerified: false,
         });
         const [createdStudent] = await tx
             .select({ id: schema_1.Student.id })
@@ -47,13 +49,28 @@ const studentSignup = async (req, res) => {
         if (!createdStudent) {
             throw new Errors_1.BadRequest("Student could not be created");
         }
+        createdStudentId = createdStudent.id;
         await tx.insert(schema_1.wallet).values({
             studentId: createdStudent.id,
             balance: 0,
         });
     });
+    try {
+        await (0, sendEmails_1.sendStudentVerificationEmail)({
+            studentId: createdStudentId,
+            email,
+            name: `${firstname} ${lastname}`,
+        });
+    }
+    catch (error) {
+        await connection_1.db.transaction(async (tx) => {
+            await tx.delete(schema_1.wallet).where((0, drizzle_orm_1.eq)(schema_1.wallet.studentId, createdStudentId));
+            await tx.delete(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, createdStudentId));
+        });
+        throw error;
+    }
     return (0, response_1.SuccessResponse)(res, {
-        message: "Student registered successfully"
+        message: "Student registered successfully. Please verify your email before logging in."
     }, 201);
 };
 exports.studentSignup = studentSignup;
@@ -69,6 +86,7 @@ const studentLogin = async (req, res) => {
         lastname: schema_1.Student.lastname,
         email: schema_1.Student.email,
         password: schema_1.Student.password,
+        isVerified: schema_1.Student.isVerified,
         phone: schema_1.Student.phone,
         category: schema_1.Student.category,
         categoryName: schema_1.category.name,
@@ -83,6 +101,9 @@ const studentLogin = async (req, res) => {
     const isPasswordValid = await (0, bcrypt_1.compare)(password, student.password);
     if (!isPasswordValid) {
         throw new Errors_1.BadRequest("Invalid Credentials");
+    }
+    if (!student.isVerified) {
+        throw new Errors_1.BadRequest("Please verify your email before logging in");
     }
     const token = (0, auth_1.generateToken)({
         id: student.id,
@@ -190,3 +211,35 @@ const resetPassword = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Password reset successfully" });
 };
 exports.resetPassword = resetPassword;
+const verifyStudentEmail = async (req, res) => {
+    const token = String(req.query.token || "").trim();
+    if (!token) {
+        throw new Errors_1.BadRequest("Verification token is required");
+    }
+    let payload;
+    try {
+        payload = (0, sendEmails_1.verifyEmailVerificationToken)(token);
+    }
+    catch {
+        throw new Errors_1.BadRequest("Invalid or expired verification token");
+    }
+    const [student] = await connection_1.db
+        .select({
+        id: schema_1.Student.id,
+        email: schema_1.Student.email,
+        isVerified: schema_1.Student.isVerified,
+    })
+        .from(schema_1.Student)
+        .where((0, drizzle_orm_1.eq)(schema_1.Student.id, payload.studentId));
+    if (!student || student.email !== payload.email) {
+        throw new Errors_1.BadRequest("Invalid or expired verification token");
+    }
+    if (!student.isVerified) {
+        await connection_1.db
+            .update(schema_1.Student)
+            .set({ isVerified: true })
+            .where((0, drizzle_orm_1.eq)(schema_1.Student.id, student.id));
+    }
+    res.status(200).send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Email verified</title></head><body style="font-family: Segoe UI, Arial, sans-serif; background:#fff5f5; margin:0; padding:40px 16px;"><div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #f2d6d9; border-radius:24px; padding:32px; text-align:center; box-shadow:0 18px 60px rgba(215, 25, 40, 0.14);"><h1 style="color:#d71928; margin:0 0 12px;">Email verified successfully</h1><p style="color:#4b5563; margin:0; font-size:16px; line-height:1.7;">Your Maths House account is now verified. You can return to the app and log in.</p></div></body></html>`);
+};
+exports.verifyStudentEmail = verifyStudentEmail;

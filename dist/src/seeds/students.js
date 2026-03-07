@@ -23,12 +23,12 @@ async function seedStudents(categoryMap) {
         const targetCategoryId = categoryMap[s.category];
         const existing = await connection_1.db.select().from(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.email, s.email));
         if (existing.length > 0) {
-            if (existing[0].category !== targetCategoryId) {
+            if (existing[0].category !== targetCategoryId || !existing[0].isVerified) {
                 await connection_1.db
                     .update(schema_1.Student)
-                    .set({ category: targetCategoryId, grade: s.grade, parentphone: s.parentphone, phone: s.phone })
+                    .set({ category: targetCategoryId, grade: s.grade, parentphone: s.parentphone, phone: s.phone, isVerified: true })
                     .where((0, drizzle_orm_1.eq)(schema_1.Student.id, existing[0].id));
-                console.log(`  ✅ Updated category for existing student "${s.firstname} ${s.lastname}"`);
+                console.log(`  ✅ Updated data for existing student "${s.firstname} ${s.lastname}"`);
             }
             const existingWallet = await connection_1.db
                 .select()
@@ -59,6 +59,7 @@ async function seedStudents(categoryMap) {
                 category: targetCategoryId,
                 grade: s.grade,
                 parentphone: s.parentphone,
+                isVerified: true,
             });
             await tx.insert(schema_1.wallet).values({
                 studentId,

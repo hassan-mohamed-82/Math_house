@@ -71,6 +71,13 @@
       "when": 1772894149335,
       "tag": "0009_boring_calypso",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1772903310497,
+      "tag": "0010_spooky_yellowjacket",
+      "breakpoints": true
     }
   ]
 }

@@ -3,15 +3,18 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PASSWORD_RESET_CODE_TTL_MINUTES = exports.sendPasswordResetEmail = exports.consumePasswordResetCode = exports.verifyPasswordResetCode = exports.savePasswordResetCode = void 0;
+exports.sendStudentVerificationEmail = exports.verifyEmailVerificationToken = exports.generateEmailVerificationToken = exports.PASSWORD_RESET_CODE_TTL_MINUTES = exports.sendPasswordResetEmail = exports.consumePasswordResetCode = exports.verifyPasswordResetCode = exports.savePasswordResetCode = void 0;
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const nodemailer_1 = __importDefault(require("nodemailer"));
+const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const resend_1 = require("resend");
 const firebase_1 = require("./firebase");
 const emailTemplate_1 = require("./emailTemplate");
 const PASSWORD_RESET_COLLECTION = "password_reset_codes";
 const PASSWORD_RESET_CODE_LENGTH = 6;
 const PASSWORD_RESET_LIFETIME_MINUTES = 5;
+const EMAIL_VERIFICATION_LIFETIME_HOURS = 1;
+const EMAIL_VERIFICATION_SECRET = process.env.EMAIL_VERIFICATION_SECRET || process.env.JWT_SECRET || "";
 const getEmailDocumentId = (email) => Buffer.from(email.toLowerCase()).toString("base64url");
 const generateNumericCode = (length = PASSWORD_RESET_CODE_LENGTH) => {
     let code = "";
@@ -118,3 +121,37 @@ const sendPasswordResetEmail = async (email, name = "there") => {
 };
 exports.sendPasswordResetEmail = sendPasswordResetEmail;
 exports.PASSWORD_RESET_CODE_TTL_MINUTES = PASSWORD_RESET_LIFETIME_MINUTES;
+const generateEmailVerificationToken = (studentId, email) => {
+    if (!EMAIL_VERIFICATION_SECRET) {
+        throw new Error("Missing EMAIL_VERIFICATION_SECRET or JWT_SECRET for email verification.");
+    }
+    return jsonwebtoken_1.default.sign({
+        studentId,
+        email,
+        purpose: "student-email-verification",
+    }, EMAIL_VERIFICATION_SECRET, { expiresIn: `${EMAIL_VERIFICATION_LIFETIME_HOURS}h` });
+};
+exports.generateEmailVerificationToken = generateEmailVerificationToken;
+const verifyEmailVerificationToken = (token) => {
+    if (!EMAIL_VERIFICATION_SECRET) {
+        throw new Error("Missing EMAIL_VERIFICATION_SECRET or JWT_SECRET for email verification.");
+    }
+    return jsonwebtoken_1.default.verify(token, EMAIL_VERIFICATION_SECRET);
+};
+exports.verifyEmailVerificationToken = verifyEmailVerificationToken;
+const sendStudentVerificationEmail = async (params) => {
+    const token = (0, exports.generateEmailVerificationToken)(params.studentId, params.email);
+    const publicAppUrl = (process.env.PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
+    const verificationUrl = `${publicAppUrl}/api/user/auth/verify-email?token=${encodeURIComponent(token)}`;
+    await sendEmail({
+        to: params.email,
+        subject: "Verify your Maths House email",
+        html: (0, emailTemplate_1.emailVerificationLinkTemplate)(params.name, verificationUrl, `${EMAIL_VERIFICATION_LIFETIME_HOURS} hour`),
+    });
+    return {
+        token,
+        verificationUrl,
+        expiresInHours: EMAIL_VERIFICATION_LIFETIME_HOURS,
+    };
+};
+exports.sendStudentVerificationEmail = sendStudentVerificationEmail;
