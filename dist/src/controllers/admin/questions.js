@@ -35,8 +35,8 @@ const createQuestion = async (req, res) => {
         || !sectionId
         || !codeId)
         throw new BadRequest_1.BadRequest("All fields are required");
-    if (answerType === "MCQ" && (!options || !Array.isArray(options) || options.length === 0))
-        throw new BadRequest_1.BadRequest("Options are required for MCQ");
+    if ((answerType === "MCQ" || answerType === "Grid in") && (!options || !Array.isArray(options) || options.length === 0))
+        throw new BadRequest_1.BadRequest(`Options are required for ${answerType}`);
     const lesson = await connection_1.db.select().from(schema_1.lessons).where((0, drizzle_orm_1.eq)(schema_1.lessons.id, lessonId)).limit(1);
     if (!lesson[0]) {
         throw new Errors_1.NotFound("Lesson is not found");
@@ -72,7 +72,7 @@ const createQuestion = async (req, res) => {
             const formattedOptions = options.map((opt) => ({
                 questionId: questionId,
                 answer: opt.answer,
-                isCorrect: opt.isCorrect,
+                isCorrect: answerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
             await tx.insert(schema_1.questionOptions).values(formattedOptions);
@@ -258,10 +258,11 @@ const updateQuestion = async (req, res) => {
             // Delete existing options
             await tx.delete(schema_1.questionOptions).where((0, drizzle_orm_1.eq)(schema_1.questionOptions.questionId, id));
             // Insert new options
+            const currentAnswerType = answerType !== undefined ? answerType : existingQuestion[0].answerType;
             const formattedOptions = options.map((opt) => ({
                 questionId: id,
                 answer: opt.answer,
-                isCorrect: opt.isCorrect,
+                isCorrect: currentAnswerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
             await tx.insert(schema_1.questionOptions).values(formattedOptions);
@@ -557,8 +558,8 @@ const createParallelQuestion = async (req, res) => {
         || !difficulty
         || !lessonId)
         throw new BadRequest_1.BadRequest("All fields are required");
-    if (answerType === "MCQ" && (!options || !Array.isArray(options) || options.length === 0))
-        throw new BadRequest_1.BadRequest("Options are required for MCQ");
+    if ((answerType === "MCQ" || answerType === "Grid in") && (!options || !Array.isArray(options) || options.length === 0))
+        throw new BadRequest_1.BadRequest(`Options are required for ${answerType}`);
     const originalQuestion = await connection_1.db.select().from(schema_1.questions).where((0, drizzle_orm_1.eq)(schema_1.questions.id, origianlQuestionId)).limit(1);
     if (!originalQuestion[0]) {
         throw new Errors_1.NotFound("Original question is not found");
@@ -584,7 +585,7 @@ const createParallelQuestion = async (req, res) => {
             const formattedOptions = options.map((opt) => ({
                 questionId: questionId,
                 answer: opt.answer,
-                isCorrect: opt.isCorrect,
+                isCorrect: answerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
             await tx.insert(schema_1.ParallelQuestionOptions).values(formattedOptions);
@@ -620,10 +621,11 @@ const updateParallelQuestion = async (req, res) => {
             // Delete existing options
             await tx.delete(schema_1.ParallelQuestionOptions).where((0, drizzle_orm_1.eq)(schema_1.ParallelQuestionOptions.questionId, id));
             // Insert new options
+            const currentAnswerType = answerType !== undefined ? answerType : existingQuestion[0].answerType;
             const formattedOptions = options.map((opt) => ({
                 questionId: id,
                 answer: opt.answer,
-                isCorrect: opt.isCorrect,
+                isCorrect: currentAnswerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
             await tx.insert(schema_1.ParallelQuestionOptions).values(formattedOptions);

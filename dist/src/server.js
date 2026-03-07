@@ -12,11 +12,11 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const cors_1 = __importDefault(require("cors"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const helmet_1 = __importDefault(require("helmet"));
-// import { startCronJobs } from "./jobs/cronJobs";
+const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const http_1 = __importDefault(require("http"));
 const socket_io_1 = require("socket.io");
-// import { initSocket } from "./socket"; // I will uncomment this in the next step or manually add it 
 const socket_1 = require("./socket/socket");
+const sanitize_1 = require("./middlewares/sanitize");
 const cronJobs_1 = require("./jobs/cronJobs");
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -28,7 +28,6 @@ const io = new socket_io_1.Server(httpServer, {
     }
 });
 (0, socket_1.initSocket)(io);
-// ✅ CORS بدون app.options
 app.use((0, cors_1.default)({
     origin: "*",
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
@@ -39,10 +38,24 @@ app.use((0, cors_1.default)({
 app.use((0, helmet_1.default)({
     crossOriginResourcePolicy: false,
 }));
+const apiLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Limit each IP to 100 requests per `window` (here, per 15 minutes)
+    message: {
+        success: false,
+        message: "Too many requests from this IP, please try again after an 15 minutes"
+    },
+    standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+    legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+app.use(apiLimiter);
 app.use((0, cookie_parser_1.default)());
 app.use(express_1.default.json({ limit: "20mb" }));
 app.use(express_1.default.urlencoded({ extended: true, limit: "20mb" }));
+// Data Sanitization against XSS
+app.use(sanitize_1.sanitizeRequest);
 app.use("/uploads", express_1.default.static(path_1.default.join(__dirname, "../uploads")));
+app.use("/public", express_1.default.static(path_1.default.join(process.cwd(), "public")));
 app.get("/api/test", (req, res, next) => {
     res.json({ message: "API is working! notify token" });
 });

@@ -8,10 +8,10 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
-const xss = require("xss-clean");
 import http from "http";
 import { Server } from "socket.io";
 import { initSocket } from "./socket/socket";
+import { sanitizeRequest } from "./middlewares/sanitize";
 
 import { startCurrencyCron } from "./jobs/cronJobs";
 
@@ -62,9 +62,10 @@ app.use(express.json({ limit: "20mb" }));
 app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 
 // Data Sanitization against XSS
-app.use(xss());
+app.use(sanitizeRequest);
 
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+app.use("/public", express.static(path.join(process.cwd(), "public")));
 
 app.get("/api/test", (req, res, next) => {
   res.json({ message: "API is working! notify token" });

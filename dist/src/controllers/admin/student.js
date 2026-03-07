@@ -33,19 +33,28 @@ const createStudent = async (req, res) => {
     if (existingCategory.length === 0) {
         throw new BadRequest_1.BadRequest("category not found");
     }
+    if (existingCategory[0].parentCategoryId) {
+        throw new BadRequest_1.BadRequest("student must be assigned to a main category only");
+    }
     const hashedPassword = await bcrypt_1.default.hash(password, 10);
     const id = (0, uuid_1.v4)();
-    await connection_1.db.insert(schema_1.Student).values({
-        id,
-        firstname,
-        lastname,
-        nickname,
-        email,
-        password: hashedPassword,
-        phone,
-        category: categoryId,
-        grade,
-        parentphone
+    await connection_1.db.transaction(async (tx) => {
+        await tx.insert(schema_1.Student).values({
+            id,
+            firstname,
+            lastname,
+            nickname,
+            email,
+            password: hashedPassword,
+            phone,
+            category: categoryId,
+            grade,
+            parentphone
+        });
+        await tx.insert(schema_1.wallet).values({
+            studentId: id,
+            balance: 0
+        });
     });
     (0, response_1.SuccessResponse)(res, { message: "create student success", data: { id } });
 };
@@ -139,6 +148,18 @@ const updateStudent = async (req, res) => {
             .where((0, drizzle_orm_1.eq)(schema_1.Student.email, email));
         if (emailExists.length > 0) {
             throw new BadRequest_1.BadRequest("email already exists");
+        }
+    }
+    if (categoryId) {
+        const existingCategory = await connection_1.db
+            .select({ id: schema_1.category.id, parentCategoryId: schema_1.category.parentCategoryId })
+            .from(schema_1.category)
+            .where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId));
+        if (existingCategory.length === 0) {
+            throw new BadRequest_1.BadRequest("category not found");
+        }
+        if (existingCategory[0].parentCategoryId) {
+            throw new BadRequest_1.BadRequest("student must be assigned to a main category only");
         }
     }
     const updateData = {};
@@ -239,7 +260,15 @@ const getStudentsByGrade = async (req, res) => {
 };
 exports.getStudentsByGrade = getStudentsByGrade;
 const selection = async (req, res) => {
-    const categories = await connection_1.db.select().from(schema_1.category);
+    const categories = await connection_1.db
+        .select({
+        id: schema_1.category.id,
+        name: schema_1.category.name,
+        description: schema_1.category.description,
+        image: schema_1.category.image,
+    })
+        .from(schema_1.category)
+        .where((0, drizzle_orm_1.isNull)(schema_1.category.parentCategoryId));
     const grades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
     (0, response_1.SuccessResponse)(res, { message: "get all categories and grades success", data: { categories, grades } });
 };

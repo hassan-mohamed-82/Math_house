@@ -30,9 +30,11 @@ async function seedQuestions() {
     console.log("  Generating 100 questions...");
     const questionsToInsert = [];
     for (let i = 1; i <= 100; i++) {
+        const isGridIn = i % 10 === 0;
+        const correctAnswer = isGridIn ? (10 / i).toString() : null;
         questionsToInsert.push({
             question: `Question ${i}: Solve for x in ${i}x + 10 = 20`,
-            answerType: "MCQ",
+            answerType: isGridIn ? "Grid in" : "MCQ",
             difficulty: ["A", "B", "C", "D", "E"][i % 5],
             questionType: i % 2 === 0 ? "Trail" : "Extra",
             lessonId: lessonId,
@@ -40,6 +42,7 @@ async function seedQuestions() {
             month: ["Jan", "Feb", "Mar", "Apr", "May"][i % 5],
             sectionId: sectionId,
             codeId: codeId,
+            correctAnswer: correctAnswer
         });
     }
     for (const q of questionsToInsert) {
@@ -48,33 +51,48 @@ async function seedQuestions() {
         const existing = await connection_1.db.select().from(schema_1.questions).where((0, drizzle_orm_1.eq)(schema_1.questions.question, q.question));
         if (existing.length > 0)
             continue;
+        const { correctAnswer, ...dbInsertData } = q;
         // 1. Insert Question
         await connection_1.db.insert(schema_1.questions).values({
             id: questionId,
-            ...q
+            ...dbInsertData
         });
-        // 2. Insert Options
-        const options = [
-            { questionId, answer: "5", isCorrect: true, order: "A" },
-            { questionId, answer: "10", isCorrect: false, order: "B" },
-            { questionId, answer: "15", isCorrect: false, order: "C" },
-            { questionId, answer: "20", isCorrect: false, order: "D" },
-        ];
+        let options;
+        if (q.answerType === "Grid in") {
+            options = [
+                { questionId, answer: correctAnswer, isCorrect: true, order: null },
+            ];
+        }
+        else {
+            options = [
+                { questionId, answer: "5", isCorrect: true, order: "A" },
+                { questionId, answer: "10", isCorrect: false, order: "B" },
+                { questionId, answer: "15", isCorrect: false, order: "C" },
+                { questionId, answer: "20", isCorrect: false, order: "D" },
+            ];
+        }
         await connection_1.db.insert(schema_1.questionOptions).values(options);
-        // 3. Create a Parallel Question
         const parallelQuestionId = (0, uuid_1.v4)();
         await connection_1.db.insert(schema_1.ParallelQuestion).values({
             id: parallelQuestionId,
             origianlQuestionId: questionId,
             question: `Parallel to Q${q.question}: What is ${q.question}?`,
-            answerType: "MCQ",
+            answerType: q.answerType,
             difficulty: q.difficulty,
             lessonId: q.lessonId,
         });
-        const parallelOptions = [
-            { questionId: parallelQuestionId, answer: "5", isCorrect: true, order: "A" },
-            { questionId: parallelQuestionId, answer: "10", isCorrect: false, order: "B" },
-        ];
+        let parallelOptions;
+        if (q.answerType === "Grid in") {
+            parallelOptions = [
+                { questionId: parallelQuestionId, answer: correctAnswer, isCorrect: true, order: null },
+            ];
+        }
+        else {
+            parallelOptions = [
+                { questionId: parallelQuestionId, answer: "5", isCorrect: true, order: "A" },
+                { questionId: parallelQuestionId, answer: "10", isCorrect: false, order: "B" },
+            ];
+        }
         await connection_1.db.insert(schema_1.ParallelQuestionOptions).values(parallelOptions);
     }
     console.log(`  ✅ Successfully seeded ${questionsToInsert.length} questions and parallel questions.`);

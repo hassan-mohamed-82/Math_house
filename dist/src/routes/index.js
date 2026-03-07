@@ -5,8 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const index_1 = __importDefault(require("./admin/index"));
-// import userRouter from './user/index'
+const index_2 = __importDefault(require("./user/index"));
 const route = (0, express_1.Router)();
 route.use('/admin', index_1.default);
-// route.use('/user', userRouter);
+route.use('/user', index_2.default);
 exports.default = route;
