@@ -19,6 +19,10 @@ const studentSignup = async (req, res) => {
     if (existingStudent.length > 0) {
         throw new Errors_1.BadRequest("Email is already registered");
     }
+    const existingPhoneStudent = await connection_1.db.select().from(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.phone, phone));
+    if (existingPhoneStudent.length > 0) {
+        throw new Errors_1.BadRequest("Phone number is already registered");
+    }
     const existingCategory = await connection_1.db
         .select({ id: schema_1.category.id, name: schema_1.category.name, parentCategoryId: schema_1.category.parentCategoryId })
         .from(schema_1.category)

@@ -112,7 +112,11 @@ const updateMyProfile = async (req, res) => {
     if (parentphone)
         updateData.parentphone = parentphone;
     if (Object.keys(updateData).length === 0) {
-        throw new Errors_1.BadRequest("no data to update");
+        const profile = await getStudentProfileData(studentId);
+        return (0, response_1.SuccessResponse)(res, {
+            message: "Profile updated successfully",
+            student: profile,
+        });
     }
     await connection_1.db
         .update(schema_1.Student)

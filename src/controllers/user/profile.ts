@@ -120,7 +120,12 @@ export const updateMyProfile = async (req: Request, res: Response) => {
 	if (parentphone) updateData.parentphone = parentphone;
 
 	if (Object.keys(updateData).length === 0) {
-		throw new BadRequest("no data to update");
+		const profile = await getStudentProfileData(studentId);
+
+		return SuccessResponse(res, {
+			message: "Profile updated successfully",
+			student: profile,
+		});
 	}
 
 	await db

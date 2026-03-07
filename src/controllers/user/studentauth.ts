@@ -39,6 +39,11 @@ export const studentSignup = async (req: Request, res: Response) => {
         throw new BadRequest("Email is already registered");
     }
 
+    const existingPhoneStudent = await db.select().from(Student).where(eq(Student.phone, phone));
+    if (existingPhoneStudent.length > 0) {
+        throw new BadRequest("Phone number is already registered");
+    }
+
     const existingCategory = await db
         .select({ id: category.id, name: category.name, parentCategoryId: category.parentCategoryId })
         .from(category)
