@@ -65,6 +65,7 @@ app.use(express.urlencoded({ extended: true, limit: "20mb" }));
 app.use(sanitizeRequest);
 
 app.use("/uploads", express.static(path.join(__dirname, "../uploads")));
+app.use(express.static(path.join(process.cwd(), "public")));
 app.use("/public", express.static(path.join(process.cwd(), "public")));
 
 app.get("/api/test", (req, res, next) => {
@@ -74,6 +75,10 @@ app.get("/api/test", (req, res, next) => {
 app.use("/api", ApiRoute);
 
 app.use((req, res, next) => {
+  if (!req.path.startsWith("/api") && req.method === "GET") {
+    return res.status(404).sendFile(path.join(process.cwd(), "public", "404.html"));
+  }
+
   throw new NotFound("Route not found");
 });
 

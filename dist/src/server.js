@@ -55,12 +55,16 @@ app.use(express_1.default.urlencoded({ extended: true, limit: "20mb" }));
 // Data Sanitization against XSS
 app.use(sanitize_1.sanitizeRequest);
 app.use("/uploads", express_1.default.static(path_1.default.join(__dirname, "../uploads")));
+app.use(express_1.default.static(path_1.default.join(process.cwd(), "public")));
 app.use("/public", express_1.default.static(path_1.default.join(process.cwd(), "public")));
 app.get("/api/test", (req, res, next) => {
     res.json({ message: "API is working! notify token" });
 });
 app.use("/api", routes_1.default);
 app.use((req, res, next) => {
+    if (!req.path.startsWith("/api") && req.method === "GET") {
+        return res.status(404).sendFile(path_1.default.join(process.cwd(), "public", "404.html"));
+    }
     throw new Errors_1.NotFound("Route not found");
 });
 app.use(errorHandler_1.errorHandler);

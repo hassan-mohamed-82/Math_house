@@ -8,6 +8,16 @@ import { BadRequest } from "../../Errors";
 import { eq, isNull } from "drizzle-orm";
 import { consumePasswordResetCode, sendPasswordResetEmail, sendStudentVerificationEmail, verifyEmailVerificationToken, verifyPasswordResetCode } from "../../utils/sendEmails";
 
+const renderVerificationPage = ({
+    title,
+    message,
+    statusCode = 200,
+}: {
+    title: string;
+    message: string;
+    statusCode?: number;
+}) => `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${title}</title></head><body style="font-family: Segoe UI, Arial, sans-serif; background:#fff5f5; margin:0; padding:40px 16px;"><div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #f2d6d9; border-radius:24px; padding:32px; text-align:center; box-shadow:0 18px 60px rgba(215, 25, 40, 0.14);"><h1 style="color:#d71928; margin:0 0 12px;">${title}</h1><p style="color:#4b5563; margin:0; font-size:16px; line-height:1.7;">${message}</p><p style="display:none">${statusCode}</p></div></body></html>`;
+
 export const studentSignup = async (req: Request, res: Response) => {
     const {
         firstname,
@@ -263,14 +273,22 @@ export const verifyStudentEmail = async (req: Request, res: Response) => {
     const token = String(req.query.token || "").trim();
 
     if (!token) {
-        throw new BadRequest("Verification token is required");
+        return res.status(400).send(renderVerificationPage({
+            title: "Verification failed",
+            message: "Verification token is required.",
+            statusCode: 400,
+        }));
     }
 
     let payload;
     try {
         payload = verifyEmailVerificationToken(token);
     } catch {
-        throw new BadRequest("Invalid or expired verification token");
+        return res.status(400).send(renderVerificationPage({
+            title: "Verification link expired",
+            message: "This verification link is invalid or has expired. Please request a new verification email.",
+            statusCode: 400,
+        }));
     }
 
     const [student] = await db
@@ -283,17 +301,31 @@ export const verifyStudentEmail = async (req: Request, res: Response) => {
         .where(eq(Student.id, payload.studentId));
 
     if (!student || student.email !== payload.email) {
-        throw new BadRequest("Invalid or expired verification token");
+        return res.status(400).send(renderVerificationPage({
+            title: "Verification link expired",
+            message: "This verification link is invalid or has expired. Please request a new verification email.",
+            statusCode: 400,
+        }));
     }
 
-    if (!student.isVerified) {
-        await db
-            .update(Student)
-            .set({ isVerified: true })
-            .where(eq(Student.id, student.id));
+    if (student.isVerified) {
+        return res.status(410).send(renderVerificationPage({
+            title: "Verification link already used",
+            message: "This verification link has already been used. Your email is already verified, so you can log in now.",
+            statusCode: 410,
+        }));
     }
 
-    res.status(200).send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Email verified</title></head><body style="font-family: Segoe UI, Arial, sans-serif; background:#fff5f5; margin:0; padding:40px 16px;"><div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #f2d6d9; border-radius:24px; padding:32px; text-align:center; box-shadow:0 18px 60px rgba(215, 25, 40, 0.14);"><h1 style="color:#d71928; margin:0 0 12px;">Email verified successfully</h1><p style="color:#4b5563; margin:0; font-size:16px; line-height:1.7;">Your Maths House account is now verified. You can return to the app and log in.</p></div></body></html>`);
+    await db
+        .update(Student)
+        .set({ isVerified: true })
+        .where(eq(Student.id, student.id));
+
+    res.status(200).send(renderVerificationPage({
+        title: "Email verified successfully",
+        message: "Your Maths House account is now verified. You can return to the app and log in.",
+        statusCode: 200,
+    }));
 };
 
 export const resendVerificationEmail = async (req: Request, res: Response) => {

@@ -269,7 +269,7 @@ export const emailVerificationLinkTemplate = (
                   <td style="padding: 16px 18px; text-align: center; color: #7f1d1d; font-size: 15px; line-height: 1.7;">⏱️ This verification link expires in <strong>${expiresInText}</strong>.</td>
                 </tr>
               </table>
-              <p style="margin: 0; color: #6b7280; font-size: 13px; line-height: 1.8; word-break: break-all;">If the button does not work, copy and paste this link into your browser:<br /><span style="color: #d71928;">${verificationUrl}</span></p>
+              <p style="margin: 0; color: #6b7280; font-size: 13px; line-height: 1.8;">If the button does not work, <a href="${verificationUrl}" style="color: #d71928; font-weight: 700; text-decoration: underline;">click here</a>.</p>
             </td>
           </tr>
         </table>
