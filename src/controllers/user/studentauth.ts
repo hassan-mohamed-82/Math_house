@@ -295,3 +295,36 @@ export const verifyStudentEmail = async (req: Request, res: Response) => {
 
     res.status(200).send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Email verified</title></head><body style="font-family: Segoe UI, Arial, sans-serif; background:#fff5f5; margin:0; padding:40px 16px;"><div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #f2d6d9; border-radius:24px; padding:32px; text-align:center; box-shadow:0 18px 60px rgba(215, 25, 40, 0.14);"><h1 style="color:#d71928; margin:0 0 12px;">Email verified successfully</h1><p style="color:#4b5563; margin:0; font-size:16px; line-height:1.7;">Your Maths House account is now verified. You can return to the app and log in.</p></div></body></html>`);
 };
+
+export const resendVerificationEmail = async (req: Request, res: Response) => {
+    const { email } = req.body;
+
+    if (!email) {
+        throw new BadRequest("Email is required");
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const [student] = await db
+        .select({
+            id: Student.id,
+            firstname: Student.firstname,
+            lastname: Student.lastname,
+            email: Student.email,
+            isVerified: Student.isVerified,
+        })
+        .from(Student)
+        .where(eq(Student.email, normalizedEmail));
+
+    if (student && !student.isVerified) {
+        await sendStudentVerificationEmail({
+            studentId: student.id,
+            email: student.email,
+            name: `${student.firstname} ${student.lastname}`,
+        });
+    }
+
+    return SuccessResponse(res, {
+        message: "If an unverified account exists, a verification email has been sent"
+    });
+};

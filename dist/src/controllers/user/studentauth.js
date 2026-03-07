@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verifyStudentEmail = exports.resetPassword = exports.validatePasswordResetCode = exports.forgetPassword = exports.selectcategoryandgrade = exports.studentLogin = exports.studentSignup = void 0;
+exports.resendVerificationEmail = exports.verifyStudentEmail = exports.resetPassword = exports.validatePasswordResetCode = exports.forgetPassword = exports.selectcategoryandgrade = exports.studentLogin = exports.studentSignup = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const auth_1 = require("../../utils/auth");
@@ -243,3 +243,31 @@ const verifyStudentEmail = async (req, res) => {
     res.status(200).send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Email verified</title></head><body style="font-family: Segoe UI, Arial, sans-serif; background:#fff5f5; margin:0; padding:40px 16px;"><div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #f2d6d9; border-radius:24px; padding:32px; text-align:center; box-shadow:0 18px 60px rgba(215, 25, 40, 0.14);"><h1 style="color:#d71928; margin:0 0 12px;">Email verified successfully</h1><p style="color:#4b5563; margin:0; font-size:16px; line-height:1.7;">Your Maths House account is now verified. You can return to the app and log in.</p></div></body></html>`);
 };
 exports.verifyStudentEmail = verifyStudentEmail;
+const resendVerificationEmail = async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        throw new Errors_1.BadRequest("Email is required");
+    }
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const [student] = await connection_1.db
+        .select({
+        id: schema_1.Student.id,
+        firstname: schema_1.Student.firstname,
+        lastname: schema_1.Student.lastname,
+        email: schema_1.Student.email,
+        isVerified: schema_1.Student.isVerified,
+    })
+        .from(schema_1.Student)
+        .where((0, drizzle_orm_1.eq)(schema_1.Student.email, normalizedEmail));
+    if (student && !student.isVerified) {
+        await (0, sendEmails_1.sendStudentVerificationEmail)({
+            studentId: student.id,
+            email: student.email,
+            name: `${student.firstname} ${student.lastname}`,
+        });
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        message: "If an unverified account exists, a verification email has been sent"
+    });
+};
+exports.resendVerificationEmail = resendVerificationEmail;
