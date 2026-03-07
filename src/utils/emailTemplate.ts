@@ -105,7 +105,13 @@ export const verificationEmailTemplate = (name: string, code: string) => {
         <table width="640" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 640px; background: #ffffff; border-radius: 28px; overflow: hidden; border: 1px solid #f2d6d9; box-shadow: 0 18px 60px rgba(215, 25, 40, 0.14);">
           <tr>
             <td style="background: linear-gradient(135deg, #d71928 0%, #ef233c 55%, #b91c1c 100%); padding: 32px 28px 18px; text-align: center;">
-              ${logoMarkup}
+              <div style="max-width: 360px; margin: 0 auto; background: #ffffff; border-radius: 22px; padding: 12px 18px 14px; box-shadow: 0 10px 30px rgba(127, 29, 29, 0.18); border: 1px solid rgba(255,255,255,0.65);">
+                <div style="height: 3px; width: 100%; border-radius: 999px; background: linear-gradient(90deg, rgba(215,25,40,0) 0%, #d71928 18%, #ef233c 50%, #d71928 82%, rgba(215,25,40,0) 100%);"></div>
+                <div style="padding: 12px 8px 10px;">
+                  ${logoMarkup}
+                </div>
+                <div style="height: 3px; width: 100%; border-radius: 999px; background: linear-gradient(90deg, rgba(215,25,40,0) 0%, #d71928 18%, #ef233c 50%, #d71928 82%, rgba(215,25,40,0) 100%);"></div>
+              </div>
               <div style="margin-top: 18px; color: rgba(255,255,255,0.82); font-size: 13px; line-height: 1.8; letter-spacing: 0.8px;">x + y = z &nbsp;&nbsp; • &nbsp;&nbsp; a² + b² = c² &nbsp;&nbsp; • &nbsp;&nbsp; π &nbsp;&nbsp; • &nbsp;&nbsp; √16 = 4</div>
             </td>
           </tr>
@@ -170,7 +176,13 @@ export const resendVerificationTemplate = (name: string, code: string) => {
         <table width="640" cellpadding="0" cellspacing="0" style="width: 100%; max-width: 640px; background: #ffffff; border-radius: 28px; overflow: hidden; border: 1px solid #f2d6d9; box-shadow: 0 18px 60px rgba(215, 25, 40, 0.14);">
           <tr>
             <td style="background: linear-gradient(135deg, #d71928 0%, #ef233c 55%, #b91c1c 100%); padding: 32px 28px 18px; text-align: center;">
-              ${logoMarkup}
+              <div style="max-width: 360px; margin: 0 auto; background: #ffffff; border-radius: 22px; padding: 12px 18px 14px; box-shadow: 0 10px 30px rgba(127, 29, 29, 0.18); border: 1px solid rgba(255,255,255,0.65);">
+                <div style="height: 3px; width: 100%; border-radius: 999px; background: linear-gradient(90deg, rgba(215,25,40,0) 0%, #d71928 18%, #ef233c 50%, #d71928 82%, rgba(215,25,40,0) 100%);"></div>
+                <div style="padding: 12px 8px 10px;">
+                  ${logoMarkup}
+                </div>
+                <div style="height: 3px; width: 100%; border-radius: 999px; background: linear-gradient(90deg, rgba(215,25,40,0) 0%, #d71928 18%, #ef233c 50%, #d71928 82%, rgba(215,25,40,0) 100%);"></div>
+              </div>
               <div style="margin-top: 18px; color: rgba(255,255,255,0.82); font-size: 13px; line-height: 1.8; letter-spacing: 0.8px;">sin θ &nbsp;&nbsp; • &nbsp;&nbsp; cos θ &nbsp;&nbsp; • &nbsp;&nbsp; 2x + 3 = 11 &nbsp;&nbsp; • &nbsp;&nbsp; ∑ n</div>
             </td>
           </tr>
@@ -255,7 +267,13 @@ export const passwordResetTemplate = (name: string, code: string, expiresInText:
               padding: 32px 28px 18px;
               text-align: center;
             ">
-              ${logoMarkup}
+              <div style="max-width: 360px; margin: 0 auto; background: #ffffff; border-radius: 22px; padding: 12px 18px 14px; box-shadow: 0 10px 30px rgba(127, 29, 29, 0.18); border: 1px solid rgba(255,255,255,0.65);">
+                <div style="height: 3px; width: 100%; border-radius: 999px; background: linear-gradient(90deg, rgba(215,25,40,0) 0%, #d71928 18%, #ef233c 50%, #d71928 82%, rgba(215,25,40,0) 100%);"></div>
+                <div style="padding: 12px 8px 10px;">
+                  ${logoMarkup}
+                </div>
+                <div style="height: 3px; width: 100%; border-radius: 999px; background: linear-gradient(90deg, rgba(215,25,40,0) 0%, #d71928 18%, #ef233c 50%, #d71928 82%, rgba(215,25,40,0) 100%);"></div>
+              </div>
               <div style="
                 margin-top: 18px;
                 color: rgba(255,255,255,0.82);
