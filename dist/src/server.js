@@ -60,6 +60,9 @@ app.use("/public", express_1.default.static(path_1.default.join(process.cwd(), "
 app.get("/api/test", (req, res, next) => {
     res.json({ message: "API is working! notify token" });
 });
+app.get("/", (req, res) => {
+    res.sendFile(path_1.default.join(process.cwd(), "public", "index.html"));
+});
 app.use("/api", routes_1.default);
 app.use((req, res, next) => {
     if (!req.path.startsWith("/api") && req.method === "GET") {

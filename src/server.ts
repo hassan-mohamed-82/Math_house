@@ -72,6 +72,10 @@ app.get("/api/test", (req, res, next) => {
   res.json({ message: "API is working! notify token" });
 });
 
+app.get("/", (req, res) => {
+  res.sendFile(path.join(process.cwd(), "public", "index.html"));
+});
+
 app.use("/api", ApiRoute);
 
 app.use((req, res, next) => {
