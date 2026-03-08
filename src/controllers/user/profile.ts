@@ -5,6 +5,7 @@ import { db } from "../../models/connection";
 import { category, Student, wallet } from "../../models/schema";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 import { SuccessResponse } from "../../utils/response";
+import { handleImageUpdate } from "../../utils/handleImages";
 
 const getAuthenticatedStudentId = (req: Request) => {
 	if (!req.user?.id) {
@@ -43,6 +44,7 @@ const getStudentProfileData = async (studentId: string) => {
 			phone: Student.phone,
 			parentphone: Student.parentphone,
 			grade: Student.grade,
+			avatar: Student.avatar,
 			categoryId: Student.category,
 			categoryName: category.name,
 		})
@@ -66,6 +68,7 @@ const getStudentProfileData = async (studentId: string) => {
 		phone: student.phone,
 		parentphone: student.parentphone,
 		grade: student.grade,
+		avatar: student.avatar,
 		category: {
 			id: student.categoryId,
 			name: student.categoryName,
@@ -88,7 +91,7 @@ export const getMyProfile = async (req: Request, res: Response) => {
 
 export const updateMyProfile = async (req: Request, res: Response) => {
 	const studentId = getAuthenticatedStudentId(req);
-	const { firstname, lastname, nickname, email, phone, parentphone } = req.body;
+	const { firstname, lastname, nickname, email, phone, parentphone, avatar } = req.body;
 
 	const [existingStudent] = await db
 		.select()
@@ -118,6 +121,11 @@ export const updateMyProfile = async (req: Request, res: Response) => {
 	if (email) updateData.email = email;
 	if (phone) updateData.phone = phone;
 	if (parentphone) updateData.parentphone = parentphone;
+
+	if (avatar !== undefined) {
+		const avatarUrl = await handleImageUpdate(req, existingStudent.avatar, avatar, "students");
+		updateData.avatar = avatarUrl;
+	}
 
 	if (Object.keys(updateData).length === 0) {
 		const profile = await getStudentProfileData(studentId);

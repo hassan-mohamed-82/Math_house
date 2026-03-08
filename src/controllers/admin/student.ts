@@ -8,6 +8,7 @@ import { BadRequest } from "../../Errors/BadRequest";
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from "uuid";
 import jwt from "jsonwebtoken";
+import { handleImageUpdate, validateAndSaveLogo, deleteImage } from "../../utils/handleImages";
 
 const JWT_SECRET = process.env.JWT_SECRET as string;
 
@@ -21,7 +22,8 @@ export const createStudent = async (req: Request, res: Response) => {
         phone,
         category: categoryId,
         grade,
-        parentphone
+        parentphone,
+        avatar,
     } = req.body;
 
     if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade || !parentphone) {
@@ -52,7 +54,7 @@ export const createStudent = async (req: Request, res: Response) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = uuidv4();
-
+    const imgUrl = avatar ? await validateAndSaveLogo(req, avatar, "students") : null;
     await db.transaction(async (tx) => {
         await tx.insert(Student).values({
             id,
@@ -65,7 +67,8 @@ export const createStudent = async (req: Request, res: Response) => {
             category: categoryId,
             grade,
             parentphone,
-            isVerified: true
+            isVerified: true,
+            avatar: imgUrl
         });
 
         await tx.insert(wallet).values({
@@ -84,6 +87,7 @@ export const getAllStudents = async (req: Request, res: Response) => {
     let query = db
         .select({
             id: Student.id,
+            avatar: Student.avatar,
             firstname: Student.firstname,
             lastname: Student.lastname,
             nickname: Student.nickname,
@@ -126,6 +130,7 @@ export const getAllStudents = async (req: Request, res: Response) => {
         category: s.category,
         categoryName: s.categoryName,
         grade: s.grade,
+        avatar: s.avatar,
         paymentStatus: "Free" // هتحتاج تعدلها حسب الـ Logic بتاعك
     }));
 
@@ -142,6 +147,7 @@ export const getStudentById = async (req: Request, res: Response) => {
     const [student] = await db
         .select({
             id: Student.id,
+            avatar: Student.avatar,
             firstname: Student.firstname,
             lastname: Student.lastname,
             nickname: Student.nickname,
@@ -175,7 +181,8 @@ export const updateStudent = async (req: Request, res: Response) => {
         grade,
         parentphone,
         oldPassword,
-        newPassword
+        newPassword,
+        avatar
     } = req.body;
 
     if (!id) {
@@ -216,7 +223,10 @@ export const updateStudent = async (req: Request, res: Response) => {
             throw new BadRequest("student must be assigned to a main category only");
         }
     }
-
+    let ImgUrl;
+    if (avatar) {
+    ImgUrl = await handleImageUpdate(req, existingStudent[0].avatar, avatar, "students");
+    }
     const updateData: any = {};
 
     if (firstname) updateData.firstname = firstname;
@@ -225,6 +235,7 @@ export const updateStudent = async (req: Request, res: Response) => {
     if (email) updateData.email = email;
     if (phone) updateData.phone = phone;
     if (categoryId) updateData.category = categoryId;
+    if (avatar) updateData.avatar = ImgUrl;
     if (grade) updateData.grade = grade;
     if (parentphone) updateData.parentphone = parentphone;
 
@@ -270,6 +281,10 @@ export const deleteStudent = async (req: Request, res: Response) => {
         throw new NotFound("student not found");
     }
 
+    if (student[0].avatar) {
+        await deleteImage(student[0].avatar);
+    }
+
     await db.delete(Student).where(eq(Student.id, id));
 
     SuccessResponse(res, { message: "delete student success" });
@@ -285,6 +300,7 @@ export const getStudentsByCategory = async (req: Request, res: Response) => {
     const students = await db
         .select({
             id: Student.id,
+            avatar: Student.avatar,
             firstname: Student.firstname,
             lastname: Student.lastname,
             nickname: Student.nickname,
@@ -310,6 +326,7 @@ export const getStudentsByGrade = async (req: Request, res: Response) => {
     const students = await db
         .select({
             id: Student.id,
+            avatar: Student.avatar,
             firstname: Student.firstname,
             lastname: Student.lastname,
             nickname: Student.nickname,

@@ -7,6 +7,7 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors";
 import { eq, isNull } from "drizzle-orm";
 import { consumePasswordResetCode, sendPasswordResetEmail, sendStudentVerificationEmail, verifyEmailVerificationToken, verifyPasswordResetCode } from "../../utils/sendEmails";
+import { validateAndSaveLogo, deleteImage } from "../../utils/handleImages";
 
 const renderVerificationPage = ({
     title,
@@ -28,6 +29,7 @@ export const studentSignup = async (req: Request, res: Response) => {
         phone,
         category: categoryId,
         grade,
+        avatar,
     } = req.body;
 
     if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade) {
@@ -59,6 +61,8 @@ export const studentSignup = async (req: Request, res: Response) => {
 
     const hashedPassword = await hash(password, 10);
 
+    const avatarUrl = avatar ? await validateAndSaveLogo(req, avatar, "students") : null;
+
     let createdStudentId = "";
 
     await db.transaction(async (tx) => {
@@ -72,6 +76,7 @@ export const studentSignup = async (req: Request, res: Response) => {
             category: categoryId,
             grade,
             isVerified: false,
+            avatar: avatarUrl,
         });
 
         const [createdStudent] = await tx
@@ -103,6 +108,10 @@ export const studentSignup = async (req: Request, res: Response) => {
             await tx.delete(Student).where(eq(Student.id, createdStudentId));
         });
 
+        if (avatarUrl) {
+            await deleteImage(avatarUrl).catch(() => {});
+        }
+
         throw error;
     }
 
@@ -130,6 +139,7 @@ export const studentLogin = async (req: Request, res: Response) => {
             category: Student.category,
             categoryName: category.name,
             grade: Student.grade,
+            avatar: Student.avatar,
         })
         .from(Student)
         .leftJoin(category, eq(Student.category, category.id))
@@ -168,7 +178,8 @@ export const studentLogin = async (req: Request, res: Response) => {
                 id: student.category,
                 name: student.categoryName,
             },
-            grade: student.grade
+            grade: student.grade,
+            avatar: student.avatar,
         }
     }, 200);
 };
