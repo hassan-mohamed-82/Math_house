@@ -90,12 +90,15 @@ export const generateSecureStreamUrl = (videoId: string): string => {
   // Set expiration (e.g., 2 hours from now)
   const expires = Math.floor(Date.now() / 1000) + 7200;
 
-  // CRITICAL: We must sign the DIRECTORY path, not the playlist.m3u8 file path.
+  // Bunny HLS token auth should sign the directory path so segment requests inherit access.
   const tokenPath = `/${videoId}/`;
 
-  // Construct the base string exactly as Bunny Token Auth V2 requires
-  // Formula: securityKey + tokenPath + expires
-  const hashableBase = `${securityKey}${tokenPath}${expires}`;
+  // Bunny Token Authentication v2 requires additional query parameters (except token/expires)
+  // to be appended to the hash base in ascending form-encoded order.
+  const queryString = `token_path=${tokenPath}`;
+
+  // Formula: securityKey + signed_url + expires + encoded_query_parameters
+  const hashableBase = `${securityKey}${tokenPath}${expires}${queryString}`;
 
   // Generate the SHA-256 hash
   let token = crypto
