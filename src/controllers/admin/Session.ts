@@ -99,7 +99,6 @@ export const searchUsers = async (req: Request, res: Response) => {
 };
 
 // ===================== SESSIONS CRUD =====================
-
 export const createSession = async (req: Request, res: Response) => {
     const {
         name,
@@ -119,34 +118,38 @@ export const createSession = async (req: Request, res: Response) => {
         userIds
     } = req.body;
 
-    if (!name || !sessionDate || !timeFrom || !timeTo || !type || !teacherId) {
-        throw new BadRequest("Missing required fields");
+    // Validation for NOT NULL fields
+    if (!name || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !categoryId || !courseId || !session_link) {
+        throw new BadRequest("Missing required fields (Check categoryId, courseId, or session_link)");
     }
 
     const sessionId = randomUUID();
 
-    // استخدام Transaction لضمان سلامة البيانات
     await db.transaction(async (tx) => {
-        // 1. إدخال الجلسة مع معالجة القيم الفارغة
-        await tx.insert(sessions).values({
+        // 1. إنشاء الـ Object الأساسي بالحقول الإجبارية فقط
+        const newSessionData: any = {
             id: sessionId,
-            name,
-            sessionDate,
+            name: name.trim(),
+            sessionDate: new Date(sessionDate).toISOString().split('T')[0],
             timeFrom,
             timeTo,
-            categoryId: categoryId || null,
-            courseId: courseId || null,
-            lessonId: (lessonId && lessonId.trim() !== "") ? lessonId : null,
-            lessonName: lessonName || null,
+            categoryId,
+            courseId,
             type,
-            groupId: type === "group" ? (groupId || null) : null,
             teacherId,
-            session_link: session_link || null,
-            material_link: material_link || null,
-            teacher_material_link: teacher_material_link || null,
-        });
+            session_link,
+        };
 
-        // 2. تحديد المستخدمين المستهدفين
+        // 2. حقن الحقول الاختيارية ديناميكياً فقط في حال وجودها وكانت غير فارغة
+        if (lessonId && lessonId.trim() !== "") newSessionData.lessonId = lessonId.trim();
+        if (lessonName && lessonName.trim() !== "") newSessionData.lessonName = lessonName.trim();
+        if (type === "group" && groupId && groupId.trim() !== "") newSessionData.groupId = groupId.trim();
+        if (material_link && material_link.trim() !== "") newSessionData.material_link = material_link.trim();
+        if (teacher_material_link && teacher_material_link.trim() !== "") newSessionData.teacher_material_link = teacher_material_link.trim();
+
+        // 3. التنفيذ
+        await tx.insert(sessions).values(newSessionData);
+
         let finalUserIds: string[] = userIds || [];
 
         if (type === "group" && groupId && finalUserIds.length === 0) {
@@ -158,7 +161,6 @@ export const createSession = async (req: Request, res: Response) => {
             finalUserIds = groupUsersList.map(u => u.studentId);
         }
 
-        // 3. ربط المستخدمين بالجلسة
         if (finalUserIds.length > 0) {
             const sessionUserRecords = finalUserIds.map((uId: string) => ({
                 sessionId: sessionId,
@@ -255,12 +257,19 @@ export const updateSession = async (req: Request, res: Response) => {
     const { userIds, ...data } = req.body;
 
     await db.transaction(async (tx) => {
+        // تجهيز بيانات التحديث
+        const updateData: any = { ...data, updatedAt: new Date() };
+
+        // تنظيف البيانات: إذا تم إرسال حقول اختيارية فارغة، نقوم بحذفها من الكائن
+        // لمنع Drizzle من محاولة إدخال قيمة فارغة في حقول لا تقبلها
+        if (updateData.lessonId !== undefined && updateData.lessonId.trim() === "") delete updateData.lessonId;
+        if (updateData.lessonName !== undefined && updateData.lessonName.trim() === "") delete updateData.lessonName;
+        if (updateData.groupId !== undefined && updateData.groupId.trim() === "") delete updateData.groupId;
+        if (updateData.material_link !== undefined && updateData.material_link.trim() === "") delete updateData.material_link;
+        if (updateData.teacher_material_link !== undefined && updateData.teacher_material_link.trim() === "") delete updateData.teacher_material_link;
+
         await tx.update(sessions)
-            .set({
-                ...data,
-                lessonId: data.lessonId || null,
-                updatedAt: new Date()
-            })
+            .set(updateData)
             .where(eq(sessions.id, id));
 
         if (userIds !== undefined) {
