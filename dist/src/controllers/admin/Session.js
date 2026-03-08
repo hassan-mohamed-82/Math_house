@@ -16,7 +16,7 @@ const Errors_1 = require("../../Errors");
 // ===================== SELECT OPTIONS =====================
 // جلب Groups و Teachers للـ Select dropdowns
 const selectOptions = async (req, res) => {
-    const [groupsList, teachersList] = await Promise.all([
+    const [groupsList, teachersList, categoriesList, coursesList] = await Promise.all([
         connection_1.db.select({
             id: Groups_1.groups.id,
             name: Groups_1.groups.name,
@@ -25,6 +25,15 @@ const selectOptions = async (req, res) => {
             id: teacher_1.teachers.id,
             name: teacher_1.teachers.name,
         }).from(teacher_1.teachers),
+        connection_1.db.select({
+            id: category_1.category.id,
+            name: category_1.category.name,
+        }).from(category_1.category),
+        connection_1.db.select({
+            id: courses_1.courses.id,
+            name: courses_1.courses.name,
+            categoryId: courses_1.courses.categoryId,
+        }).from(courses_1.courses),
     ]);
     (0, response_1.SuccessResponse)(res, {
         groups: groupsList.map(g => ({
@@ -34,6 +43,15 @@ const selectOptions = async (req, res) => {
         teachers: teachersList.map(t => ({
             value: t.id,
             label: t.name
+        })),
+        categories: categoriesList.map(c => ({
+            value: c.id,
+            label: c.name
+        })),
+        courses: coursesList.map(c => ({
+            value: c.id,
+            label: c.name,
+            categoryId: c.categoryId
         })),
     });
 };

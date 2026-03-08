@@ -19,7 +19,7 @@ import { NotFound } from "../../Errors";
 
 // جلب Groups و Teachers للـ Select dropdowns
 export const selectOptions = async (req: Request, res: Response) => {
-    const [groupsList, teachersList] = await Promise.all([
+    const [groupsList, teachersList, categoriesList, coursesList] = await Promise.all([
         db.select({
             id: groups.id,
             name: groups.name,
@@ -28,6 +28,15 @@ export const selectOptions = async (req: Request, res: Response) => {
             id: teachers.id,
             name: teachers.name,
         }).from(teachers),
+        db.select({
+            id: category.id,
+            name: category.name,
+        }).from(category),
+        db.select({
+            id: courses.id,
+            name: courses.name,
+            categoryId: courses.categoryId,
+        }).from(courses),
     ]);
 
     SuccessResponse(res, {
@@ -38,6 +47,15 @@ export const selectOptions = async (req: Request, res: Response) => {
         teachers: teachersList.map(t => ({
             value: t.id,
             label: t.name
+        })),
+        categories: categoriesList.map(c => ({
+            value: c.id,
+            label: c.name
+        })),
+        courses: coursesList.map(c => ({
+            value: c.id,
+            label: c.name,
+            categoryId: c.categoryId
         })),
     });
 };
