@@ -155,7 +155,7 @@ export const createSession = async (req: Request, res: Response) => {
         userIds
     } = req.body;
 
-    if (!name || !sessionDate || !timeFrom || !timeTo || !categoryId || !courseId || !type || !teacherId || !session_link) {
+    if (!name || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !session_link) {
         throw new BadRequest("Missing required fields");
     }
 

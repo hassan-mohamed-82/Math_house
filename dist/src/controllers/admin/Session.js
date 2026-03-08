@@ -116,7 +116,7 @@ exports.searchUsers = searchUsers;
 // إنشاء Session جديدة
 const createSession = async (req, res) => {
     const { name, sessionDate, timeFrom, timeTo, categoryId, courseId, lessonId, lessonName, type, groupId, teacherId, session_link, material_link, teacher_material_link, userIds } = req.body;
-    if (!name || !sessionDate || !timeFrom || !timeTo || !categoryId || !courseId || !type || !teacherId || !session_link) {
+    if (!name || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !session_link) {
         throw new BadRequest_1.BadRequest("Missing required fields");
     }
     const sessionId = (0, crypto_1.randomUUID)();
