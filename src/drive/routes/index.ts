@@ -1,0 +1,57 @@
+import { Router } from 'express';
+import { login } from '../controllers/auth';
+import { 
+  createFolder,
+  deleteFolder,
+  deleteVideo,
+  getDriveContents,
+  handleBunnyWebhook, 
+  initializeVideoUpload,
+  getLessonVideo
+} from '../controllers/controller';
+import { authenticated } from '../../middlewares/authenticated';
+import { authorizeRoles } from '../../middlewares/authorized';
+import { requireDriveSuperAdmin } from '../middlewares/superAdmin';
+
+const router = Router();
+
+router.post('/auth/login', login);
+
+// ==========================================
+// ADMIN ROUTES (Video Upload & Management)
+// ==========================================
+
+// 1. Initialize the secure direct upload to Bunny.net
+router.post('/upload/init', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, initializeVideoUpload);
+
+// [Placeholder] 2. Standard Drive CRUD operations for the Admin
+// An admin needs to be able to fetch the virtual folders and delete mistakes.
+router.get('/folders/:folderId?', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, getDriveContents);
+router.post('/folders', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, createFolder);
+router.delete('/folders/:folderId', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, deleteFolder);
+router.delete('/files/:videoId', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, deleteVideo);
+
+
+// ==========================================
+// STUDENT/USER ROUTES (Video Playback)
+// ==========================================
+
+// 3. Get the secure, expiring HLS streaming URL for the custom React player
+// Notice we allow both 'student' and 'admin' here so admins can preview the video.
+router.get(
+  '/stream/:videoId', 
+  authenticated, 
+  authorizeRoles('student', 'admin'), 
+  getLessonVideo
+);
+
+
+// ==========================================
+// PUBLIC WEBHOOK ROUTES (System integrations)
+// ==========================================
+
+// 4. The PUBLIC Webhook route for Bunny.net
+// Do NOT add 'authenticated' here. Bunny.net handles its own security via the query secret.
+router.post('/webhook/bunny', handleBunnyWebhook);
+
+export default router;
