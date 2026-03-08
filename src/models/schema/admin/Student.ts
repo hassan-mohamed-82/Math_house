@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, char, timestamp, mysqlEnum, double } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, mysqlEnum, boolean } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { category } from "./category";
 export const Student = mysqlTable("student", {
@@ -12,7 +12,6 @@ export const Student = mysqlTable("student", {
     category:char("category",{length:36}).notNull().references(()=>category.id),
     grade:mysqlEnum("grade",["1","2","3","4","5","6","7","8","9","10","11","12","13"]).notNull(),
     parentphone:varchar("parent_phone",{length:255}),
-    
-    
+    isVerified:boolean("is_verified").notNull().default(false),
 
 })

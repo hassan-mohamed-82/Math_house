@@ -17,6 +17,7 @@ import {
     getParallelQuestionsByOriginalId,
     getQuestionsbyLessonId,
     getQuestionsbyCourseId,
+    getQuestionsbySectiondId,
 } from "../../controllers/admin/questions";
 
 import { getExamCodes } from "../../controllers/admin/examCodes";
@@ -41,6 +42,7 @@ router.post("/", catchAsync(createQuestion));
 router.get("/", catchAsync(getAllQuestions));
 router.get("/course/:courseId", catchAsync(getQuestionsbyCourseId));
 router.get("/lesson/:id", catchAsync(getQuestionsbyLessonId));
+router.get("/section/:sectionId", catchAsync(getQuestionsbySectiondId));
 router.get("/:id", catchAsync(getQuestionbyId));
 router.put("/:id", catchAsync(updateQuestion));
 router.delete("/:id", catchAsync(deleteQuestion));

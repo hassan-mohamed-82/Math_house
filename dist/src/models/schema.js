@@ -43,3 +43,4 @@ __exportStar(require("./schema/admin/Package"), exports);
 __exportStar(require("./schema/admin/Notfication"), exports);
 __exportStar(require("./schema/admin/promoCodes"), exports);
 __exportStar(require("./schema/admin/paymentMethod"), exports);
+__exportStar(require("./schema/user/Wallet"), exports);

@@ -1,9 +1,13 @@
 import express from "express";
 import { catchAsync } from "../../utils/catchAsync";
-import { studentLogin, studentSignup } from "../../controllers/user/studentauth";
-import { selectcategoryandgrade } from "../../controllers/user/studentauth";
+import { forgetPassword, resendVerificationEmail, resetPassword, selectcategoryandgrade, studentLogin, studentSignup, validatePasswordResetCode, verifyStudentEmail } from "../../controllers/user/studentauth";
 const router = express.Router();
 router.post("/signup", catchAsync(studentSignup));
 router.post("/login", catchAsync(studentLogin));
+router.post("/resend-verification-email", catchAsync(resendVerificationEmail));
+router.post("/forgot-password", catchAsync(forgetPassword));
+router.post("/validate-reset-code", catchAsync(validatePasswordResetCode));
+router.post("/reset-password", catchAsync(resetPassword));
+router.get("/verify-email", catchAsync(verifyStudentEmail));
 router.get("/select", catchAsync(selectcategoryandgrade));
 export default router;

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { category, parents, Student } from "../../models/schema";
-import { eq, or, like } from "drizzle-orm";
+import { category, Student, wallet } from "../../models/schema";
+import { eq, or, like, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -46,20 +46,32 @@ export const createStudent = async (req: Request, res: Response) => {
         throw new BadRequest("category not found");
     }
 
+    if (existingCategory[0].parentCategoryId) {
+        throw new BadRequest("student must be assigned to a main category only");
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = uuidv4();
 
-    await db.insert(Student).values({
-        id,
-        firstname,
-        lastname,
-        nickname,
-        email,
-        password: hashedPassword,
-        phone,
-        category: categoryId,
-        grade,
-        parentphone
+    await db.transaction(async (tx) => {
+        await tx.insert(Student).values({
+            id,
+            firstname,
+            lastname,
+            nickname,
+            email,
+            password: hashedPassword,
+            phone,
+            category: categoryId,
+            grade,
+            parentphone,
+            isVerified: true
+        });
+
+        await tx.insert(wallet).values({
+            studentId: id,
+            balance: 0
+        });
     });
 
     SuccessResponse(res, { message: "create student success", data: { id } });
@@ -190,6 +202,21 @@ export const updateStudent = async (req: Request, res: Response) => {
         }
     }
 
+    if (categoryId) {
+        const existingCategory = await db
+            .select({ id: category.id, parentCategoryId: category.parentCategoryId })
+            .from(category)
+            .where(eq(category.id, categoryId));
+
+        if (existingCategory.length === 0) {
+            throw new BadRequest("category not found");
+        }
+
+        if (existingCategory[0].parentCategoryId) {
+            throw new BadRequest("student must be assigned to a main category only");
+        }
+    }
+
     const updateData: any = {};
 
     if (firstname) updateData.firstname = firstname;
@@ -299,7 +326,16 @@ export const getStudentsByGrade = async (req: Request, res: Response) => {
 };
 
 export const selection = async (req: Request, res: Response) => {
-    const categories = await db.select().from(category);
+    const categories = await db
+        .select({
+            id: category.id,
+            name: category.name,
+            description: category.description,
+            image: category.image,
+        })
+        .from(category)
+        .where(isNull(category.parentCategoryId));
+
     const grades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
     SuccessResponse(res, { message: "get all categories and grades success", data: { categories, grades } });
 };

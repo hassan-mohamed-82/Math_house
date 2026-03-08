@@ -24,6 +24,7 @@ router.post("/", (0, catchAsync_1.catchAsync)(questions_2.createQuestion));
 router.get("/", (0, catchAsync_1.catchAsync)(questions_2.getAllQuestions));
 router.get("/course/:courseId", (0, catchAsync_1.catchAsync)(questions_2.getQuestionsbyCourseId));
 router.get("/lesson/:id", (0, catchAsync_1.catchAsync)(questions_2.getQuestionsbyLessonId));
+router.get("/section/:sectionId", (0, catchAsync_1.catchAsync)(questions_2.getQuestionsbySectiondId));
 router.get("/:id", (0, catchAsync_1.catchAsync)(questions_2.getQuestionbyId));
 router.put("/:id", (0, catchAsync_1.catchAsync)(questions_2.updateQuestion));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(questions_2.deleteQuestion));

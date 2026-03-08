@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Maths House Backend</title>
+</head>
+<body style="margin:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:linear-gradient(180deg,#fff7f7 0%,#fff0f1 46%,#ffffff 100%);color:#202124;overflow-x:hidden;">
+  <div style="position:fixed;inset:0;pointer-events:none;opacity:.18;overflow:hidden;">
+    <div style="position:absolute;top:7%;left:8%;font-size:34px;color:#d71928;font-weight:700;transform:rotate(-12deg);">x² + y² = z²</div>
+    <div style="position:absolute;top:14%;right:10%;font-size:28px;color:#b91c1c;font-weight:700;transform:rotate(8deg);">∫ f(x)dx</div>
+    <div style="position:absolute;top:30%;left:11%;font-size:30px;color:#ef233c;font-weight:700;">π ≈ 3.14159</div>
+    <div style="position:absolute;top:34%;right:12%;font-size:32px;color:#d71928;font-weight:700;transform:rotate(-7deg);">Δ = b² - 4ac</div>
+    <div style="position:absolute;bottom:24%;left:10%;font-size:30px;color:#ef233c;font-weight:700;">sin θ + cos θ</div>
+    <div style="position:absolute;bottom:16%;right:10%;font-size:34px;color:#b91c1c;font-weight:700;transform:rotate(10deg);">√81 = 9</div>
+    <div style="position:absolute;bottom:8%;left:36%;font-size:28px;color:#d71928;font-weight:700;">Σ n = n(n+1)/2</div>
+  </div>
+
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px;box-sizing:border-box;position:relative;z-index:1;">
+    <div style="max-width:920px;width:100%;background:rgba(255,255,255,.94);backdrop-filter:blur(4px);border:1px solid #f4cfd3;border-radius:34px;overflow:hidden;box-shadow:0 24px 70px rgba(215,25,40,.16);">
+      <div style="background:linear-gradient(135deg,#d71928 0%,#ef233c 55%,#b91c1c 100%);padding:34px 28px 28px;text-align:center;">
+        <div style="max-width:390px;margin:0 auto;background:#ffffff;border-radius:24px;padding:16px 20px;box-shadow:0 12px 34px rgba(127,29,29,.18);border:1px solid rgba(255,255,255,.7);">
+          <div style="height:3px;width:100%;border-radius:999px;background:linear-gradient(90deg,rgba(215,25,40,0) 0%,#d71928 18%,#ef233c 50%,#d71928 82%,rgba(215,25,40,0) 100%);"></div>
+          <div style="padding:14px 8px 12px;">
+            <img src="/mathshouse_white_logoHeader.png" alt="Maths House" style="max-width:290px;width:100%;height:auto;display:block;margin:0 auto;" />
+          </div>
+          <div style="height:3px;width:100%;border-radius:999px;background:linear-gradient(90deg,rgba(215,25,40,0) 0%,#d71928 18%,#ef233c 50%,#d71928 82%,rgba(215,25,40,0) 100%);"></div>
+        </div>
+        <div style="margin-top:18px;color:rgba(255,255,255,.88);font-size:13px;line-height:1.8;letter-spacing:.8px;">Backend Services &nbsp;&nbsp; • &nbsp;&nbsp; Authentication &nbsp;&nbsp; • &nbsp;&nbsp; Lessons & Exams &nbsp;&nbsp; • &nbsp;&nbsp; Real-time Features</div>
+      </div>
+
+      <div style="padding:42px 34px 46px;">
+        <div style="display:inline-block;padding:10px 18px;border-radius:999px;background:#fff1f2;color:#d71928;font-size:13px;font-weight:700;letter-spacing:.7px;border:1px solid #fecdd3;">BACKEND STATUS</div>
+        <h1 style="margin:20px 0 12px;font-size:44px;line-height:1.15;color:#202124;font-weight:800;">Maths House API is running</h1>
+        <p style="margin:0 0 30px;max-width:700px;color:#5f6368;font-size:17px;line-height:1.9;">This server powers the Maths House platform, including authentication, student flows, lessons, questions, exams, notifications, and supporting backend services.</p>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:30px;">
+          <div style="background:#ffffff;border:1px solid #f2d6d9;border-radius:22px;padding:20px;box-shadow:0 10px 30px rgba(215,25,40,.06);">
+            <div style="color:#d71928;font-size:13px;font-weight:700;letter-spacing:.7px;margin-bottom:10px;">API BASE</div>
+            <div style="color:#202124;font-size:18px;font-weight:800;">/api</div>
+            <div style="margin-top:8px;color:#6b7280;font-size:14px;line-height:1.8;">All backend endpoints are available under the main API prefix.</div>
+          </div>
+          <div style="background:#ffffff;border:1px solid #f2d6d9;border-radius:22px;padding:20px;box-shadow:0 10px 30px rgba(215,25,40,.06);">
+            <div style="color:#d71928;font-size:13px;font-weight:700;letter-spacing:.7px;margin-bottom:10px;">AUTH</div>
+            <div style="color:#202124;font-size:18px;font-weight:800;">Students · Admins</div>
+            <div style="margin-top:8px;color:#6b7280;font-size:14px;line-height:1.8;">Login, signup, email verification, password reset, and protected profile flows.</div>
+          </div>
+          <div style="background:#ffffff;border:1px solid #f2d6d9;border-radius:22px;padding:20px;box-shadow:0 10px 30px rgba(215,25,40,.06);">
+            <div style="color:#d71928;font-size:13px;font-weight:700;letter-spacing:.7px;margin-bottom:10px;">REAL-TIME</div>
+            <div style="color:#202124;font-size:18px;font-weight:800;">Socket & Jobs</div>
+            <div style="margin-top:8px;color:#6b7280;font-size:14px;line-height:1.8;">Background jobs, queues, and socket-based server features are enabled here.</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:14px;flex-wrap:wrap;">
+          <a href="/api/test" style="display:inline-block;background:linear-gradient(135deg,#d71928 0%,#ef233c 100%);color:#ffffff;text-decoration:none;font-size:16px;font-weight:700;padding:16px 28px;border-radius:14px;box-shadow:0 12px 24px rgba(215,25,40,.22);">Check API Status</a>
+          <a href="https://mathshouse.net" style="display:inline-block;background:#ffffff;color:#d71928;text-decoration:none;font-size:16px;font-weight:700;padding:16px 28px;border-radius:14px;border:1px solid #f3b5bc;">Go to Frontend</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

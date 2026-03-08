@@ -27,3 +27,4 @@ export * from "./schema/admin/Package";
 export * from "./schema/admin/Notfication";
 export * from "./schema/admin/promoCodes";
 export * from "./schema/admin/paymentMethod";
+export * from "./schema/user/Wallet";

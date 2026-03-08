@@ -1,17 +1,36 @@
-import { Request, Response, NextFunction } from "express";
+import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { Student } from "../../models/schema/admin/Student";
+import { Student, category, wallet } from "../../models/schema";
 import { generateToken } from "../../utils/auth";
 import { compare, hash } from "bcrypt";
 import { SuccessResponse } from "../../utils/response";
-import { NotFound, BadRequest } from "../../Errors";
-import { eq } from "drizzle-orm";
-import { category } from "../../models/schema";
+import { BadRequest } from "../../Errors";
+import { eq, isNull } from "drizzle-orm";
+import { consumePasswordResetCode, sendPasswordResetEmail, sendStudentVerificationEmail, verifyEmailVerificationToken, verifyPasswordResetCode } from "../../utils/sendEmails";
 
-export const studentSignup = async (req: Request, res: Response, next: NextFunction) => {
-    const { firstname, lastname, nickname, email, password, phone, category, grade } = req.body;
+const renderVerificationPage = ({
+    title,
+    message,
+    statusCode = 200,
+}: {
+    title: string;
+    message: string;
+    statusCode?: number;
+}) => `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${title}</title></head><body style="font-family: Segoe UI, Arial, sans-serif; background:#fff5f5; margin:0; padding:40px 16px;"><div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #f2d6d9; border-radius:24px; padding:32px; text-align:center; box-shadow:0 18px 60px rgba(215, 25, 40, 0.14);"><h1 style="color:#d71928; margin:0 0 12px;">${title}</h1><p style="color:#4b5563; margin:0; font-size:16px; line-height:1.7;">${message}</p><p style="display:none">${statusCode}</p></div></body></html>`;
 
-    if (!firstname || !lastname || !nickname || !email || !password || !phone || !category || !grade) {
+export const studentSignup = async (req: Request, res: Response) => {
+    const {
+        firstname,
+        lastname,
+        nickname,
+        email,
+        password,
+        phone,
+        category: categoryId,
+        grade,
+    } = req.body;
+
+    if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade) {
         throw new BadRequest("All required fields must be provided");
     }
 
@@ -20,47 +39,113 @@ export const studentSignup = async (req: Request, res: Response, next: NextFunct
         throw new BadRequest("Email is already registered");
     }
 
-    const existcategory= await db.select().from(category).where(eq(category.id, category));{
-         if(!existcategory){
-            throw new BadRequest("Category not found");
-         }
+    const existingPhoneStudent = await db.select().from(Student).where(eq(Student.phone, phone));
+    if (existingPhoneStudent.length > 0) {
+        throw new BadRequest("Phone number is already registered");
     }
 
+    const existingCategory = await db
+        .select({ id: category.id, name: category.name, parentCategoryId: category.parentCategoryId })
+        .from(category)
+        .where(eq(category.id, categoryId));
+
+    if (existingCategory.length === 0) {
+        throw new BadRequest("Category not found");
+    }
+
+    if (existingCategory[0].parentCategoryId) {
+        throw new BadRequest("Student must be assigned to a main category only");
+    }
 
     const hashedPassword = await hash(password, 10);
 
-    const [newStudent] = await db.insert(Student).values({
-        firstname,
-        lastname,
-        nickname,
-        email,
-        password: hashedPassword,
-        phone,
-        category,
-        grade,
+    let createdStudentId = "";
+
+    await db.transaction(async (tx) => {
+        await tx.insert(Student).values({
+            firstname,
+            lastname,
+            nickname,
+            email,
+            password: hashedPassword,
+            phone,
+            category: categoryId,
+            grade,
+            isVerified: false,
+        });
+
+        const [createdStudent] = await tx
+            .select({ id: Student.id })
+            .from(Student)
+            .where(eq(Student.email, email));
+
+        if (!createdStudent) {
+            throw new BadRequest("Student could not be created");
+        }
+
+        createdStudentId = createdStudent.id;
+
+        await tx.insert(wallet).values({
+            studentId: createdStudent.id,
+            balance: 0,
+        });
     });
 
+    try {
+        await sendStudentVerificationEmail({
+            studentId: createdStudentId,
+            email,
+            name: `${firstname} ${lastname}`,
+        });
+    } catch (error) {
+        await db.transaction(async (tx) => {
+            await tx.delete(wallet).where(eq(wallet.studentId, createdStudentId));
+            await tx.delete(Student).where(eq(Student.id, createdStudentId));
+        });
+
+        throw error;
+    }
+
     return SuccessResponse(res, {
-        message: "Student registered successfully"
+        message: "Student registered successfully. Please verify your email before logging in."
     }, 201);
 };
 
-export const studentLogin = async (req: Request, res: Response, next: NextFunction) => {
+export const studentLogin = async (req: Request, res: Response) => {
     const { email, password } = req.body;
 
     if (!email || !password) {
         throw new BadRequest("Email and password are required");
     }
 
-    const students = await db.select().from(Student).where(eq(Student.email, email));
-    if (students.length === 0) {
+    const [student] = await db
+        .select({
+            id: Student.id,
+            firstname: Student.firstname,
+            lastname: Student.lastname,
+            email: Student.email,
+            password: Student.password,
+            isVerified: Student.isVerified,
+            phone: Student.phone,
+            category: Student.category,
+            categoryName: category.name,
+            grade: Student.grade,
+        })
+        .from(Student)
+        .leftJoin(category, eq(Student.category, category.id))
+        .where(eq(Student.email, email));
+
+    if (!student) {
         throw new BadRequest("Invalid Credentials");
     }
 
-    const student = students[0];
     const isPasswordValid = await compare(password, student.password);
     if (!isPasswordValid) {
         throw new BadRequest("Invalid Credentials");
+    }
+
+    if (!student.isVerified) {
+        throw new BadRequest("Please verify your email before logging in");
     }
 
     const token = generateToken({
@@ -79,19 +164,204 @@ export const studentLogin = async (req: Request, res: Response, next: NextFuncti
             lastname: student.lastname,
             email: student.email,
             phone: student.phone,
-            category: student.category,
+            category: {
+                id: student.category,
+                name: student.categoryName,
+            },
             grade: student.grade
         }
     }, 200);
 };
 
 
-export const selectcategoryandgrade=async(req:Request,res:Response,next:NextFunction)=>{
-    const categories=await db.select().from(category)
-    const grades=["1","2","3","4","5","6","7","8","9","10","11","12","13"]
-    return SuccessResponse(res,{
-        message:"Categories and grades fetched successfully",
+export const selectcategoryandgrade = async (req: Request, res: Response) => {
+    const categories = await db
+        .select({
+            id: category.id,
+            name: category.name,
+            description: category.description,
+            image: category.image,
+        })
+        .from(category)
+        .where(isNull(category.parentCategoryId));
+
+    const grades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
+    return SuccessResponse(res, {
+        message: "Categories and grades fetched successfully",
         categories,
         grades
-    },200)
+    }, 200);
+};
+
+export const forgetPassword = async (req: Request, res: Response) => {
+    const { email } = req.body;
+    if (!email) {
+        throw new BadRequest("Email is required");
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const [student] = await db
+        .select({
+            id: Student.id,
+            firstname: Student.firstname,
+            lastname: Student.lastname,
+            email: Student.email,
+        })
+        .from(Student)
+        .where(eq(Student.email, normalizedEmail));
+
+    if (student) {
+        await sendPasswordResetEmail(student.email, `${student.firstname} ${student.lastname}`);
+    }
+
+    return SuccessResponse(res, {message: "Password reset instructions sent to email"});
 }
+
+export const validatePasswordResetCode = async (req: Request, res: Response) => {
+    const { email, code } = req.body;
+    if (!email || !code) {
+        throw new BadRequest("Email and reset code are required");
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const isValid = await verifyPasswordResetCode(normalizedEmail, String(code).trim());
+
+    if (!isValid) {
+        throw new BadRequest("Invalid or expired reset code");
+    }
+
+    return SuccessResponse(res, {message: "Reset code is valid"});
+}
+
+export const resetPassword = async (req: Request, res: Response) => {
+    const { email, code, newPassword } = req.body;
+
+    if (!email || !code || !newPassword) {
+        throw new BadRequest("Email, reset code and newPassword are required");
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedCode = String(code).trim();
+
+    const [student] = await db
+        .select({
+            id: Student.id,
+            email: Student.email,
+        })
+        .from(Student)
+        .where(eq(Student.email, normalizedEmail));
+
+    if (!student) {
+        throw new BadRequest("Invalid or expired reset code");
+    }
+
+    const isValid = await verifyPasswordResetCode(normalizedEmail, normalizedCode);
+
+    if (!isValid) {
+        throw new BadRequest("Invalid or expired reset code");
+    }
+
+    const hashedPassword = await hash(String(newPassword), 10);
+
+    await db
+        .update(Student)
+        .set({ password: hashedPassword })
+        .where(eq(Student.id, student.id));
+
+    await consumePasswordResetCode(normalizedEmail);
+
+    return SuccessResponse(res, { message: "Password reset successfully" });
+}
+
+export const verifyStudentEmail = async (req: Request, res: Response) => {
+    const token = String(req.query.token || "").trim();
+
+    if (!token) {
+        return res.status(400).send(renderVerificationPage({
+            title: "Verification failed",
+            message: "Verification token is required.",
+            statusCode: 400,
+        }));
+    }
+
+    let payload;
+    try {
+        payload = verifyEmailVerificationToken(token);
+    } catch {
+        return res.status(400).send(renderVerificationPage({
+            title: "Verification link expired",
+            message: "This verification link is invalid or has expired. Please request a new verification email.",
+            statusCode: 400,
+        }));
+    }
+
+    const [student] = await db
+        .select({
+            id: Student.id,
+            email: Student.email,
+            isVerified: Student.isVerified,
+        })
+        .from(Student)
+        .where(eq(Student.id, payload.studentId));
+
+    if (!student || student.email !== payload.email) {
+        return res.status(400).send(renderVerificationPage({
+            title: "Verification link expired",
+            message: "This verification link is invalid or has expired. Please request a new verification email.",
+            statusCode: 400,
+        }));
+    }
+
+    if (student.isVerified) {
+        return res.status(410).send(renderVerificationPage({
+            title: "Verification link already used",
+            message: "This verification link has already been used. Your email is already verified, so you can log in now.",
+            statusCode: 410,
+        }));
+    }
+
+    await db
+        .update(Student)
+        .set({ isVerified: true })
+        .where(eq(Student.id, student.id));
+
+    res.status(200).send(renderVerificationPage({
+        title: "Email verified successfully",
+        message: "Your Maths House account is now verified. You can return to the app and log in.",
+        statusCode: 200,
+    }));
+};
+
+export const resendVerificationEmail = async (req: Request, res: Response) => {
+    const { email } = req.body;
+
+    if (!email) {
+        throw new BadRequest("Email is required");
+    }
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const [student] = await db
+        .select({
+            id: Student.id,
+            firstname: Student.firstname,
+            lastname: Student.lastname,
+            email: Student.email,
+            isVerified: Student.isVerified,
+        })
+        .from(Student)
+        .where(eq(Student.email, normalizedEmail));
+
+    if (student && !student.isVerified) {
+        await sendStudentVerificationEmail({
+            studentId: student.id,
+            email: student.email,
+            name: `${student.firstname} ${student.lastname}`,
+        });
+    }
+
+    return SuccessResponse(res, {
+        message: "If an unverified account exists, a verification email has been sent"
+    });
+};
