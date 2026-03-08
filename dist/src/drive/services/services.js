@@ -73,9 +73,11 @@ exports.generateTusUploadCredentials = generateTusUploadCredentials;
 const generateSecureStreamUrl = (videoId) => {
     const securityKey = process.env.BUNNY_STREAM_TOKEN_KEY;
     const pullZone = process.env.BUNNY_STREAM_PULL_ZONE;
+    const cdnHostname = process.env.CDN_HOSTNAME;
     if (!securityKey || !pullZone) {
         throw new Error("Critical: Missing Bunny Stream token configuration.");
     }
+    const streamHostname = cdnHostname || `${pullZone}.b-cdn.net`;
     // Set expiration (e.g., 2 hours from now)
     const expires = Math.floor(Date.now() / 1000) + 7200;
     // CRITICAL: We must sign the DIRECTORY path, not the playlist.m3u8 file path.
@@ -95,8 +97,9 @@ const generateSecureStreamUrl = (videoId) => {
         .replace(/=/g, '');
     // URL-encode the token_path parameter for the query string
     const encodedTokenPath = encodeURIComponent(tokenPath);
-    // Construct the final secure URL for your React player
-    const secureUrl = `https://${pullZone}/${videoId}/playlist.m3u8?token=${token}&expires=${expires}&token_path=${encodedTokenPath}`;
+    // Use Bunny's path-based token format so the playlist and all nested HLS segment
+    // requests inherit the same authorization automatically.
+    const secureUrl = `https://${streamHostname}/bcdn_token=${token}&expires=${expires}&token_path=${encodedTokenPath}/${videoId}/playlist.m3u8`;
     return secureUrl;
 };
 exports.generateSecureStreamUrl = generateSecureStreamUrl;

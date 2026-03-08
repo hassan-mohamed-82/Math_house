@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Drive Upload Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/tus-js-client@4.2.3/dist/tus.min.js"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --panel-2: #1f2937;
+      --border: #334155;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --success: #22c55e;
+      --danger: #ef4444;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      background: linear-gradient(180deg, #020617 0%, #0f172a 100%);
+      color: var(--text);
+      padding: 24px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      display: grid;
+      gap: 20px;
+    }
+
+    .card {
+      background: rgba(17, 24, 39, 0.95);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    h1, h2 {
+      margin-top: 0;
+    }
+
+    p, label, small {
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    input, button, textarea {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      padding: 12px 14px;
+      font-size: 14px;
+    }
+
+    input[type="file"] {
+      padding: 10px;
+    }
+
+    button {
+      background: var(--accent);
+      color: #082f49;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+    }
+
+    button.secondary {
+      background: #475569;
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 16px;
+    }
+
+    .status {
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-weight: 700;
+      margin-top: 10px;
+    }
+
+    .success { background: rgba(34, 197, 94, 0.15); color: #86efac; }
+    .error { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+    .info { background: rgba(56, 189, 248, 0.12); color: #7dd3fc; }
+
+    progress {
+      width: 100%;
+      height: 18px;
+      margin-top: 10px;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #020617;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 14px;
+      max-height: 320px;
+      overflow: auto;
+      color: #cbd5e1;
+    }
+
+    .hint {
+      font-size: 13px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Drive Upload Test</h1>
+      <p class="hint">
+        This page logs in as a Drive super admin, calls <strong>/drive/upload/init</strong>, then uploads the selected file directly to Bunny.net using TUS.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>1. API Configuration</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="apiBase">API Base URL</label>
+          <input id="apiBase" value="http://localhost:3000" />
+        </div>
+        <div class="field">
+          <label for="loginEndpoint">Drive Login Path</label>
+          <input id="loginEndpoint" value="/drive/auth/login" />
+        </div>
+        <div class="field">
+          <label for="initEndpoint">Upload Init Path</label>
+          <input id="initEndpoint" value="/drive/upload/init" />
+        </div>
+        <div class="field">
+          <label for="tusEndpoint">Bunny TUS Endpoint</label>
+          <input id="tusEndpoint" value="https://video.bunnycdn.com/tusupload" />
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>2. Drive Super Admin Login</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" type="email" placeholder="super-admin@email.com" />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input id="password" type="password" placeholder="password" />
+        </div>
+      </div>
+      <div class="actions">
+        <button id="loginBtn">Login</button>
+        <button id="clearTokenBtn" class="secondary">Clear Token</button>
+      </div>
+      <div id="loginStatus" class="status info">No token loaded.</div>
+    </div>
+
+    <div class="card">
+      <h2>3. Upload Video</h2>
+      <div class="grid">
+        <div class="field">
+          <label for="videoTitle">Video Title</label>
+          <input id="videoTitle" placeholder="Leave empty to use file name" />
+        </div>
+        <div class="field">
+          <label for="folderId">Folder ID (optional)</label>
+          <input id="folderId" placeholder="drive folder uuid" />
+        </div>
+      </div>
+      <div class="field" style="margin-top: 14px;">
+        <label for="videoFile">Video File</label>
+        <input id="videoFile" type="file" accept="video/*" />
+      </div>
+      <div class="actions">
+        <button id="uploadBtn">Initialize and Upload</button>
+      </div>
+      <progress id="progressBar" value="0" max="100"></progress>
+      <div id="uploadStatus" class="status info">Waiting for upload.</div>
+    </div>
+
+    <div class="card">
+      <h2>4. Debug Output</h2>
+      <pre id="output"></pre>
+    </div>
+  </div>
+
+  <script>
+    const els = {
+      apiBase: document.getElementById('apiBase'),
+      loginEndpoint: document.getElementById('loginEndpoint'),
+      initEndpoint: document.getElementById('initEndpoint'),
+      tusEndpoint: document.getElementById('tusEndpoint'),
+      email: document.getElementById('email'),
+      password: document.getElementById('password'),
+      videoTitle: document.getElementById('videoTitle'),
+      folderId: document.getElementById('folderId'),
+      videoFile: document.getElementById('videoFile'),
+      loginBtn: document.getElementById('loginBtn'),
+      clearTokenBtn: document.getElementById('clearTokenBtn'),
+      uploadBtn: document.getElementById('uploadBtn'),
+      loginStatus: document.getElementById('loginStatus'),
+      uploadStatus: document.getElementById('uploadStatus'),
+      progressBar: document.getElementById('progressBar'),
+      output: document.getElementById('output')
+    };
+
+    const storageKey = 'drive_test_token';
+
+    function setStatus(element, text, type = 'info') {
+      element.className = `status ${type}`;
+      element.textContent = text;
+    }
+
+    function log(label, value) {
+      const formatted = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      els.output.textContent += `\n[${new Date().toLocaleTimeString()}] ${label}\n${formatted}\n`;
+      els.output.scrollTop = els.output.scrollHeight;
+    }
+
+    function getToken() {
+      return localStorage.getItem(storageKey) || '';
+    }
+
+    function setToken(token) {
+      localStorage.setItem(storageKey, token);
+      setStatus(els.loginStatus, 'Drive token loaded.', 'success');
+    }
+
+    function clearToken() {
+      localStorage.removeItem(storageKey);
+      setStatus(els.loginStatus, 'Token cleared.', 'info');
+    }
+
+    function joinUrl(base, path) {
+      return `${base.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+    }
+
+    async function login() {
+      const email = els.email.value.trim();
+      const password = els.password.value;
+      if (!email || !password) {
+        setStatus(els.loginStatus, 'Email and password are required.', 'error');
+        return;
+      }
+
+      try {
+        setStatus(els.loginStatus, 'Logging in...', 'info');
+        const response = await fetch(joinUrl(els.apiBase.value, els.loginEndpoint.value), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await response.json();
+        log('Login response', data);
+
+        if (!response.ok) {
+          throw new Error(data?.error?.message || data?.message || 'Login failed');
+        }
+
+        const token = data?.data?.token;
+        if (!token) {
+          throw new Error('No token returned from login endpoint');
+        }
+
+        setToken(token);
+      } catch (error) {
+        setStatus(els.loginStatus, error.message || 'Login failed.', 'error');
+      }
+    }
+
+    async function initializeUpload(token, title, folderId) {
+      const response = await fetch(joinUrl(els.apiBase.value, els.initEndpoint.value), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ videoTitle: title, folderId: folderId || undefined })
+      });
+
+      const data = await response.json();
+      log('Upload init response', data);
+
+      if (!response.ok) {
+        throw new Error(data?.error?.message || data?.message || 'Upload init failed');
+      }
+
+      const uploadCredentials = data?.data?.uploadCredentials;
+      if (!uploadCredentials) {
+        throw new Error('No uploadCredentials returned from upload init');
+      }
+
+      return uploadCredentials;
+    }
+
+    async function startUpload() {
+      const token = getToken();
+      const file = els.videoFile.files?.[0];
+      const title = els.videoTitle.value.trim() || file?.name;
+      const folderId = els.folderId.value.trim();
+
+      if (!token) {
+        setStatus(els.uploadStatus, 'Please login first.', 'error');
+        return;
+      }
+
+      if (!file) {
+        setStatus(els.uploadStatus, 'Please choose a video file.', 'error');
+        return;
+      }
+
+      if (!title) {
+        setStatus(els.uploadStatus, 'Video title is required.', 'error');
+        return;
+      }
+
+      try {
+        els.progressBar.value = 0;
+        setStatus(els.uploadStatus, 'Initializing upload...', 'info');
+
+        const creds = await initializeUpload(token, title, folderId);
+        log('Resolved upload credentials', creds);
+
+        setStatus(els.uploadStatus, 'Uploading to Bunny...', 'info');
+
+        const upload = new tus.Upload(file, {
+          endpoint: els.tusEndpoint.value.trim(),
+          retryDelays: [0, 1000, 3000, 5000],
+          chunkSize: 5 * 1024 * 1024,
+          uploadDataDuringCreation: true,
+          removeFingerprintOnSuccess: true,
+          metadata: {
+            filename: file.name,
+            filetype: file.type,
+            title
+          },
+          headers: {
+            AuthorizationSignature: creds.signature,
+            AuthorizationExpire: String(creds.expirationTime),
+            VideoId: creds.videoId,
+            LibraryId: String(creds.libraryId)
+          },
+          onError(error) {
+            log('TUS upload error', String(error));
+            setStatus(els.uploadStatus, `Upload failed: ${error}`, 'error');
+          },
+          onProgress(bytesUploaded, bytesTotal) {
+            const percentage = bytesTotal ? ((bytesUploaded / bytesTotal) * 100).toFixed(2) : '0';
+            els.progressBar.value = Number(percentage);
+            setStatus(els.uploadStatus, `Uploading... ${percentage}%`, 'info');
+          },
+          onSuccess() {
+            els.progressBar.value = 100;
+            log('TUS upload success', {
+              file: file.name,
+              uploadUrl: upload.url,
+              videoId: creds.videoId
+            });
+            setStatus(els.uploadStatus, 'Upload finished. Wait for Bunny webhook processing to mark the video as ready.', 'success');
+          }
+        });
+
+        upload.findPreviousUploads().then((previousUploads) => {
+          if (previousUploads.length > 0) {
+            upload.resumeFromPreviousUpload(previousUploads[0]);
+            log('Resuming previous upload', previousUploads[0]);
+          }
+          upload.start();
+        });
+      } catch (error) {
+        log('Upload flow error', String(error));
+        setStatus(els.uploadStatus, error.message || 'Upload failed.', 'error');
+      }
+    }
+
+    els.loginBtn.addEventListener('click', login);
+    els.clearTokenBtn.addEventListener('click', clearToken);
+    els.uploadBtn.addEventListener('click', startUpload);
+
+    if (getToken()) {
+      setStatus(els.loginStatus, 'Drive token loaded from local storage.', 'success');
+    }
+  </script>
+</body>
+</html>
