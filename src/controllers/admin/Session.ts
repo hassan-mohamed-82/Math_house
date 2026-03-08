@@ -131,10 +131,13 @@ export const createSession = async (req: Request, res: Response) => {
         type,
         groupId,
         teacherId,
+        session_link,
+        material_link,
+        teacher_material_link,
         userIds
     } = req.body;
 
-    if (!name || !sessionDate || !timeFrom || !timeTo || !categoryId || !courseId || !type || !teacherId) {
+    if (!name || !sessionDate || !timeFrom || !timeTo || !categoryId || !courseId || !type || !teacherId || !session_link) {
         throw new BadRequest("Missing required fields");
     }
 
@@ -152,7 +155,10 @@ export const createSession = async (req: Request, res: Response) => {
         lessonName,
         type,
         groupId: type === "group" ? groupId : null,
-        teacherId
+        teacherId,
+        session_link,
+        material_link,
+        teacher_material_link,
     });
 
     let finalUserIds: string[] = userIds || [];
@@ -213,6 +219,9 @@ export const getAllSessions = async (req: Request, res: Response) => {
             groupName: groups.name,
             teacherId: sessions.teacherId,
             teacherName: teachers.name,
+            session_link: sessions.session_link,
+            material_link: sessions.material_link,
+            teacher_material_link: sessions.teacher_material_link,
         })
         .from(sessions)
         .leftJoin(category, eq(sessions.categoryId, category.id))
@@ -248,6 +257,9 @@ export const getSessionById = async (req: Request, res: Response) => {
             groupName: groups.name,
             teacherId: sessions.teacherId,
             teacherName: teachers.name,
+            session_link: sessions.session_link,
+            material_link: sessions.material_link,
+            teacher_material_link: sessions.teacher_material_link,
         })
         .from(sessions)
         .leftJoin(category, eq(sessions.categoryId, category.id))
@@ -299,6 +311,9 @@ export const updateSession = async (req: Request, res: Response) => {
         type,
         groupId,
         teacherId,
+        session_link,
+        material_link,
+        teacher_material_link,
         userIds
     } = req.body;
 
@@ -315,6 +330,9 @@ export const updateSession = async (req: Request, res: Response) => {
             type,
             groupId: type === "group" ? groupId : null,
             teacherId,
+            session_link,
+            material_link,
+            teacher_material_link,
             updatedAt: new Date()
         })
         .where(eq(sessions.id, id));

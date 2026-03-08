@@ -19,8 +19,12 @@ export const sessions = mysqlTable("sessions", {
     type: mysqlEnum("type", ["session", "private", "group"]).notNull(),
     groupId: char("group_id", { length: 36 }).references(() => groups.id), // Optional - لو Type = group
     teacherId: char("teacher_id", { length: 255 }).notNull().references(() => teachers.id),
+    session_link: varchar("session_link", { length: 500 }).notNull(),
+    material_link: varchar("material_link", { length: 500 }),
+    teacher_material_link: varchar("teacher_material_link", { length: 500 }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
+    
 });
 
 // الـ Users/Students اللي في الـ Session

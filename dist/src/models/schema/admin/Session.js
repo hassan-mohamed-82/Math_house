@@ -21,6 +21,9 @@ exports.sessions = (0, mysql_core_1.mysqlTable)("sessions", {
     type: (0, mysql_core_1.mysqlEnum)("type", ["session", "private", "group"]).notNull(),
     groupId: (0, mysql_core_1.char)("group_id", { length: 36 }).references(() => Groups_1.groups.id), // Optional - لو Type = group
     teacherId: (0, mysql_core_1.char)("teacher_id", { length: 255 }).notNull().references(() => teacher_1.teachers.id),
+    session_link: (0, mysql_core_1.varchar)("session_link", { length: 500 }).notNull(),
+    material_link: (0, mysql_core_1.varchar)("material_link", { length: 500 }),
+    teacher_material_link: (0, mysql_core_1.varchar)("teacher_material_link", { length: 500 }),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow(),
 });

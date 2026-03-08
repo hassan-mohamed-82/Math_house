@@ -97,8 +97,8 @@ exports.searchUsers = searchUsers;
 // ===================== SESSIONS CRUD =====================
 // إنشاء Session جديدة
 const createSession = async (req, res) => {
-    const { name, sessionDate, timeFrom, timeTo, categoryId, courseId, lessonId, lessonName, type, groupId, teacherId, userIds } = req.body;
-    if (!name || !sessionDate || !timeFrom || !timeTo || !categoryId || !courseId || !type || !teacherId) {
+    const { name, sessionDate, timeFrom, timeTo, categoryId, courseId, lessonId, lessonName, type, groupId, teacherId, session_link, material_link, teacher_material_link, userIds } = req.body;
+    if (!name || !sessionDate || !timeFrom || !timeTo || !categoryId || !courseId || !type || !teacherId || !session_link) {
         throw new BadRequest_1.BadRequest("Missing required fields");
     }
     const sessionId = (0, crypto_1.randomUUID)();
@@ -114,7 +114,10 @@ const createSession = async (req, res) => {
         lessonName,
         type,
         groupId: type === "group" ? groupId : null,
-        teacherId
+        teacherId,
+        session_link,
+        material_link,
+        teacher_material_link,
     });
     let finalUserIds = userIds || [];
     // لو Type = group و مفيش userIds، نجيب Users الـ Group تلقائياً
@@ -166,6 +169,9 @@ const getAllSessions = async (req, res) => {
         groupName: Groups_1.groups.name,
         teacherId: Session_1.sessions.teacherId,
         teacherName: teacher_1.teachers.name,
+        session_link: Session_1.sessions.session_link,
+        material_link: Session_1.sessions.material_link,
+        teacher_material_link: Session_1.sessions.teacher_material_link,
     })
         .from(Session_1.sessions)
         .leftJoin(category_1.category, (0, drizzle_orm_1.eq)(Session_1.sessions.categoryId, category_1.category.id))
@@ -199,6 +205,9 @@ const getSessionById = async (req, res) => {
         groupName: Groups_1.groups.name,
         teacherId: Session_1.sessions.teacherId,
         teacherName: teacher_1.teachers.name,
+        session_link: Session_1.sessions.session_link,
+        material_link: Session_1.sessions.material_link,
+        teacher_material_link: Session_1.sessions.teacher_material_link,
     })
         .from(Session_1.sessions)
         .leftJoin(category_1.category, (0, drizzle_orm_1.eq)(Session_1.sessions.categoryId, category_1.category.id))
@@ -235,7 +244,7 @@ exports.getSessionById = getSessionById;
 // تحديث Session (مع الـ Users)
 const updateSession = async (req, res) => {
     const { id } = req.params;
-    const { name, sessionDate, timeFrom, timeTo, categoryId, courseId, lessonId, lessonName, type, groupId, teacherId, userIds } = req.body;
+    const { name, sessionDate, timeFrom, timeTo, categoryId, courseId, lessonId, lessonName, type, groupId, teacherId, session_link, material_link, teacher_material_link, userIds } = req.body;
     await connection_1.db.update(Session_1.sessions)
         .set({
         name,
@@ -249,6 +258,9 @@ const updateSession = async (req, res) => {
         type,
         groupId: type === "group" ? groupId : null,
         teacherId,
+        session_link,
+        material_link,
+        teacher_material_link,
         updatedAt: new Date()
     })
         .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, id));
