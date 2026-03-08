@@ -131,7 +131,7 @@ export const createSession = async (req: Request, res: Response) => {
         await tx.insert(sessions).values({
             id: sessionId,
             name,
-            sessionDate: new Date(sessionDate), // تحويل لنوع Date لضمان التوافق مع SQL
+            sessionDate,
             timeFrom,
             timeTo,
             categoryId: categoryId || null,
@@ -258,7 +258,6 @@ export const updateSession = async (req: Request, res: Response) => {
         await tx.update(sessions)
             .set({
                 ...data,
-                sessionDate: data.sessionDate ? new Date(data.sessionDate) : undefined,
                 lessonId: data.lessonId || null,
                 updatedAt: new Date()
             })
