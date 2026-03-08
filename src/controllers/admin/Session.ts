@@ -8,65 +8,31 @@ import { Student } from "../../models/schema/admin/Student";
 import { teachers } from "../../models/schema/admin/teacher";
 import { category } from "../../models/schema/admin/category";
 import { courses } from "../../models/schema/admin/courses";
-import { lessons } from "../../models/schema/admin/lessons";
-import { eq, like, or, sql, and } from "drizzle-orm";
+import { eq, like, or, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
 
-
 // ===================== SELECT OPTIONS =====================
-
-// جلب Groups و Teachers للـ Select dropdowns
 export const selectOptions = async (req: Request, res: Response) => {
     const [groupsList, teachersList, categoriesList, coursesList] = await Promise.all([
-        db.select({
-            id: groups.id,
-            name: groups.name,
-        }).from(groups).where(eq(groups.isActive, true)),
-        db.select({
-            id: teachers.id,
-            name: teachers.name,
-        }).from(teachers),
-        db.select({
-            id: category.id,
-            name: category.name,
-        }).from(category),
-        db.select({
-            id: courses.id,
-            name: courses.name,
-            categoryId: courses.categoryId,
-        }).from(courses),
+        db.select({ id: groups.id, name: groups.name }).from(groups).where(eq(groups.isActive, true)),
+        db.select({ id: teachers.id, name: teachers.name }).from(teachers),
+        db.select({ id: category.id, name: category.name }).from(category),
+        db.select({ id: courses.id, name: courses.name, categoryId: courses.categoryId }).from(courses),
     ]);
 
     SuccessResponse(res, {
-        groups: groupsList.map(g => ({
-            value: g.id,
-            label: g.name
-        })),
-        teachers: teachersList.map(t => ({
-            value: t.id,
-            label: t.name
-        })),
-        categories: categoriesList.map(c => ({
-            value: c.id,
-            label: c.name
-        })),
-        courses: coursesList.map(c => ({
-            value: c.id,
-            label: c.name,
-            categoryId: c.categoryId
-        })),
+        groups: groupsList.map(g => ({ value: g.id, label: g.name })),
+        teachers: teachersList.map(t => ({ value: t.id, label: t.name })),
+        categories: categoriesList.map(c => ({ value: c.id, label: c.name })),
+        courses: coursesList.map(c => ({ value: c.id, label: c.name, categoryId: c.categoryId })),
     });
 };
 
-
 // ===================== USERS APIs =====================
-
-// جلب الـ Users اللي في Group معين (لما تختار Group)
 export const getGroupUsers = async (req: Request, res: Response) => {
     const { groupId } = req.params;
-
     const users = await db
         .select({
             id: Student.id,
@@ -91,7 +57,6 @@ export const getGroupUsers = async (req: Request, res: Response) => {
 
 export const searchUsers = async (req: Request, res: Response) => {
     const { q, excludeIds } = req.query;
-
     const searchValue = (q ?? "").toString().trim().toLowerCase();
     const searchTerm = `%${searchValue}%`;
 
@@ -135,7 +100,6 @@ export const searchUsers = async (req: Request, res: Response) => {
 
 // ===================== SESSIONS CRUD =====================
 
-// إنشاء Session جديدة
 export const createSession = async (req: Request, res: Response) => {
     const {
         name,
@@ -161,63 +125,60 @@ export const createSession = async (req: Request, res: Response) => {
 
     const sessionId = randomUUID();
 
-  await db.insert(sessions).values({
-    id: sessionId,
-    name,
-    sessionDate,
-    timeFrom,
-    timeTo,
-    categoryId,
-    courseId,
-    lessonId: lessonId || null,
-    lessonName,
-    type,
-    groupId: type === "group" ? groupId : null,
-    teacherId,
-    session_link,
-    material_link: material_link || null,
-    teacher_material_link: teacher_material_link || null,
-});
-    let finalUserIds: string[] = userIds || [];
+    // استخدام Transaction لضمان سلامة البيانات
+    await db.transaction(async (tx) => {
+        // 1. إدخال الجلسة مع معالجة القيم الفارغة
+        await tx.insert(sessions).values({
+            id: sessionId,
+            name,
+            sessionDate: new Date(sessionDate), // تحويل لنوع Date لضمان التوافق مع SQL
+            timeFrom,
+            timeTo,
+            categoryId: categoryId || null,
+            courseId: courseId || null,
+            lessonId: (lessonId && lessonId.trim() !== "") ? lessonId : null,
+            lessonName: lessonName || null,
+            type,
+            groupId: type === "group" ? (groupId || null) : null,
+            teacherId,
+            session_link: session_link || null,
+            material_link: material_link || null,
+            teacher_material_link: teacher_material_link || null,
+        });
 
-    // لو Type = group و مفيش userIds، نجيب Users الـ Group تلقائياً
-    if (type === "group" && groupId && (!userIds || userIds.length === 0)) {
-        const groupUsers = await db
-            .select({ studentId: groupStudents.studentId })
-            .from(groupStudents)
-            .where(eq(groupStudents.groupId, groupId));
+        // 2. تحديد المستخدمين المستهدفين
+        let finalUserIds: string[] = userIds || [];
 
-        finalUserIds = groupUsers.map(u => u.studentId);
-    }
+        if (type === "group" && groupId && finalUserIds.length === 0) {
+            const groupUsersList = await tx
+                .select({ studentId: groupStudents.studentId })
+                .from(groupStudents)
+                .where(eq(groupStudents.groupId, groupId));
 
-    if (finalUserIds.length > 0) {
-        const sessionUserRecords = finalUserIds.map((userId: string) => ({
-            sessionId: sessionId,
-            studentId: userId
-        }));
+            finalUserIds = groupUsersList.map(u => u.studentId);
+        }
 
-        await db.insert(sessionUsers).values(sessionUserRecords);
-    }
+        // 3. ربط المستخدمين بالجلسة
+        if (finalUserIds.length > 0) {
+            const sessionUserRecords = finalUserIds.map((uId: string) => ({
+                sessionId: sessionId,
+                studentId: uId
+            }));
+            await tx.insert(sessionUsers).values(sessionUserRecords);
+        }
+    });
 
     SuccessResponse(res, { id: sessionId }, 201);
 };
 
-// جلب كل الـ Sessions مع Filter
 export const getAllSessions = async (req: Request, res: Response) => {
     const { page = 1, limit = 10, date, type, teacherId } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
-
     const conditions = [];
 
-    if (date) {
-        conditions.push(eq(sessions.sessionDate, new Date(date as string)));
-    }
-    if (type) {
-        conditions.push(eq(sessions.type, type as "session" | "private" | "group"));
-    }
-    if (teacherId) {
-        conditions.push(eq(sessions.teacherId, teacherId as string));
-    }
+    if (date) conditions.push(eq(sessions.sessionDate, new Date(date as string)));
+    if (type) conditions.push(eq(sessions.type, type as any));
+    if (teacherId) conditions.push(eq(sessions.teacherId, teacherId as string));
 
     const sessionsList = await db
         .select({
@@ -226,19 +187,13 @@ export const getAllSessions = async (req: Request, res: Response) => {
             sessionDate: sessions.sessionDate,
             timeFrom: sessions.timeFrom,
             timeTo: sessions.timeTo,
-            categoryId: sessions.categoryId,
             categoryName: category.name,
-            courseId: sessions.courseId,
             courseName: courses.name,
             lessonName: sessions.lessonName,
             type: sessions.type,
-            groupId: sessions.groupId,
             groupName: groups.name,
-            teacherId: sessions.teacherId,
             teacherName: teachers.name,
             session_link: sessions.session_link,
-            material_link: sessions.material_link,
-            teacher_material_link: sessions.teacher_material_link,
         })
         .from(sessions)
         .leftJoin(category, eq(sessions.categoryId, category.id))
@@ -253,7 +208,6 @@ export const getAllSessions = async (req: Request, res: Response) => {
     SuccessResponse(res, sessionsList);
 };
 
-// جلب Session واحدة بالـ ID (مع الـ Users)
 export const getSessionById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
@@ -265,38 +219,26 @@ export const getSessionById = async (req: Request, res: Response) => {
             timeFrom: sessions.timeFrom,
             timeTo: sessions.timeTo,
             categoryId: sessions.categoryId,
-            categoryName: category.name,
             courseId: sessions.courseId,
-            courseName: courses.name,
+            lessonId: sessions.lessonId,
             lessonName: sessions.lessonName,
             type: sessions.type,
             groupId: sessions.groupId,
-            groupName: groups.name,
             teacherId: sessions.teacherId,
-            teacherName: teachers.name,
             session_link: sessions.session_link,
             material_link: sessions.material_link,
             teacher_material_link: sessions.teacher_material_link,
         })
         .from(sessions)
-        .leftJoin(category, eq(sessions.categoryId, category.id))
-        .leftJoin(courses, eq(sessions.courseId, courses.id))
-        .leftJoin(groups, eq(sessions.groupId, groups.id))
-        .leftJoin(teachers, eq(sessions.teacherId, teachers.id))
         .where(eq(sessions.id, id));
 
-    if (!session) {
-        throw new NotFound("Session not found");
-    }
+    if (!session) throw new NotFound("Session not found");
 
-    // جلب الـ Users
     const users = await db
         .select({
             id: Student.id,
             firstname: Student.firstname,
             lastname: Student.lastname,
-            nickname: Student.nickname,
-            email: Student.email,
         })
         .from(sessionUsers)
         .innerJoin(Student, eq(sessionUsers.studentId, Student.id))
@@ -304,79 +246,41 @@ export const getSessionById = async (req: Request, res: Response) => {
 
     SuccessResponse(res, {
         ...session,
-        users: users.map(u => ({
-            value: u.id,
-            label: `${u.firstname} ${u.lastname}`,
-            nickname: u.nickname,
-            email: u.email
-        }))
+        users: users.map(u => ({ value: u.id, label: `${u.firstname} ${u.lastname}` }))
     });
 };
 
-// تحديث Session (مع الـ Users)
 export const updateSession = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const {
-        name,
-        sessionDate,
-        timeFrom,
-        timeTo,
-        categoryId,
-        courseId,
-        lessonId,
-        lessonName,
-        type,
-        groupId,
-        teacherId,
-        session_link,
-        material_link,
-        teacher_material_link,
-        userIds
-    } = req.body;
+    const { userIds, ...data } = req.body;
 
-    await db.update(sessions)
-        .set({
-            name,
-            sessionDate,
-            timeFrom,
-            timeTo,
-            categoryId,
-            courseId,
-            lessonId,
-            lessonName,
-            type,
-            groupId: type === "group" ? groupId : null,
-            teacherId,
-            session_link,
-            material_link,
-            teacher_material_link,
-            updatedAt: new Date()
-        })
-        .where(eq(sessions.id, id));
+    await db.transaction(async (tx) => {
+        await tx.update(sessions)
+            .set({
+                ...data,
+                sessionDate: data.sessionDate ? new Date(data.sessionDate) : undefined,
+                lessonId: data.lessonId || null,
+                updatedAt: new Date()
+            })
+            .where(eq(sessions.id, id));
 
-    // تحديث الـ Users
-    if (userIds !== undefined) {
-        await db.delete(sessionUsers).where(eq(sessionUsers.sessionId, id));
-
-        if (userIds.length > 0) {
-            const sessionUserRecords = userIds.map((userId: string) => ({
-                sessionId: id,
-                studentId: userId
-            }));
-
-            await db.insert(sessionUsers).values(sessionUserRecords);
+        if (userIds !== undefined) {
+            await tx.delete(sessionUsers).where(eq(sessionUsers.sessionId, id));
+            if (userIds.length > 0) {
+                const records = userIds.map((uId: string) => ({ sessionId: id, studentId: uId }));
+                await tx.insert(sessionUsers).values(records);
+            }
         }
-    }
+    });
 
     SuccessResponse(res, { message: "Session updated successfully" });
 };
 
-// حذف Session
 export const deleteSession = async (req: Request, res: Response) => {
     const { id } = req.params;
-
-    await db.delete(sessionUsers).where(eq(sessionUsers.sessionId, id));
-    await db.delete(sessions).where(eq(sessions.id, id));
-
+    await db.transaction(async (tx) => {
+        await tx.delete(sessionUsers).where(eq(sessionUsers.sessionId, id));
+        await tx.delete(sessions).where(eq(sessions.id, id));
+    });
     SuccessResponse(res, { message: "Session deleted successfully" });
 };
