@@ -15,7 +15,8 @@ router.post('/auth/login', auth_1.login);
 router.post('/upload/init', authenticated_1.authenticated, (0, authorized_1.authorizeRoles)('admin'), superAdmin_1.requireDriveSuperAdmin, controller_1.initializeVideoUpload);
 // [Placeholder] 2. Standard Drive CRUD operations for the Admin
 // An admin needs to be able to fetch the virtual folders and delete mistakes.
-router.get('/folders/:folderId?', authenticated_1.authenticated, (0, authorized_1.authorizeRoles)('admin'), superAdmin_1.requireDriveSuperAdmin, controller_1.getDriveContents);
+router.get('/folders', authenticated_1.authenticated, (0, authorized_1.authorizeRoles)('admin'), superAdmin_1.requireDriveSuperAdmin, controller_1.getDriveContents);
+router.get('/folders/:folderId', authenticated_1.authenticated, (0, authorized_1.authorizeRoles)('admin'), superAdmin_1.requireDriveSuperAdmin, controller_1.getDriveContents);
 router.post('/folders', authenticated_1.authenticated, (0, authorized_1.authorizeRoles)('admin'), superAdmin_1.requireDriveSuperAdmin, controller_1.createFolder);
 router.delete('/folders/:folderId', authenticated_1.authenticated, (0, authorized_1.authorizeRoles)('admin'), superAdmin_1.requireDriveSuperAdmin, controller_1.deleteFolder);
 router.delete('/files/:videoId', authenticated_1.authenticated, (0, authorized_1.authorizeRoles)('admin'), superAdmin_1.requireDriveSuperAdmin, controller_1.deleteVideo);
