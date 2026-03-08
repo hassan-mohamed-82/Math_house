@@ -14,7 +14,9 @@ async function saveBase64Image(base64, req, folder) {
     let ext = "png";
     let data = base64;
     if (matches && matches.length === 3) {
-        ext = matches[1].split("/")[1];
+        const rawExt = matches[1].split("/")[1];
+        // Sanitize extension to prevent path traversal
+        ext = rawExt.replace(/[^a-zA-Z0-9]/g, "") || "png";
         data = matches[2];
     }
     const buffer = Buffer.from(data, "base64");

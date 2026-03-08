@@ -13,9 +13,10 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const uuid_1 = require("uuid");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
+const handleImages_1 = require("../../utils/handleImages");
 const JWT_SECRET = process.env.JWT_SECRET;
 const createStudent = async (req, res) => {
-    const { firstname, lastname, nickname, email, password, phone, category: categoryId, grade, parentphone } = req.body;
+    const { firstname, lastname, nickname, email, password, phone, category: categoryId, grade, parentphone, avatar, } = req.body;
     if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade || !parentphone) {
         throw new BadRequest_1.BadRequest("all fields are required");
     }
@@ -38,6 +39,7 @@ const createStudent = async (req, res) => {
     }
     const hashedPassword = await bcrypt_1.default.hash(password, 10);
     const id = (0, uuid_1.v4)();
+    const imgUrl = avatar ? await (0, handleImages_1.validateAndSaveLogo)(req, avatar, "students") : null;
     await connection_1.db.transaction(async (tx) => {
         await tx.insert(schema_1.Student).values({
             id,
@@ -50,7 +52,8 @@ const createStudent = async (req, res) => {
             category: categoryId,
             grade,
             parentphone,
-            isVerified: true
+            isVerified: true,
+            avatar: imgUrl
         });
         await tx.insert(schema_1.wallet).values({
             studentId: id,
@@ -66,6 +69,7 @@ const getAllStudents = async (req, res) => {
     let query = connection_1.db
         .select({
         id: schema_1.Student.id,
+        avatar: schema_1.Student.avatar,
         firstname: schema_1.Student.firstname,
         lastname: schema_1.Student.lastname,
         nickname: schema_1.Student.nickname,
@@ -97,6 +101,7 @@ const getAllStudents = async (req, res) => {
         category: s.category,
         categoryName: s.categoryName,
         grade: s.grade,
+        avatar: s.avatar,
         paymentStatus: "Free" // هتحتاج تعدلها حسب الـ Logic بتاعك
     }));
     (0, response_1.SuccessResponse)(res, { message: "get all students success", data: formattedStudents });
@@ -110,6 +115,7 @@ const getStudentById = async (req, res) => {
     const [student] = await connection_1.db
         .select({
         id: schema_1.Student.id,
+        avatar: schema_1.Student.avatar,
         firstname: schema_1.Student.firstname,
         lastname: schema_1.Student.lastname,
         nickname: schema_1.Student.nickname,
@@ -131,7 +137,7 @@ const getStudentById = async (req, res) => {
 exports.getStudentById = getStudentById;
 const updateStudent = async (req, res) => {
     const { id } = req.params;
-    const { firstname, lastname, nickname, email, phone, category: categoryId, grade, parentphone, oldPassword, newPassword } = req.body;
+    const { firstname, lastname, nickname, email, phone, category: categoryId, grade, parentphone, oldPassword, newPassword, avatar } = req.body;
     if (!id) {
         throw new BadRequest_1.BadRequest("id is required");
     }
@@ -163,6 +169,10 @@ const updateStudent = async (req, res) => {
             throw new BadRequest_1.BadRequest("student must be assigned to a main category only");
         }
     }
+    let ImgUrl;
+    if (avatar) {
+        ImgUrl = await (0, handleImages_1.handleImageUpdate)(req, existingStudent[0].avatar, avatar, "students");
+    }
     const updateData = {};
     if (firstname)
         updateData.firstname = firstname;
@@ -176,6 +186,8 @@ const updateStudent = async (req, res) => {
         updateData.phone = phone;
     if (categoryId)
         updateData.category = categoryId;
+    if (avatar)
+        updateData.avatar = ImgUrl;
     if (grade)
         updateData.grade = grade;
     if (parentphone)
@@ -212,6 +224,9 @@ const deleteStudent = async (req, res) => {
     if (student.length === 0) {
         throw new NotFound_1.NotFound("student not found");
     }
+    if (student[0].avatar) {
+        await (0, handleImages_1.deleteImage)(student[0].avatar);
+    }
     await connection_1.db.delete(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, id));
     (0, response_1.SuccessResponse)(res, { message: "delete student success" });
 };
@@ -224,6 +239,7 @@ const getStudentsByCategory = async (req, res) => {
     const students = await connection_1.db
         .select({
         id: schema_1.Student.id,
+        avatar: schema_1.Student.avatar,
         firstname: schema_1.Student.firstname,
         lastname: schema_1.Student.lastname,
         nickname: schema_1.Student.nickname,
@@ -246,6 +262,7 @@ const getStudentsByGrade = async (req, res) => {
     const students = await connection_1.db
         .select({
         id: schema_1.Student.id,
+        avatar: schema_1.Student.avatar,
         firstname: schema_1.Student.firstname,
         lastname: schema_1.Student.lastname,
         nickname: schema_1.Student.nickname,

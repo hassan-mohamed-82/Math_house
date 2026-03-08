@@ -16,4 +16,5 @@ exports.Student = (0, mysql_core_1.mysqlTable)("student", {
     grade: (0, mysql_core_1.mysqlEnum)("grade", ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"]).notNull(),
     parentphone: (0, mysql_core_1.varchar)("parent_phone", { length: 255 }),
     isVerified: (0, mysql_core_1.boolean)("is_verified").notNull().default(false),
+    avatar: (0, mysql_core_1.varchar)("avatar", { length: 255 }),
 });

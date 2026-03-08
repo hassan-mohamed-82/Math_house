@@ -9,9 +9,10 @@ const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const drizzle_orm_1 = require("drizzle-orm");
 const sendEmails_1 = require("../../utils/sendEmails");
+const handleImages_1 = require("../../utils/handleImages");
 const renderVerificationPage = ({ title, message, statusCode = 200, }) => `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${title}</title></head><body style="font-family: Segoe UI, Arial, sans-serif; background:#fff5f5; margin:0; padding:40px 16px;"><div style="max-width:560px; margin:0 auto; background:#ffffff; border:1px solid #f2d6d9; border-radius:24px; padding:32px; text-align:center; box-shadow:0 18px 60px rgba(215, 25, 40, 0.14);"><h1 style="color:#d71928; margin:0 0 12px;">${title}</h1><p style="color:#4b5563; margin:0; font-size:16px; line-height:1.7;">${message}</p><p style="display:none">${statusCode}</p></div></body></html>`;
 const studentSignup = async (req, res) => {
-    const { firstname, lastname, nickname, email, password, phone, category: categoryId, grade, } = req.body;
+    const { firstname, lastname, nickname, email, password, phone, category: categoryId, grade, avatar, } = req.body;
     if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade) {
         throw new Errors_1.BadRequest("All required fields must be provided");
     }
@@ -34,6 +35,7 @@ const studentSignup = async (req, res) => {
         throw new Errors_1.BadRequest("Student must be assigned to a main category only");
     }
     const hashedPassword = await (0, bcrypt_1.hash)(password, 10);
+    const avatarUrl = avatar ? await (0, handleImages_1.validateAndSaveLogo)(req, avatar, "students") : null;
     let createdStudentId = "";
     await connection_1.db.transaction(async (tx) => {
         await tx.insert(schema_1.Student).values({
@@ -46,6 +48,7 @@ const studentSignup = async (req, res) => {
             category: categoryId,
             grade,
             isVerified: false,
+            avatar: avatarUrl,
         });
         const [createdStudent] = await tx
             .select({ id: schema_1.Student.id })
@@ -72,6 +75,9 @@ const studentSignup = async (req, res) => {
             await tx.delete(schema_1.wallet).where((0, drizzle_orm_1.eq)(schema_1.wallet.studentId, createdStudentId));
             await tx.delete(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, createdStudentId));
         });
+        if (avatarUrl) {
+            await (0, handleImages_1.deleteImage)(avatarUrl).catch(() => { });
+        }
         throw error;
     }
     return (0, response_1.SuccessResponse)(res, {
@@ -96,6 +102,7 @@ const studentLogin = async (req, res) => {
         category: schema_1.Student.category,
         categoryName: schema_1.category.name,
         grade: schema_1.Student.grade,
+        avatar: schema_1.Student.avatar,
     })
         .from(schema_1.Student)
         .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.Student.category, schema_1.category.id))
@@ -129,7 +136,8 @@ const studentLogin = async (req, res) => {
                 id: student.category,
                 name: student.categoryName,
             },
-            grade: student.grade
+            grade: student.grade,
+            avatar: student.avatar,
         }
     }, 200);
 };

@@ -10,6 +10,7 @@ const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const Errors_1 = require("../../Errors");
 const response_1 = require("../../utils/response");
+const handleImages_1 = require("../../utils/handleImages");
 const getAuthenticatedStudentId = (req) => {
     if (!req.user?.id) {
         throw new Errors_1.UnauthorizedError("Not authenticated");
@@ -41,6 +42,7 @@ const getStudentProfileData = async (studentId) => {
         phone: schema_1.Student.phone,
         parentphone: schema_1.Student.parentphone,
         grade: schema_1.Student.grade,
+        avatar: schema_1.Student.avatar,
         categoryId: schema_1.Student.category,
         categoryName: schema_1.category.name,
     })
@@ -61,6 +63,7 @@ const getStudentProfileData = async (studentId) => {
         phone: student.phone,
         parentphone: student.parentphone,
         grade: student.grade,
+        avatar: student.avatar,
         category: {
             id: student.categoryId,
             name: student.categoryName,
@@ -81,7 +84,7 @@ const getMyProfile = async (req, res) => {
 exports.getMyProfile = getMyProfile;
 const updateMyProfile = async (req, res) => {
     const studentId = getAuthenticatedStudentId(req);
-    const { firstname, lastname, nickname, email, phone, parentphone } = req.body;
+    const { firstname, lastname, nickname, email, phone, parentphone, avatar } = req.body;
     const [existingStudent] = await connection_1.db
         .select()
         .from(schema_1.Student)
@@ -111,6 +114,10 @@ const updateMyProfile = async (req, res) => {
         updateData.phone = phone;
     if (parentphone)
         updateData.parentphone = parentphone;
+    if (avatar !== undefined) {
+        const avatarUrl = await (0, handleImages_1.handleImageUpdate)(req, existingStudent.avatar, avatar, "students");
+        updateData.avatar = avatarUrl;
+    }
     if (Object.keys(updateData).length === 0) {
         const profile = await getStudentProfileData(studentId);
         return (0, response_1.SuccessResponse)(res, {
