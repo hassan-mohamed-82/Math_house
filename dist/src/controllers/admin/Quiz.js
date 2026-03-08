@@ -408,33 +408,21 @@ const toggleQuizActive = async (req, res) => {
 };
 exports.toggleQuizActive = toggleQuizActive;
 // Helper: Get lesson IDs based on selection
-const getLessonIds = async (categoryId, courseId, chapterId, lessonId) => {
+const getLessonIds = async (lessonId) => {
     if (lessonId) {
         return [lessonId];
     }
     let query = connection_1.db.select({ id: schema_6.lessons.id }).from(schema_6.lessons);
-    if (chapterId) {
-        const result = await query.where((0, drizzle_orm_1.eq)(schema_6.lessons.chapterId, chapterId));
-        return result.map(l => l.id);
-    }
-    if (courseId) {
-        const result = await query.where((0, drizzle_orm_1.eq)(schema_6.lessons.courseId, courseId));
-        return result.map(l => l.id);
-    }
-    if (categoryId) {
-        const result = await query.where((0, drizzle_orm_1.eq)(schema_6.lessons.categoryId, categoryId));
-        return result.map(l => l.id);
-    }
     return [];
 };
 const getQuestionsBank = async (req, res) => {
-    const { categoryId, courseId, chapterId, lessonId, type, year, month, section, codeId, difficulty, page = 1, limit = 20 } = req.query;
+    const { lessonId, type, year, month, section, codeId, difficulty, page = 1, limit = 20 } = req.query;
     // Validation
-    if (!categoryId && !courseId && !chapterId && !lessonId) {
-        throw new BadRequest_1.BadRequest("Please select categoryId, courseId, chapterId, or lessonId");
+    if (!lessonId) {
+        throw new BadRequest_1.BadRequest("Please select lessonId");
     }
     // Get lesson IDs based on selection
-    const lessonIds = await getLessonIds(categoryId, courseId, chapterId, lessonId);
+    const lessonIds = await getLessonIds(lessonId);
     if (lessonIds.length === 0) {
         return (0, response_1.SuccessResponse)(res, {
             message: "No lessons found for this selection",

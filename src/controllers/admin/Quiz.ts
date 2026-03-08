@@ -474,9 +474,7 @@ export const toggleQuizActive = async (req: Request, res: Response) => {
 
 // Helper: Get lesson IDs based on selection
 const getLessonIds = async (
-    categoryId?: string,
-    courseId?: string,
-    chapterId?: string,
+   
     lessonId?: string
 ): Promise<string[]> => {
     if (lessonId) {
@@ -485,29 +483,13 @@ const getLessonIds = async (
 
     let query = db.select({ id: lessons.id }).from(lessons);
 
-    if (chapterId) {
-        const result = await query.where(eq(lessons.chapterId, chapterId));
-        return result.map(l => l.id);
-    }
-
-    if (courseId) {
-        const result = await query.where(eq(lessons.courseId, courseId));
-        return result.map(l => l.id);
-    }
-
-    if (categoryId) {
-        const result = await query.where(eq(lessons.categoryId, categoryId));
-        return result.map(l => l.id);
-    }
 
     return [];
 };
 
 export const getQuestionsBank = async (req: Request, res: Response) => {
     const {
-        categoryId,
-        courseId,
-        chapterId,
+        
         lessonId,
         type,
         year,
@@ -520,15 +502,13 @@ export const getQuestionsBank = async (req: Request, res: Response) => {
     } = req.query;
 
     // Validation
-    if (!categoryId && !courseId && !chapterId && !lessonId) {
-        throw new BadRequest("Please select categoryId, courseId, chapterId, or lessonId");
+    if (!lessonId) {
+        throw new BadRequest("Please select lessonId");
     }
 
     // Get lesson IDs based on selection
     const lessonIds = await getLessonIds(
-        categoryId as string,
-        courseId as string,
-        chapterId as string,
+     
         lessonId as string
     );
 
