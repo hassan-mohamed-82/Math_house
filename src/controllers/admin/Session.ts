@@ -155,30 +155,29 @@ export const createSession = async (req: Request, res: Response) => {
         userIds
     } = req.body;
 
-    if (!name || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !session_link) {
+    if (!name || !sessionDate || !timeFrom || !timeTo || !type || !teacherId) {
         throw new BadRequest("Missing required fields");
     }
 
     const sessionId = randomUUID();
 
-    await db.insert(sessions).values({
-        id: sessionId,
-        name,
-        sessionDate,
-        timeFrom,
-        timeTo,
-        categoryId,
-        courseId,
-        lessonId,
-        lessonName,
-        type,
-        groupId: type === "group" ? groupId : null,
-        teacherId,
-        session_link,
-        material_link,
-        teacher_material_link,
-    });
-
+  await db.insert(sessions).values({
+    id: sessionId,
+    name,
+    sessionDate,
+    timeFrom,
+    timeTo,
+    categoryId,
+    courseId,
+    lessonId: lessonId || null,
+    lessonName,
+    type,
+    groupId: type === "group" ? groupId : null,
+    teacherId,
+    session_link,
+    material_link: material_link || null,
+    teacher_material_link: teacher_material_link || null,
+});
     let finalUserIds: string[] = userIds || [];
 
     // لو Type = group و مفيش userIds، نجيب Users الـ Group تلقائياً
