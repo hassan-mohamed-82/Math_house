@@ -1,12 +1,12 @@
 import { Request, Response } from 'express';
 import { BadRequest } from '../../Errors';
 import { db } from '../../models/connection';
-import { payment, Student, wallet, walletTransaction } from '../../models/schema';
+import { payment, paymentMethod, Student, wallet, walletTransaction } from '../../models/schema';
 import { and, count, desc, eq, like, or, sql } from 'drizzle-orm';
 import { SuccessResponse } from '../../utils/response';
 
 export const replyToRechargeRequest = async (req: Request, res: Response) => {
-    const { paymentId } = req.params;
+    const paymentId = req.params.paymentId || req.params.id;
     const { action } = req.body;
 
     if (!paymentId) {
@@ -16,12 +16,28 @@ export const replyToRechargeRequest = async (req: Request, res: Response) => {
         throw new BadRequest("Action must be either 'approve' or 'reject'");
     }
     const [existingPayment] = await db
-        .select({ id: payment.id, status: payment.status, amount: payment.amount , studentId: payment.studentId})
+        .select({
+            id: payment.id,
+            status: payment.status,
+            amount: payment.amount,
+            studentId: payment.studentId,
+            paymentMethodId: payment.paymentMethodId,
+        })
         .from(payment)
         .where(eq(payment.id, paymentId))
         .limit(1);
     if (!existingPayment) {
         throw new BadRequest("Payment request not found");
+    }
+
+    const [existingPaymentMethod] = await db
+        .select({ type: paymentMethod.type })
+        .from(paymentMethod)
+        .where(eq(paymentMethod.id, existingPayment.paymentMethodId))
+        .limit(1);
+
+    if (existingPaymentMethod?.type === 'Automatic') {
+        throw new BadRequest('Automatic payments should be processed through the payment gateway callback');
     }
 
     if (existingPayment.status !== 'pending') {
@@ -59,7 +75,23 @@ export const replyToRechargeRequest = async (req: Request, res: Response) => {
 
         await db.update(wallet)
             .set({ balance: sql`${wallet.balance} + ${amountToAdd}` })
-            .where(eq(wallet.studentId, studentId)); 
+            .where(eq(wallet.studentId, studentId));
+
+        const [existingWalletTransaction] = await db
+            .select({ id: walletTransaction.id })
+            .from(walletTransaction)
+            .where(eq(walletTransaction.paymentId, paymentId))
+            .limit(1);
+
+        if (!existingWalletTransaction) {
+            await db.insert(walletTransaction).values({
+                walletId: existingWallet.id,
+                paymentId,
+                amount: amountToAdd,
+                type: 'deposit',
+                source: 'Student'
+            });
+        }
     }
     return SuccessResponse(res, { message: `Payment request has been ${newStatus}` });
 };

@@ -7,7 +7,7 @@ const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const replyToRechargeRequest = async (req, res) => {
-    const { paymentId } = req.params;
+    const paymentId = req.params.paymentId || req.params.id;
     const { action } = req.body;
     if (!paymentId) {
         throw new Errors_1.BadRequest("Payment ID is required");
@@ -16,12 +16,26 @@ const replyToRechargeRequest = async (req, res) => {
         throw new Errors_1.BadRequest("Action must be either 'approve' or 'reject'");
     }
     const [existingPayment] = await connection_1.db
-        .select({ id: schema_1.payment.id, status: schema_1.payment.status, amount: schema_1.payment.amount, studentId: schema_1.payment.studentId })
+        .select({
+        id: schema_1.payment.id,
+        status: schema_1.payment.status,
+        amount: schema_1.payment.amount,
+        studentId: schema_1.payment.studentId,
+        paymentMethodId: schema_1.payment.paymentMethodId,
+    })
         .from(schema_1.payment)
         .where((0, drizzle_orm_1.eq)(schema_1.payment.id, paymentId))
         .limit(1);
     if (!existingPayment) {
         throw new Errors_1.BadRequest("Payment request not found");
+    }
+    const [existingPaymentMethod] = await connection_1.db
+        .select({ type: schema_1.paymentMethod.type })
+        .from(schema_1.paymentMethod)
+        .where((0, drizzle_orm_1.eq)(schema_1.paymentMethod.id, existingPayment.paymentMethodId))
+        .limit(1);
+    if (existingPaymentMethod?.type === 'Automatic') {
+        throw new Errors_1.BadRequest('Automatic payments should be processed through the payment gateway callback');
     }
     if (existingPayment.status !== 'pending') {
         throw new Errors_1.BadRequest("Only pending payment requests can be processed");
@@ -51,6 +65,20 @@ const replyToRechargeRequest = async (req, res) => {
         await connection_1.db.update(schema_1.wallet)
             .set({ balance: (0, drizzle_orm_1.sql) `${schema_1.wallet.balance} + ${amountToAdd}` })
             .where((0, drizzle_orm_1.eq)(schema_1.wallet.studentId, studentId));
+        const [existingWalletTransaction] = await connection_1.db
+            .select({ id: schema_1.walletTransaction.id })
+            .from(schema_1.walletTransaction)
+            .where((0, drizzle_orm_1.eq)(schema_1.walletTransaction.paymentId, paymentId))
+            .limit(1);
+        if (!existingWalletTransaction) {
+            await connection_1.db.insert(schema_1.walletTransaction).values({
+                walletId: existingWallet.id,
+                paymentId,
+                amount: amountToAdd,
+                type: 'deposit',
+                source: 'Student'
+            });
+        }
     }
     return (0, response_1.SuccessResponse)(res, { message: `Payment request has been ${newStatus}` });
 };

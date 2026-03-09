@@ -52,7 +52,7 @@ Base path: `/api/user/wallet`
 
 **`POST /api/user/wallet/recharge`**
 
-Creates a wallet recharge request for the authenticated student.
+Creates a manual wallet recharge request for the authenticated student.
 
 **Request Body:**
 
@@ -65,6 +65,7 @@ Creates a wallet recharge request for the authenticated student.
 **Important Behavior:**
 
 - `receiptImg` is always required
+- this endpoint only supports payment methods whose type is `Manual`
 - receipt images are stored and saved as a URL in `payment.receiptImg`
 - the student must have a linked parent account through `parentphone`
 - the created payment record is stored with:
@@ -100,6 +101,7 @@ Creates a wallet recharge request for the authenticated student.
 | `400` | Payment method, amount, and receipt image are required |
 | `400` | Amount must be greater than zero |
 | `400` | Payment method is not active |
+| `400` | Use the automatic recharge endpoint for automatic payment methods |
 | `401` | Student not logged in |
 | `404` | Payment method not found |
 | `404` | Student not found |
@@ -107,7 +109,69 @@ Creates a wallet recharge request for the authenticated student.
 
 ---
 
-### 2. Get Wallet Transactions
+### 2. Initialize Automatic Wallet Recharge
+
+**`POST /api/user/wallet/recharge/automatic`**
+
+Creates a Paymob checkout session for automatic payment methods.
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `paymentMethodId` | string | ✅ | Automatic payment method ID |
+| `amount` | number | ✅ | Recharge amount, must be greater than `0` |
+
+**Important Behavior:**
+
+- this endpoint only supports payment methods whose type is `Automatic`
+- the current automatic gateway implementation supports `Paymob`
+- a pending payment row is created before the checkout session is returned
+- on successful Paymob callback, the payment is marked as `completed` and the wallet is credited automatically
+
+**Sample Request:**
+
+```json
+{
+	"paymentMethodId": "pm_paymob_uuid",
+	"amount": 250
+}
+```
+
+**Success Response (201):**
+
+```json
+{
+	"success": true,
+	"data": {
+		"message": "Automatic payment session created successfully",
+		"paymentId": "payment_uuid",
+		"paymentMethod": "Paymob",
+		"checkoutUrl": "https://accept.paymob.com/api/acceptance/iframes/...",
+		"iframeUrl": "https://accept.paymob.com/api/acceptance/iframes/...",
+		"paymobOrderId": 123456789,
+		"callbackUrl": "http://localhost:3000/api/payment/paymob/callback"
+	}
+}
+```
+
+**Error Responses:**
+
+| Status | Condition |
+| --- | --- |
+| `400` | Payment method and amount are required |
+| `400` | Amount must be greater than zero |
+| `400` | Payment method is not active |
+| `400` | Selected payment method is not an automatic payment method |
+| `400` | Automatic payments are currently available only through Paymob |
+| `400` | Failed to initialize automatic payment |
+| `401` | Student not logged in |
+| `404` | Payment method not found |
+| `404` | Student not found |
+
+---
+
+### 3. Get Wallet Transactions
 
 **`GET /api/user/wallet/transactions`**
 
@@ -173,11 +237,44 @@ GET /api/user/wallet/transactions?page=1&limit=10&search=deposit
 
 ---
 
+## Public Payment Callback Endpoint
+
+### 4. Paymob Callback
+
+**`GET /api/payment/paymob/callback`**
+
+**`POST /api/payment/paymob/callback`**
+
+Public endpoint used by Paymob to finalize automatic wallet payments.
+
+**Important Behavior:**
+
+- validates the Paymob HMAC signature when `PAYMOB_HMAC` is configured
+- identifies the local payment using Paymob `merchant_order_id`
+- marks the payment as `completed` on success
+- marks the payment as `rejected` on failure
+- credits the wallet only once even if Paymob retries the callback
+
+**Success Response (200):**
+
+```json
+{
+	"success": true,
+	"data": {
+		"message": "Automatic payment completed successfully",
+		"paymentId": "payment_uuid",
+		"status": "completed"
+	}
+}
+```
+
+---
+
 ## Admin Payment Endpoints
 
 Base path: `/api/admin/payment`
 
-### 3. Get Recharge Requests
+### 5. Get Recharge Requests
 
 **`GET /api/admin/payment/recharge-requests`**
 
@@ -259,7 +356,7 @@ This endpoint currently has no explicit custom validation errors in the controll
 
 ---
 
-### 4. Reply to Recharge Request
+### 6. Reply to Recharge Request
 
 **`POST /api/admin/payment/recharge/:id/reply`**
 
@@ -304,6 +401,11 @@ Approves or rejects a pending recharge request.
 	- `type = "deposit"`
 	- `source = "Student"`
 
+**Restriction:**
+
+- automatic payments cannot be approved manually from this endpoint
+- automatic payments must be finalized through the Paymob callback route
+
 **Behavior on Rejection:**
 
 - payment status becomes `rejected`
@@ -316,6 +418,7 @@ Approves or rejects a pending recharge request.
 | `400` | Payment ID is required |
 | `400` | Action must be either `approve` or `reject` |
 | `400` | Payment request not found |
+| `400` | Automatic payments should be processed through the payment gateway callback |
 | `400` | Only pending payment requests can be processed |
 | `400` | Associated student not found for this payment |
 | `400` | Amount must be greater than zero to add to wallet |
@@ -327,8 +430,11 @@ Approves or rejects a pending recharge request.
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/api/user/wallet/recharge` | Student creates a wallet recharge request |
+| `POST` | `/api/user/wallet/recharge` | Student creates a manual wallet recharge request |
+| `POST` | `/api/user/wallet/recharge/automatic` | Student initializes a Paymob automatic recharge session |
 | `GET` | `/api/user/wallet/transactions` | Student gets paginated wallet transactions |
+| `GET` | `/api/payment/paymob/callback` | Paymob callback endpoint |
+| `POST` | `/api/payment/paymob/callback` | Paymob webhook endpoint |
 | `GET` | `/api/admin/payment/recharge-requests` | Admin gets grouped recharge requests |
 | `POST` | `/api/admin/payment/recharge/:id/reply` | Admin approves or rejects a recharge request |
 
