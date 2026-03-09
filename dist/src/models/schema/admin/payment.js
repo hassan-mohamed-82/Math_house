@@ -14,5 +14,8 @@ exports.payment = (0, mysql_core_1.mysqlTable)("payment", {
     studentId: (0, mysql_core_1.char)("studentId", { length: 36 }).references(() => Student_1.Student.id),
     parentId: (0, mysql_core_1.char)("parentId", { length: 255 }).references(() => parent_1.parents.id),
     status: (0, mysql_core_2.mysqlEnum)("status", ["pending", "completed", "rejected"]).notNull().default("pending"),
+    receiptImg: (0, mysql_core_1.char)("receiptImg", { length: 255 }),
+    source: (0, mysql_core_2.mysqlEnum)("source", ["student", "parent"]).notNull(),
+    purpose: (0, mysql_core_2.mysqlEnum)("purpose", ["wallet_recharge", "course_purchase"]).notNull(),
     createdAt: (0, mysql_core_1.timestamp)("createdAt").defaultNow(),
 });

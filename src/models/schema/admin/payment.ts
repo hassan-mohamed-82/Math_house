@@ -12,5 +12,8 @@ export const payment = mysqlTable("payment", {
     studentId: char("studentId", { length: 36 }).references(() => Student.id),
     parentId: char("parentId", { length: 255 }).references(() => parents.id),
     status: mysqlEnum("status", ["pending", "completed", "rejected"]).notNull().default("pending"),
+    receiptImg: char("receiptImg", { length: 255 }),
+    source: mysqlEnum("source", ["student", "parent"]).notNull(),
+    purpose: mysqlEnum("purpose", ["wallet_recharge", "course_purchase"]).notNull(),
     createdAt: timestamp("createdAt").defaultNow(),
 });

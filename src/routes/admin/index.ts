@@ -27,6 +27,7 @@ import examsRouter from "./exams"
 import currencyRouter from "./currency"
 import promoCodesRouter from "./promoCodes"
 import paymentMethodRouter from "./paymentMethod"
+import paymentRouter from "./payment"
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import authRouter from "./auth"
@@ -62,4 +63,5 @@ router.use("/exams", examsRouter)
 router.use("/currency", currencyRouter)
 router.use("/promoCodes", promoCodesRouter)
 router.use("/paymentMethod", paymentMethodRouter)
+router.use("/payment", paymentRouter)
 export default router
