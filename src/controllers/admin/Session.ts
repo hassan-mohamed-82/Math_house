@@ -8,6 +8,7 @@ import { Student } from "../../models/schema/admin/Student";
 import { teachers } from "../../models/schema/admin/teacher";
 import { category } from "../../models/schema/admin/category";
 import { courses } from "../../models/schema/admin/courses";
+import { lessons } from "../../models/schema/admin/lessons";
 import { eq, like, or, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -118,9 +119,80 @@ export const createSession = async (req: Request, res: Response) => {
         userIds
     } = req.body;
 
+    const trimmedName = typeof name === "string" ? name.trim() : "";
+    const trimmedLessonId = typeof lessonId === "string" ? lessonId.trim() : "";
+    const trimmedLessonName = typeof lessonName === "string" ? lessonName.trim() : "";
+    const trimmedGroupId = typeof groupId === "string" ? groupId.trim() : "";
+    const trimmedSessionLink = typeof session_link === "string" ? session_link.trim() : "";
+    const trimmedMaterialLink = typeof material_link === "string" ? material_link.trim() : "";
+    const trimmedTeacherMaterialLink = typeof teacher_material_link === "string" ? teacher_material_link.trim() : "";
+
     // Validation for NOT NULL fields
-    if (!name || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !categoryId || !courseId || !session_link) {
+    if (!trimmedName || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !categoryId || !courseId || !trimmedSessionLink) {
         throw new BadRequest("Missing required fields (Check categoryId, courseId, or session_link)");
+    }
+
+    if (!["session", "private", "group"].includes(type)) {
+        throw new BadRequest("Invalid session type");
+    }
+
+    if (type === "group" && !trimmedGroupId) {
+        throw new BadRequest("groupId is required for group sessions");
+    }
+
+    if (userIds !== undefined && !Array.isArray(userIds)) {
+        throw new BadRequest("userIds must be an array of student ids");
+    }
+
+    const parsedSessionDate = new Date(sessionDate);
+    if (Number.isNaN(parsedSessionDate.getTime())) {
+        throw new BadRequest("Invalid sessionDate");
+    }
+
+    const [existingCategory, existingCourse, existingTeacher, existingGroup, existingLesson] = await Promise.all([
+        db.select({ id: category.id }).from(category).where(eq(category.id, categoryId)).limit(1),
+        db.select({ id: courses.id, categoryId: courses.categoryId }).from(courses).where(eq(courses.id, courseId)).limit(1),
+        db.select({ id: teachers.id }).from(teachers).where(eq(teachers.id, teacherId)).limit(1),
+        type === "group" && trimmedGroupId
+            ? db.select({ id: groups.id }).from(groups).where(eq(groups.id, trimmedGroupId)).limit(1)
+            : Promise.resolve([]),
+        trimmedLessonId
+            ? db.select({ id: lessons.id, categoryId: lessons.categoryId, courseId: lessons.courseId }).from(lessons).where(eq(lessons.id, trimmedLessonId)).limit(1)
+            : Promise.resolve([]),
+    ]);
+
+    if (existingCategory.length === 0) {
+        throw new BadRequest("Category not found");
+    }
+
+    if (existingCourse.length === 0) {
+        throw new BadRequest("Course not found");
+    }
+
+    if (existingCourse[0].categoryId !== categoryId) {
+        throw new BadRequest("The selected course does not belong to the selected category");
+    }
+
+    if (existingTeacher.length === 0) {
+        throw new BadRequest("Teacher not found");
+    }
+
+    if (type === "group" && existingGroup.length === 0) {
+        throw new BadRequest("Group not found");
+    }
+
+    if (trimmedLessonId && existingLesson.length === 0) {
+        throw new BadRequest("Lesson not found");
+    }
+
+    if (trimmedLessonId && existingLesson.length > 0) {
+        if (existingLesson[0].categoryId !== categoryId) {
+            throw new BadRequest("The selected lesson does not belong to the selected category");
+        }
+
+        if (existingLesson[0].courseId !== courseId) {
+            throw new BadRequest("The selected lesson does not belong to the selected course");
+        }
     }
 
     const sessionId = randomUUID();
@@ -129,34 +201,34 @@ export const createSession = async (req: Request, res: Response) => {
         // 1. إنشاء الـ Object الأساسي بالحقول الإجبارية فقط
         const newSessionData: any = {
             id: sessionId,
-            name: name.trim(),
-            sessionDate: new Date(sessionDate).toISOString().split('T')[0],
+            name: trimmedName,
+            sessionDate: parsedSessionDate.toISOString().split('T')[0],
             timeFrom,
             timeTo,
             categoryId,
             courseId,
             type,
             teacherId,
-            session_link,
+            session_link: trimmedSessionLink,
         };
 
         // 2. حقن الحقول الاختيارية ديناميكياً فقط في حال وجودها وكانت غير فارغة
-        if (lessonId && lessonId.trim() !== "") newSessionData.lessonId = lessonId.trim();
-        if (lessonName && lessonName.trim() !== "") newSessionData.lessonName = lessonName.trim();
-        if (type === "group" && groupId && groupId.trim() !== "") newSessionData.groupId = groupId.trim();
-        if (material_link && material_link.trim() !== "") newSessionData.material_link = material_link.trim();
-        if (teacher_material_link && teacher_material_link.trim() !== "") newSessionData.teacher_material_link = teacher_material_link.trim();
+        if (trimmedLessonId) newSessionData.lessonId = trimmedLessonId;
+        if (trimmedLessonName) newSessionData.lessonName = trimmedLessonName;
+        if (type === "group" && trimmedGroupId) newSessionData.groupId = trimmedGroupId;
+        if (trimmedMaterialLink) newSessionData.material_link = trimmedMaterialLink;
+        if (trimmedTeacherMaterialLink) newSessionData.teacher_material_link = trimmedTeacherMaterialLink;
 
         // 3. التنفيذ
         await tx.insert(sessions).values(newSessionData);
 
         let finalUserIds: string[] = userIds || [];
 
-        if (type === "group" && groupId && finalUserIds.length === 0) {
+        if (type === "group" && trimmedGroupId && finalUserIds.length === 0) {
             const groupUsersList = await tx
                 .select({ studentId: groupStudents.studentId })
                 .from(groupStudents)
-                .where(eq(groupStudents.groupId, groupId));
+            .where(eq(groupStudents.groupId, trimmedGroupId));
 
             finalUserIds = groupUsersList.map(u => u.studentId);
         }
