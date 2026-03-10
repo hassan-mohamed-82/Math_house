@@ -325,3 +325,18 @@ export const getPackageBuyHistory = async (req: Request, res: Response) => {
         },
     });
 };
+
+export const selectPaymentMethods = async (req: Request, res: Response) => {
+    const paymentMethods = await db.select({
+        id: paymentMethod.id,
+        name: paymentMethod.name,
+        type: paymentMethod.type,
+        logo: paymentMethod.logo,
+        isActive: paymentMethod.isActive,
+    }).from(paymentMethod).where(eq(paymentMethod.isActive, true));
+
+    return SuccessResponse(res, {
+        message: 'Active payment methods retrieved successfully',
+        paymentMethods,
+    });
+};

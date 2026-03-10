@@ -140,9 +140,14 @@ export const studentLogin = async (req: Request, res: Response) => {
             categoryName: category.name,
             grade: Student.grade,
             avatar: Student.avatar,
+            wallet: {
+                walletId: wallet.id,
+                balance: wallet.balance,
+            }
         })
         .from(Student)
         .leftJoin(category, eq(Student.category, category.id))
+        .leftJoin(wallet, eq(Student.id, wallet.studentId))
         .where(eq(Student.email, email));
 
     if (!student) {

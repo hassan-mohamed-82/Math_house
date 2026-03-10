@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getPackageBuyHistory = exports.initiateAutomaticPackageBuy = exports.requestPackageBuy = exports.creditPackageBalance = void 0;
+exports.selectPaymentMethods = exports.getPackageBuyHistory = exports.initiateAutomaticPackageBuy = exports.requestPackageBuy = exports.creditPackageBalance = void 0;
 const crypto_1 = require("crypto");
 const Errors_1 = require("../../Errors");
 const response_1 = require("../../utils/response");
@@ -268,3 +268,17 @@ const getPackageBuyHistory = async (req, res) => {
     });
 };
 exports.getPackageBuyHistory = getPackageBuyHistory;
+const selectPaymentMethods = async (req, res) => {
+    const paymentMethods = await connection_1.db.select({
+        id: schema_1.paymentMethod.id,
+        name: schema_1.paymentMethod.name,
+        type: schema_1.paymentMethod.type,
+        logo: schema_1.paymentMethod.logo,
+        isActive: schema_1.paymentMethod.isActive,
+    }).from(schema_1.paymentMethod).where((0, drizzle_orm_1.eq)(schema_1.paymentMethod.isActive, true));
+    return (0, response_1.SuccessResponse)(res, {
+        message: 'Active payment methods retrieved successfully',
+        paymentMethods,
+    });
+};
+exports.selectPaymentMethods = selectPaymentMethods;

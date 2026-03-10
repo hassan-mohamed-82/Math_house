@@ -103,9 +103,14 @@ const studentLogin = async (req, res) => {
         categoryName: schema_1.category.name,
         grade: schema_1.Student.grade,
         avatar: schema_1.Student.avatar,
+        wallet: {
+            walletId: schema_1.wallet.id,
+            balance: schema_1.wallet.balance,
+        }
     })
         .from(schema_1.Student)
         .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.Student.category, schema_1.category.id))
+        .leftJoin(schema_1.wallet, (0, drizzle_orm_1.eq)(schema_1.Student.id, schema_1.wallet.studentId))
         .where((0, drizzle_orm_1.eq)(schema_1.Student.email, email));
     if (!student) {
         throw new Errors_1.BadRequest("Invalid Credentials");
