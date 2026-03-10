@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.initiateAutomaticPackageBuy = exports.requestPackageBuy = exports.creditPackageBalance = void 0;
+exports.getPackageBuyHistory = exports.initiateAutomaticPackageBuy = exports.requestPackageBuy = exports.creditPackageBalance = void 0;
 const crypto_1 = require("crypto");
 const Errors_1 = require("../../Errors");
 const response_1 = require("../../utils/response");
@@ -210,3 +210,61 @@ const initiateAutomaticPackageBuy = async (req, res) => {
     }
 };
 exports.initiateAutomaticPackageBuy = initiateAutomaticPackageBuy;
+const getPackageBuyHistory = async (req, res) => {
+    const studentId = getAuthenticatedStudentId(req);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+    const search = req.query.search?.trim();
+    const searchCondition = search
+        ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.payment.status, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.packages.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.packages.type, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.paymentMethod.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.paymentMethod.type, `%${search}%`), (0, drizzle_orm_1.sql) `cast(${schema_1.payment.amount} as char) like ${`%${search}%`}`)
+        : undefined;
+    const whereCondition = (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.payment.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.payment.purpose, 'purchase'), searchCondition);
+    const [totalPackageBuyHistory] = await connection_1.db
+        .select({ count: (0, drizzle_orm_1.count)() })
+        .from(schema_1.payment)
+        .leftJoin(schema_1.packages, (0, drizzle_orm_1.eq)(schema_1.payment.packageId, schema_1.packages.id))
+        .leftJoin(schema_1.paymentMethod, (0, drizzle_orm_1.eq)(schema_1.payment.paymentMethodId, schema_1.paymentMethod.id))
+        .where(whereCondition);
+    const total = totalPackageBuyHistory.count;
+    const totalPages = Math.ceil(total / limit);
+    const packageBuyHistory = await connection_1.db
+        .select({
+        id: schema_1.payment.id,
+        amount: schema_1.payment.amount,
+        status: schema_1.payment.status,
+        createdAt: schema_1.payment.createdAt,
+        receiptImg: schema_1.payment.receiptImg,
+        source: schema_1.payment.source,
+        package: {
+            id: schema_1.packages.id,
+            name: schema_1.packages.name,
+            type: schema_1.packages.type,
+            number: schema_1.packages.number,
+            price: schema_1.packages.price,
+        },
+        paymentMethod: {
+            id: schema_1.paymentMethod.id,
+            name: schema_1.paymentMethod.name,
+            type: schema_1.paymentMethod.type,
+        },
+    })
+        .from(schema_1.payment)
+        .leftJoin(schema_1.packages, (0, drizzle_orm_1.eq)(schema_1.payment.packageId, schema_1.packages.id))
+        .leftJoin(schema_1.paymentMethod, (0, drizzle_orm_1.eq)(schema_1.payment.paymentMethodId, schema_1.paymentMethod.id))
+        .where(whereCondition)
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.payment.createdAt))
+        .limit(limit)
+        .offset(offset);
+    return (0, response_1.SuccessResponse)(res, {
+        message: 'Package buy history retrieved successfully',
+        history: packageBuyHistory,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages,
+        },
+    });
+};
+exports.getPackageBuyHistory = getPackageBuyHistory;

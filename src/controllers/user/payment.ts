@@ -4,7 +4,7 @@ import { BadRequest, NotFound, UnauthorizedError } from '../../Errors';
 import { SuccessResponse } from '../../utils/response';
 import { db } from '../../models/connection';
 import { packages, paymentMethod, Student, parents, payment } from "../../models/schema";
-import { eq, sql } from 'drizzle-orm';
+import { and, count, desc, eq, like, or, sql } from 'drizzle-orm';
 import { validateAndSaveLogo } from "../../utils/handleImages";
 import { createPaymobCheckoutSession } from "../../utils/paymob";
 
@@ -249,4 +249,79 @@ export const initiateAutomaticPackageBuy = async (req: Request, res: Response) =
         await db.delete(payment).where(eq(payment.id, paymentId));
         throw new BadRequest(error?.message || 'Failed to initialize automatic package payment');
     }
+};
+
+export const getPackageBuyHistory = async (req: Request, res: Response) => {
+    const studentId = getAuthenticatedStudentId(req);
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 10;
+    const offset = (page - 1) * limit;
+    const search = (req.query.search as string | undefined)?.trim();
+
+    const searchCondition = search
+        ? or(
+            like(payment.status, `%${search}%`),
+            like(packages.name, `%${search}%`),
+            like(packages.type, `%${search}%`),
+            like(paymentMethod.name, `%${search}%`),
+            like(paymentMethod.type, `%${search}%`),
+            sql`cast(${payment.amount} as char) like ${`%${search}%`}`
+        )
+        : undefined;
+
+    const whereCondition = and(
+        eq(payment.studentId, studentId),
+        eq(payment.purpose, 'purchase'),
+        searchCondition,
+    );
+
+    const [totalPackageBuyHistory] = await db
+        .select({ count: count() })
+        .from(payment)
+        .leftJoin(packages, eq(payment.packageId, packages.id))
+        .leftJoin(paymentMethod, eq(payment.paymentMethodId, paymentMethod.id))
+        .where(whereCondition);
+
+    const total = totalPackageBuyHistory.count;
+    const totalPages = Math.ceil(total / limit);
+
+    const packageBuyHistory = await db
+        .select({
+            id: payment.id,
+            amount: payment.amount,
+            status: payment.status,
+            createdAt: payment.createdAt,
+            receiptImg: payment.receiptImg,
+            source: payment.source,
+            package: {
+                id: packages.id,
+                name: packages.name,
+                type: packages.type,
+                number: packages.number,
+                price: packages.price,
+            },
+            paymentMethod: {
+                id: paymentMethod.id,
+                name: paymentMethod.name,
+                type: paymentMethod.type,
+            },
+        })
+        .from(payment)
+        .leftJoin(packages, eq(payment.packageId, packages.id))
+        .leftJoin(paymentMethod, eq(payment.paymentMethodId, paymentMethod.id))
+        .where(whereCondition)
+        .orderBy(desc(payment.createdAt))
+        .limit(limit)
+        .offset(offset);
+
+    return SuccessResponse(res, {
+        message: 'Package buy history retrieved successfully',
+        history: packageBuyHistory,
+        pagination: {
+            total,
+            page,
+            limit,
+            totalPages,
+        },
+    });
 };

@@ -4,6 +4,7 @@ const express_1 = require("express");
 const catchAsync_1 = require("../../utils/catchAsync");
 const payment_1 = require("../../controllers/user/payment");
 const router = (0, express_1.Router)();
+router.get("/package-buy/history", (0, catchAsync_1.catchAsync)(payment_1.getPackageBuyHistory));
 router.post("/package-buy", (0, catchAsync_1.catchAsync)(payment_1.requestPackageBuy));
 router.post("/package-buy/automatic", (0, catchAsync_1.catchAsync)(payment_1.initiateAutomaticPackageBuy));
 exports.default = router;
