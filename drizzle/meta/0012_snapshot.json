@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "9f5522e3-fba7-4549-a4a5-b26bbfa3d221",
-  "prevId": "30acadcb-b80a-4560-9df0-94149eb63ba1",
+  "id": "c7b0c518-7d44-477f-9a9b-0af54b739ac5",
+  "prevId": "9f360c87-5229-41ad-a5b9-14820dd56ebe",
   "tables": {
     "admins": {
       "name": "admins",
@@ -264,6 +264,30 @@
           "notNull": true,
           "autoincrement": false,
           "default": false
+        },
+        "live_balance": {
+          "name": "live_balance",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "exam_balance": {
+          "name": "exam_balance",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "question_balance": {
+          "name": "question_balance",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
         },
         "avatar": {
           "name": "avatar",
@@ -3446,6 +3470,14 @@
           "notNull": false,
           "autoincrement": false
         },
+        "session_relational_type": {
+          "name": "session_relational_type",
+          "type": "enum('Explanation','Re-Exeplanation','Mistakes','Exam')",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "'Explanation'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -3521,6 +3553,104 @@
       "compositePrimaryKeys": {
         "sessions_id": {
           "name": "sessions_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "session_attendance": {
+      "name": "session_attendance",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(UUID())"
+        },
+        "session_id": {
+          "name": "session_id",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "student_id": {
+          "name": "student_id",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('present','absent')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'absent'"
+        },
+        "attended_at": {
+          "name": "attended_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {
+        "session_student_unique": {
+          "name": "session_student_unique",
+          "columns": [
+            "session_id",
+            "student_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "session_attendance_session_id_sessions_id_fk": {
+          "name": "session_attendance_session_id_sessions_id_fk",
+          "tableFrom": "session_attendance",
+          "tableTo": "sessions",
+          "columnsFrom": [
+            "session_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "session_attendance_student_id_student_id_fk": {
+          "name": "session_attendance_student_id_student_id_fk",
+          "tableFrom": "session_attendance",
+          "tableTo": "student",
+          "columnsFrom": [
+            "student_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "session_attendance_id": {
+          "name": "session_attendance_id",
           "columns": [
             "id"
           ]
@@ -4686,6 +4816,27 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'pending'"
+        },
+        "receiptImg": {
+          "name": "receiptImg",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "enum('student','parent')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "purpose": {
+          "name": "purpose",
+          "type": "enum('wallet_recharge','course_purchase')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
         },
         "createdAt": {
           "name": "createdAt",

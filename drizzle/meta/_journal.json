@@ -85,6 +85,13 @@
       "when": 1772961439488,
       "tag": "0011_little_fallen_one",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1773136808320,
+      "tag": "0012_exotic_siren",
+      "breakpoints": true
     }
   ]
 }
