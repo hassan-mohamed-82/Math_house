@@ -9,6 +9,7 @@ const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const handleImages_1 = require("../../utils/handleImages");
 const paymob_1 = require("../../utils/paymob");
+const payment_1 = require("./payment");
 const getAuthenticatedStudentId = (req) => {
     const studentId = req.user?.id;
     if (!studentId) {
@@ -223,6 +224,8 @@ const handlePaymobCallback = async (req, res) => {
         status: schema_1.payment.status,
         studentId: schema_1.payment.studentId,
         paymentMethodId: schema_1.payment.paymentMethodId,
+        purpose: schema_1.payment.purpose,
+        packageId: schema_1.payment.packageId,
     })
         .from(schema_1.payment)
         .where((0, drizzle_orm_1.eq)(schema_1.payment.id, merchantOrderId))
@@ -240,6 +243,13 @@ const handlePaymobCallback = async (req, res) => {
     }
     if (amountCents && Math.round(existingPayment.amount * 100) !== amountCents) {
         throw new Errors_1.BadRequest('Payment amount mismatch');
+    }
+    if (existingPayment.status === 'completed') {
+        return (0, response_1.SuccessResponse)(res, {
+            message: 'Automatic payment already completed',
+            paymentId: existingPayment.id,
+            status: 'completed',
+        });
     }
     if (isPending) {
         return (0, response_1.SuccessResponse)(res, {
@@ -262,11 +272,28 @@ const handlePaymobCallback = async (req, res) => {
     if (!existingPayment.studentId) {
         throw new Errors_1.BadRequest('Associated student not found for this payment');
     }
-    await connection_1.db
-        .update(schema_1.payment)
-        .set({ status: 'completed' })
-        .where((0, drizzle_orm_1.eq)(schema_1.payment.id, existingPayment.id));
-    await creditWalletForPayment(existingPayment.id, existingPayment.studentId, existingPayment.amount);
+    if (existingPayment.purpose === 'wallet_recharge') {
+        await connection_1.db
+            .update(schema_1.payment)
+            .set({ status: 'completed' })
+            .where((0, drizzle_orm_1.eq)(schema_1.payment.id, existingPayment.id));
+        await creditWalletForPayment(existingPayment.id, existingPayment.studentId, existingPayment.amount);
+    }
+    else if (existingPayment.purpose === 'purchase') {
+        if (!existingPayment.packageId) {
+            throw new Errors_1.BadRequest('Associated package not found for this payment');
+        }
+        await connection_1.db.transaction(async (tx) => {
+            await tx
+                .update(schema_1.payment)
+                .set({ status: 'completed' })
+                .where((0, drizzle_orm_1.eq)(schema_1.payment.id, existingPayment.id));
+            await (0, payment_1.creditPackageBalance)(existingPayment.studentId, existingPayment.packageId, tx);
+        });
+    }
+    else {
+        throw new Errors_1.BadRequest('Unsupported payment purpose');
+    }
     return (0, response_1.SuccessResponse)(res, {
         message: 'Automatic payment completed successfully',
         paymentId: existingPayment.id,

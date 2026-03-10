@@ -4,7 +4,7 @@ import { paymentMethod } from "./paymentMethod";
 import { Student } from "./Student";
 import { parents } from "./parent";
 import { mysqlEnum } from "drizzle-orm/mysql-core";
-
+import { packages } from "./Package";
 export const payment = mysqlTable("payment", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     amount: int("amount").notNull(),
@@ -14,6 +14,7 @@ export const payment = mysqlTable("payment", {
     status: mysqlEnum("status", ["pending", "completed", "rejected"]).notNull().default("pending"),
     receiptImg: char("receiptImg", { length: 255 }),
     source: mysqlEnum("source", ["student", "parent"]).notNull(),
-    purpose: mysqlEnum("purpose", ["wallet_recharge", "course_purchase"]).notNull(),
+    purpose: mysqlEnum("purpose", ["wallet_recharge", "purchase"]).notNull(),
+    packageId: char("packageId", { length: 36 }).references(() => packages.id),
     createdAt: timestamp("createdAt").defaultNow(),
 });

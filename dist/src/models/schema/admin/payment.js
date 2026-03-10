@@ -7,6 +7,7 @@ const paymentMethod_1 = require("./paymentMethod");
 const Student_1 = require("./Student");
 const parent_1 = require("./parent");
 const mysql_core_2 = require("drizzle-orm/mysql-core");
+const Package_1 = require("./Package");
 exports.payment = (0, mysql_core_1.mysqlTable)("payment", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     amount: (0, mysql_core_1.int)("amount").notNull(),
@@ -16,6 +17,7 @@ exports.payment = (0, mysql_core_1.mysqlTable)("payment", {
     status: (0, mysql_core_2.mysqlEnum)("status", ["pending", "completed", "rejected"]).notNull().default("pending"),
     receiptImg: (0, mysql_core_1.char)("receiptImg", { length: 255 }),
     source: (0, mysql_core_2.mysqlEnum)("source", ["student", "parent"]).notNull(),
-    purpose: (0, mysql_core_2.mysqlEnum)("purpose", ["wallet_recharge", "course_purchase"]).notNull(),
+    purpose: (0, mysql_core_2.mysqlEnum)("purpose", ["wallet_recharge", "purchase"]).notNull(),
+    packageId: (0, mysql_core_1.char)("packageId", { length: 36 }).references(() => Package_1.packages.id),
     createdAt: (0, mysql_core_1.timestamp)("createdAt").defaultNow(),
 });

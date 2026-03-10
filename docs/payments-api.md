@@ -3,7 +3,7 @@
 Base URL: `/api`
 
 > [!NOTE]
-> This document covers the wallet recharge and recharge review flows currently implemented in the payment controllers.
+> This document covers the wallet recharge, package purchase, and payment review flows currently implemented in the payment controllers.
 
 > [!TIP]
 > These payment routes are mounted and available through the admin and user routers.
@@ -237,7 +237,84 @@ GET /api/user/wallet/transactions?page=1&limit=10&search=deposit
 
 ---
 
+## Student Package Payment Endpoints
+
+Base path: `/api/user/payment`
+
+### 1. Create Manual Package Buy Request
+
+**`POST /api/user/payment/package-buy`**
+
+Creates a manual package purchase request for the authenticated student.
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `packageId` | string | ✅ | Package ID |
+| `paymentMethodId` | string | ✅ | Manual payment method ID |
+| `receiptImg` | string | ✅ | Base64 receipt image |
+
+**Important Behavior:**
+
+- this endpoint only supports payment methods whose type is `Manual`
+- the package price is stored in `payment.amount`
+- the package ID is stored in `payment.packageId`
+- the receipt image is saved and its URL is stored in `payment.receiptImg`
+- the created payment record is stored with:
+	- `source = "student"`
+	- `purpose = "purchase"`
+	- `status = "pending"` by default
+
+### 2. Initialize Automatic Package Buy
+
+**`POST /api/user/payment/package-buy/automatic`**
+
+Creates a Paymob checkout session for automatic package payments.
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+| --- | --- | --- | --- |
+| `packageId` | string | ✅ | Package ID |
+| `paymentMethodId` | string | ✅ | Automatic payment method ID |
+
+**Important Behavior:**
+
+- this endpoint only supports payment methods whose type is `Automatic`
+- the current automatic gateway implementation supports `Paymob`
+- a pending payment row is created before the checkout session is returned
+- on successful Paymob callback, the payment is marked as `completed` and the purchased package balance is added to the student automatically based on package type:
+	- `live` increments `Student.livebalance`
+	- `exam` increments `Student.exambalance`
+	- `question` increments `Student.questionbalance`
+
+**Success Response (201):**
+
+```json
+{
+	"success": true,
+	"data": {
+		"message": "Automatic package payment session created successfully",
+		"paymentId": "payment_uuid",
+		"packageId": "package_uuid",
+		"paymentMethod": "Paymob",
+		"checkoutUrl": "https://accept.paymob.com/api/acceptance/iframes/...",
+		"iframeUrl": "https://accept.paymob.com/api/acceptance/iframes/...",
+		"paymobOrderId": 123456789,
+		"callbackUrl": "http://localhost:3000/api/payment/paymob/callback"
+	}
+}
+```
+
+---
+
 ## Public Payment Callback Endpoint
+
+The shared Paymob callback at **`/api/payment/paymob/callback`** now handles both:
+
+- wallet recharge payments with `purpose = "wallet_recharge"`
+- package purchase payments with `purpose = "purchase"`
 
 ### 4. Paymob Callback
 

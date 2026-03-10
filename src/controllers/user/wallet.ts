@@ -7,6 +7,7 @@ import { parents, payment, paymentMethod, Student, wallet, walletTransaction } f
 import { and, count, desc, eq, like, or, sql } from 'drizzle-orm';
 import { validateAndSaveLogo } from '../../utils/handleImages';
 import { createPaymobCheckoutSession, extractPaymobCallbackPayload, verifyPaymobHmac } from '../../utils/paymob';
+import { creditPackageBalance } from './payment';
 
 const getAuthenticatedStudentId = (req: Request) => {
     const studentId = req.user?.id;
@@ -273,6 +274,8 @@ export const handlePaymobCallback = async (req: Request, res: Response) => {
             status: payment.status,
             studentId: payment.studentId,
             paymentMethodId: payment.paymentMethodId,
+            purpose: payment.purpose,
+            packageId: payment.packageId,
         })
         .from(payment)
         .where(eq(payment.id, merchantOrderId))
@@ -294,6 +297,14 @@ export const handlePaymobCallback = async (req: Request, res: Response) => {
 
     if (amountCents && Math.round(existingPayment.amount * 100) !== amountCents) {
         throw new BadRequest('Payment amount mismatch');
+    }
+
+    if (existingPayment.status === 'completed') {
+        return SuccessResponse(res, {
+            message: 'Automatic payment already completed',
+            paymentId: existingPayment.id,
+            status: 'completed',
+        });
     }
 
     if (isPending) {
@@ -321,12 +332,29 @@ export const handlePaymobCallback = async (req: Request, res: Response) => {
         throw new BadRequest('Associated student not found for this payment');
     }
 
-    await db
-        .update(payment)
-        .set({ status: 'completed' })
-        .where(eq(payment.id, existingPayment.id));
+    if (existingPayment.purpose === 'wallet_recharge') {
+        await db
+            .update(payment)
+            .set({ status: 'completed' })
+            .where(eq(payment.id, existingPayment.id));
 
-    await creditWalletForPayment(existingPayment.id, existingPayment.studentId, existingPayment.amount);
+        await creditWalletForPayment(existingPayment.id, existingPayment.studentId, existingPayment.amount);
+    } else if (existingPayment.purpose === 'purchase') {
+        if (!existingPayment.packageId) {
+            throw new BadRequest('Associated package not found for this payment');
+        }
+
+        await db.transaction(async (tx) => {
+            await tx
+                .update(payment)
+                .set({ status: 'completed' })
+                .where(eq(payment.id, existingPayment.id));
+
+            await creditPackageBalance(existingPayment.studentId!, existingPayment.packageId!, tx);
+        });
+    } else {
+        throw new BadRequest('Unsupported payment purpose');
+    }
 
     return SuccessResponse(res, {
         message: 'Automatic payment completed successfully',

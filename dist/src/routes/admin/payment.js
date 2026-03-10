@@ -5,5 +5,7 @@ const catchAsync_1 = require("../../utils/catchAsync");
 const payment_1 = require("../../controllers/admin/payment");
 const router = (0, express_1.Router)();
 router.get("/recharge-requests", (0, catchAsync_1.catchAsync)(payment_1.getRechargeRequests));
-router.post("/recharge/:id/reply", (0, catchAsync_1.catchAsync)(payment_1.replyToRechargeRequest));
+router.post("/recharge-requests/:paymentId/reply", (0, catchAsync_1.catchAsync)(payment_1.replyToRechargeRequest));
+router.get("/package-buy-requests", (0, catchAsync_1.catchAsync)(payment_1.getPackageBuyRequests));
+router.post("/package-buy-requests/:paymentId/reply", (0, catchAsync_1.catchAsync)(payment_1.replytoPackageBuyRequest));
 exports.default = router;
