@@ -43,6 +43,9 @@ const getStudentProfileData = async (studentId) => {
         parentphone: schema_1.Student.parentphone,
         grade: schema_1.Student.grade,
         avatar: schema_1.Student.avatar,
+        livebalance: schema_1.Student.livebalance,
+        exambalance: schema_1.Student.exambalance,
+        questionbalance: schema_1.Student.questionbalance,
         categoryId: schema_1.Student.category,
         categoryName: schema_1.category.name,
     })
@@ -63,6 +66,9 @@ const getStudentProfileData = async (studentId) => {
         phone: student.phone,
         parentphone: student.parentphone,
         grade: student.grade,
+        livebalance: student.livebalance,
+        exambalance: student.exambalance,
+        questionbalance: student.questionbalance,
         avatar: student.avatar,
         category: {
             id: student.categoryId,
