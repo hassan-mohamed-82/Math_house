@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "0d641e32-23b0-4007-97c1-1d350cea0730",
-  "prevId": "3fa35329-7d66-4498-b967-61ae1876a124",
+  "id": "9f360c87-5229-41ad-a5b9-14820dd56ebe",
+  "prevId": "9f5522e3-fba7-4549-a4a5-b26bbfa3d221",
   "tables": {
     "admins": {
       "name": "admins",
@@ -3446,6 +3446,14 @@
           "notNull": false,
           "autoincrement": false
         },
+        "session_relational_type": {
+          "name": "session_relational_type",
+          "type": "enum('Explanation','Re-Exeplanation','Mistakes','Exam')",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "'Explanation'"
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -4248,6 +4256,80 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
+    "promoCodesCurrency": {
+      "name": "promoCodesCurrency",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(uuid())"
+        },
+        "promoCodeId": {
+          "name": "promoCodeId",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "currencyId": {
+          "name": "currencyId",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "promoCodesCurrency_promoCodeId_promoCodes_id_fk": {
+          "name": "promoCodesCurrency_promoCodeId_promoCodes_id_fk",
+          "tableFrom": "promoCodesCurrency",
+          "tableTo": "promoCodes",
+          "columnsFrom": [
+            "promoCodeId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "promoCodesCurrency_currencyId_currency_id_fk": {
+          "name": "promoCodesCurrency_currencyId_currency_id_fk",
+          "tableFrom": "promoCodesCurrency",
+          "tableTo": "currency",
+          "columnsFrom": [
+            "currencyId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "promoCodesCurrency_id": {
+          "name": "promoCodesCurrency_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
     "promoCodesPackages": {
       "name": "promoCodesPackages",
       "columns": {
@@ -4566,6 +4648,115 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
+    "payment": {
+      "name": "payment",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(uuid())"
+        },
+        "amount": {
+          "name": "amount",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "paymentMethodId": {
+          "name": "paymentMethodId",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "studentId": {
+          "name": "studentId",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "parentId": {
+          "name": "parentId",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "enum('pending','completed','rejected')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "'pending'"
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "payment_paymentMethodId_paymentMethod_id_fk": {
+          "name": "payment_paymentMethodId_paymentMethod_id_fk",
+          "tableFrom": "payment",
+          "tableTo": "paymentMethod",
+          "columnsFrom": [
+            "paymentMethodId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_studentId_student_id_fk": {
+          "name": "payment_studentId_student_id_fk",
+          "tableFrom": "payment",
+          "tableTo": "student",
+          "columnsFrom": [
+            "studentId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "payment_parentId_parents_id_fk": {
+          "name": "payment_parentId_parents_id_fk",
+          "tableFrom": "payment",
+          "tableTo": "parents",
+          "columnsFrom": [
+            "parentId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "payment_id": {
+          "name": "payment_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
     "wallet": {
       "name": "wallet",
       "columns": {
@@ -4629,6 +4820,101 @@
       "compositePrimaryKeys": {
         "wallet_id": {
           "name": "wallet_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "walletTransaction": {
+      "name": "walletTransaction",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": "(uuid())"
+        },
+        "walletId": {
+          "name": "walletId",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "paymentId": {
+          "name": "paymentId",
+          "type": "char(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amount": {
+          "name": "amount",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "enum('deposit','withdrawal')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "enum('Admin','Voucher','Student','Parent')",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false,
+          "default": "(now())"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "walletTransaction_walletId_wallet_id_fk": {
+          "name": "walletTransaction_walletId_wallet_id_fk",
+          "tableFrom": "walletTransaction",
+          "tableTo": "wallet",
+          "columnsFrom": [
+            "walletId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "walletTransaction_paymentId_payment_id_fk": {
+          "name": "walletTransaction_paymentId_payment_id_fk",
+          "tableFrom": "walletTransaction",
+          "tableTo": "payment",
+          "columnsFrom": [
+            "paymentId"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "walletTransaction_id": {
+          "name": "walletTransaction_id",
           "columns": [
             "id"
           ]

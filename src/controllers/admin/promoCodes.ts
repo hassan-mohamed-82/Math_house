@@ -1,13 +1,10 @@
 import { Request, Response } from "express";
-import { promoCodes, promoCodesCourses, promoCodesPackages } from "../../models/schema";
+import { promoCodes, promoCodesCourses, promoCodesPackages, courses, packages, promoCodesUsers, promoCodesCurrency, Currency } from "../../models/schema";
 import { count, eq } from "drizzle-orm";
 import { db } from "../../models/connection";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { SuccessResponse } from "../../utils/response";
-import { courses } from "../../models/schema";
-import { packages } from "../../models/schema";
-import { promoCodesUsers } from "../../models/schema";
 
 export const createPromoCode = async (req: Request, res: Response) => {
     const { promoName,
@@ -15,12 +12,13 @@ export const createPromoCode = async (req: Request, res: Response) => {
         discountAmount,
         courseIds,
         packageIds,
+        currencyIds,
         startDate,
         endDate,
         numberOfUsages } = req.body;
 
-    if (!promoName || !code || !discountAmount || !courseIds || courseIds.length === 0 || !packageIds || packageIds.length === 0 || !startDate || !endDate || !numberOfUsages) {
-        throw new BadRequest("All fields are required and courseIds/packageIds must not be empty");
+    if (!promoName || !code || !discountAmount || !courseIds || courseIds.length === 0 || !packageIds || packageIds.length === 0 || !currencyIds || currencyIds.length === 0 || !startDate || !endDate || !numberOfUsages) {
+        throw new BadRequest("All fields are required and courseIds/packageIds/currencyIds must not be empty");
     }
 
     if (startDate > endDate) {
@@ -35,9 +33,10 @@ export const createPromoCode = async (req: Request, res: Response) => {
         throw new BadRequest("Number of usages should be greater than 0");
     }
 
-    const [coursesList, packagesList, existingPromoCode] = await Promise.all([
+    const [coursesList, packagesList, currenciesList, existingPromoCode] = await Promise.all([
         db.select().from(courses),
         db.select().from(packages),
+        db.select().from(Currency),
         db.select().from(promoCodes).where(eq(promoCodes.code, code)).limit(1)
     ]);
 
@@ -52,6 +51,13 @@ export const createPromoCode = async (req: Request, res: Response) => {
     for (const pId of packageIds) {
         if (!validPackageIds.has(pId)) {
             throw new NotFound(`Package not found: ${pId}`);
+        }
+    }
+
+    const validCurrencyIds = new Set(currenciesList.map(c => c.id));
+    for (const cId of currencyIds) {
+        if (!validCurrencyIds.has(cId)) {
+            throw new NotFound(`Currency not found: ${cId}`);
         }
     }
 
@@ -85,6 +91,12 @@ export const createPromoCode = async (req: Request, res: Response) => {
     }));
     await db.insert(promoCodesPackages).values(packagesToInsert);
 
+    const currenciesToInsert = currencyIds.map((cId: string) => ({
+        promoCodeId,
+        currencyId: cId
+    }));
+    await db.insert(promoCodesCurrency).values(currenciesToInsert);
+
     return SuccessResponse(res, { message: "Promo code created successfully" }, 201);
 
 };
@@ -115,10 +127,18 @@ export const getAllPromoCodes = async (req: Request, res: Response) => {
         packageName: packages.name
     }).from(promoCodesPackages).innerJoin(packages, eq(promoCodesPackages.packageId, packages.id));
 
+    const pcCurrencies = await db.select({
+        promoCodeId: promoCodesCurrency.promoCodeId,
+        currencyId: Currency.id,
+        currencyName: Currency.name,
+        currencyCode: Currency.code
+    }).from(promoCodesCurrency).innerJoin(Currency, eq(promoCodesCurrency.currencyId, Currency.id));
+
     const formattedData = promoCodesData.map(pc => ({
         ...pc,
         courses: pcCourses.filter(c => c.promoCodeId === pc.id).map(c => ({ id: c.courseId, courseName: c.courseName })),
-        packages: pcPackages.filter(p => p.promoCodeId === pc.id).map(p => ({ id: p.packageId, packageName: p.packageName }))
+        packages: pcPackages.filter(p => p.promoCodeId === pc.id).map(p => ({ id: p.packageId, packageName: p.packageName })),
+        currencies: pcCurrencies.filter(c => c.promoCodeId === pc.id).map(c => ({ id: c.currencyId, name: c.currencyName, code: c.currencyCode }))
     }));
 
     return SuccessResponse(res, { message: "Promo codes fetched successfully", data: formattedData }, 200);
@@ -159,10 +179,18 @@ export const getPromocodesbyId = async (req: Request, res: Response) => {
     }).from(promoCodesPackages).innerJoin(packages, eq(promoCodesPackages.packageId, packages.id))
         .where(eq(promoCodesPackages.promoCodeId, id));
 
+    const pcCurrencies = await db.select({
+        currencyId: Currency.id,
+        currencyName: Currency.name,
+        currencyCode: Currency.code
+    }).from(promoCodesCurrency).innerJoin(Currency, eq(promoCodesCurrency.currencyId, Currency.id))
+        .where(eq(promoCodesCurrency.promoCodeId, id));
+
     const promoCode = {
         ...promoCodeRecords[0],
         courses: pcCourses.map(c => ({ id: c.courseId, courseName: c.courseName })),
-        packages: pcPackages.map(p => ({ id: p.packageId, packageName: p.packageName }))
+        packages: pcPackages.map(p => ({ id: p.packageId, packageName: p.packageName })),
+        currencies: pcCurrencies.map(c => ({ id: c.currencyId, name: c.currencyName, code: c.currencyCode }))
     };
 
     return SuccessResponse(res, { message: "Promo code fetched successfully", data: promoCode }, 200);
@@ -174,7 +202,7 @@ export const updatePromoCode = async (req: Request, res: Response) => {
         throw new BadRequest("Invalid promo code id");
     }
 
-    const { promoName, code, discountAmount, courseIds, packageIds, startDate, endDate, numberOfUsages } = req.body;
+    const { promoName, code, discountAmount, courseIds, packageIds, currencyIds, startDate, endDate, numberOfUsages } = req.body;
 
     const promoCodeRecords = await db.select().from(promoCodes).where(eq(promoCodes.id, id)).limit(1);
     if (!promoCodeRecords || promoCodeRecords.length === 0) {
@@ -205,6 +233,16 @@ export const updatePromoCode = async (req: Request, res: Response) => {
         for (const pId of packageIds) {
             if (!validPackageIds.has(pId)) {
                 throw new NotFound(`Package not found: ${pId}`);
+            }
+        }
+    }
+
+    if (currencyIds && currencyIds.length > 0) {
+        const currenciesList = await db.select().from(Currency);
+        const validCurrencyIds = new Set(currenciesList.map(c => c.id));
+        for (const cId of currencyIds) {
+            if (!validCurrencyIds.has(cId)) {
+                throw new NotFound(`Currency not found: ${cId}`);
             }
         }
     }
@@ -251,6 +289,15 @@ export const updatePromoCode = async (req: Request, res: Response) => {
         await db.insert(promoCodesPackages).values(packagesToInsert);
     }
 
+    if (currencyIds && currencyIds.length > 0) {
+        await db.delete(promoCodesCurrency).where(eq(promoCodesCurrency.promoCodeId, id));
+        const currenciesToInsert = currencyIds.map((cId: string) => ({
+            promoCodeId: id,
+            currencyId: cId
+        }));
+        await db.insert(promoCodesCurrency).values(currenciesToInsert);
+    }
+
     return SuccessResponse(res, { message: "Promo code updated successfully" }, 200);
 };
 
@@ -268,7 +315,17 @@ export const deletePromoCode = async (req: Request, res: Response) => {
     await db.delete(promoCodesUsers).where(eq(promoCodesUsers.promoCodeId, id));
     await db.delete(promoCodesCourses).where(eq(promoCodesCourses.promoCodeId, id));
     await db.delete(promoCodesPackages).where(eq(promoCodesPackages.promoCodeId, id));
+    await db.delete(promoCodesCurrency).where(eq(promoCodesCurrency.promoCodeId, id));
     await db.delete(promoCodes).where(eq(promoCodes.id, id));
 
     return SuccessResponse(res, { message: "Promo code deleted successfully" }, 200);
+};
+
+export const currencySelection = async (req: Request , res: Response) => {
+    const currencies = await db.select({
+        id: Currency.id,
+        name: Currency.name,
+        code: Currency.code
+    }).from(Currency);
+    return SuccessResponse(res, { message: "Currencies fetched successfully", data: currencies }, 200);
 };

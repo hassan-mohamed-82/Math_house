@@ -1,11 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.promoCodesUsers = exports.promoCodesPackages = exports.promoCodesCourses = exports.promoCodes = void 0;
+exports.promoCodesCurrency = exports.promoCodesUsers = exports.promoCodesPackages = exports.promoCodesCourses = exports.promoCodes = void 0;
 const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
 const courses_1 = require("./courses");
 const Package_1 = require("./Package");
 const Student_1 = require("./Student");
+const currency_1 = require("./currency");
 exports.promoCodes = (0, mysql_core_1.mysqlTable)("promoCodes", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     promoName: (0, mysql_core_1.varchar)("promoName", { length: 255 }).notNull(),
@@ -35,4 +36,10 @@ exports.promoCodesUsers = (0, mysql_core_1.mysqlTable)("promoCodesUsers", {
     userId: (0, mysql_core_1.char)("userId", { length: 255 }).references(() => Student_1.Student.id).notNull(),
     createdAt: (0, mysql_core_1.timestamp)("createdAt").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updatedAt").defaultNow().onUpdateNow(),
+});
+exports.promoCodesCurrency = (0, mysql_core_1.mysqlTable)("promoCodesCurrency", {
+    id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
+    promoCodeId: (0, mysql_core_1.char)("promoCodeId", { length: 255 }).references(() => exports.promoCodes.id).notNull(),
+    currencyId: (0, mysql_core_1.char)("currencyId", { length: 255 }).references(() => currency_1.Currency.id).notNull(),
+    createdAt: (0, mysql_core_1.timestamp)("createdAt").defaultNow(),
 });

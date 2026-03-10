@@ -5,23 +5,41 @@ import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export async function seedAdmins(roleId: string) {
-    const existingAdmin = await db.select().from(admins).where(eq(admins.email, "admin@admin.com"));
-
-    if (existingAdmin.length > 0) {
-        console.log("Admin already exists");
-        return;
-    }
-
     const hashedPassword = await bcrypt.hash("password123", 10);
 
-    await db.insert(admins).values({
-        name: "Admin",
-        email: "admin@admin.com",
-        password: hashedPassword,
-        phoneNumber: "1234567890",
-        roleId: roleId,
-        status: "active"
-    });
+    const seedAdminsData = [
+        {
+            name: "Admin",
+            email: "admin@admin.com",
+            phoneNumber: "1234567890",
+            type: "admin" as const,
+        },
+        {
+            name: "Super Admin",
+            email: "superadmin@admin.com",
+            phoneNumber: "1234567891",
+            type: "super_admin" as const,
+        },
+    ];
 
-    console.log("Admin created successfully");
+    for (const adminData of seedAdminsData) {
+        const existingAdmin = await db.select().from(admins).where(eq(admins.email, adminData.email));
+
+        if (existingAdmin.length > 0) {
+            console.log(`${adminData.type} account already exists`);
+            continue;
+        }
+
+        await db.insert(admins).values({
+            name: adminData.name,
+            email: adminData.email,
+            password: hashedPassword,
+            phoneNumber: adminData.phoneNumber,
+            roleId,
+            type: adminData.type,
+            status: "active"
+        });
+
+        console.log(`${adminData.type} account created successfully`);
+    }
 }
