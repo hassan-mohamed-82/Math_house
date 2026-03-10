@@ -143,6 +143,12 @@ const studentLogin = async (req, res) => {
             },
             grade: student.grade,
             avatar: student.avatar,
+            wallet: student.wallet
+                ? {
+                    id: student.wallet.walletId,
+                    balance: student.wallet.balance,
+                }
+                : null
         }
     }, 200);
 };
