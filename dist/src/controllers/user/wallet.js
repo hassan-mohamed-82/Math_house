@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getWalletTransactions = exports.handlePaymobCallback = exports.initiateAutomaticWalletRecharge = exports.rechargeWalletRequest = void 0;
+exports.getWalletBalance = exports.getWalletTransactions = exports.handlePaymobCallback = exports.initiateAutomaticWalletRecharge = exports.rechargeWalletRequest = void 0;
 const crypto_1 = require("crypto");
 const Errors_1 = require("../../Errors");
 const response_1 = require("../../utils/response");
@@ -48,7 +48,7 @@ const getLinkedParentId = async (parentPhone) => {
 };
 const ensureWalletExists = async (studentId) => {
     const [existingWallet] = await connection_1.db
-        .select({ id: schema_1.wallet.id })
+        .select({ id: schema_1.wallet.id, balance: schema_1.wallet.balance })
         .from(schema_1.wallet)
         .where((0, drizzle_orm_1.eq)(schema_1.wallet.studentId, studentId))
         .limit(1);
@@ -60,7 +60,7 @@ const ensureWalletExists = async (studentId) => {
         balance: 0,
     });
     const [createdWallet] = await connection_1.db
-        .select({ id: schema_1.wallet.id })
+        .select({ id: schema_1.wallet.id, balance: schema_1.wallet.balance })
         .from(schema_1.wallet)
         .where((0, drizzle_orm_1.eq)(schema_1.wallet.studentId, studentId))
         .limit(1);
@@ -350,3 +350,12 @@ const getWalletTransactions = async (req, res) => {
     });
 };
 exports.getWalletTransactions = getWalletTransactions;
+const getWalletBalance = async (req, res) => {
+    const studentId = getAuthenticatedStudentId(req);
+    const existingWallet = await ensureWalletExists(studentId);
+    return (0, response_1.SuccessResponse)(res, {
+        message: 'Wallet balance retrieved successfully',
+        balance: existingWallet.balance,
+    });
+};
+exports.getWalletBalance = getWalletBalance;

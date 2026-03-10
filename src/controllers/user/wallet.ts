@@ -56,7 +56,7 @@ const getLinkedParentId = async (parentPhone: string | null) => {
 
 const ensureWalletExists = async (studentId: string) => {
     const [existingWallet] = await db
-        .select({ id: wallet.id })
+        .select({ id: wallet.id, balance: wallet.balance })
         .from(wallet)
         .where(eq(wallet.studentId, studentId))
         .limit(1);
@@ -71,7 +71,7 @@ const ensureWalletExists = async (studentId: string) => {
     });
 
     const [createdWallet] = await db
-        .select({ id: wallet.id })
+        .select({ id: wallet.id, balance: wallet.balance })
         .from(wallet)
         .where(eq(wallet.studentId, studentId))
         .limit(1);
@@ -426,5 +426,15 @@ export const getWalletTransactions = async (req: Request, res: Response) => {
             limit,
             totalPages,
         },
+    });
+};
+
+export const getWalletBalance = async (req: Request, res: Response) => {
+    const studentId = getAuthenticatedStudentId(req);
+    const existingWallet = await ensureWalletExists(studentId);
+
+    return SuccessResponse(res, {
+        message: 'Wallet balance retrieved successfully',
+        balance: existingWallet.balance,
     });
 };
