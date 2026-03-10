@@ -6,9 +6,10 @@ import { groups, groupStudents } from "../../models/schema/admin/Groups";
 import { teachers } from "../../models/schema/admin/teacher";
 import { category } from "../../models/schema/admin/category";
 import { courses } from "../../models/schema/admin/courses";
+import { Student } from "../../models/schema/admin/Student";
 import { eq, and, gte, lt, or, inArray, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
-import { NotFound, UnauthorizedError } from "../../Errors";
+import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 
 const getStudentId = (req: Request): string => {
     if (!req.user?.id) throw new UnauthorizedError("Not authenticated");
@@ -45,8 +46,16 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
         conditions.push(inArray(sessions.groupId, groupIds));
     }
 
+    // Get student's live balance
+    const [student] = await db
+        .select({ liveBalance: Student.livebalance })
+        .from(Student)
+        .where(eq(Student.id, studentId));
+
+    const liveBalance = student?.liveBalance ?? 0;
+
     if (conditions.length === 0) {
-        return SuccessResponse(res, []);
+        return SuccessResponse(res, { liveBalance, sessions: [] });
     }
 
     const upcomingSessions = await db
@@ -76,7 +85,7 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
         ))
         .orderBy(sessions.sessionDate, sessions.timeFrom);
 
-    SuccessResponse(res, upcomingSessions);
+    SuccessResponse(res, { liveBalance, sessions: upcomingSessions });
 };
 
 // ===================== GET SESSION HISTORY =====================
@@ -190,27 +199,48 @@ export const joinSession = async (req: Request, res: Response) => {
         throw new NotFound("You are not enrolled in this session");
     }
 
-    // 3. Upsert attendance — mark as present
+    // 3. Check if already attended (don't deduct again)
     const [existing] = await db
-        .select({ id: sessionAttendance.id })
+        .select({ id: sessionAttendance.id, status: sessionAttendance.status })
         .from(sessionAttendance)
         .where(and(
             eq(sessionAttendance.sessionId, sessionId),
             eq(sessionAttendance.studentId, studentId),
         ));
 
-    if (existing) {
-        await db.update(sessionAttendance)
-            .set({ status: "present", attendedAt: new Date() })
-            .where(eq(sessionAttendance.id, existing.id));
-    } else {
-        await db.insert(sessionAttendance).values({
-            sessionId,
-            studentId,
-            status: "present",
-            attendedAt: new Date(),
-        });
+    if (existing && existing.status === "present") {
+        return SuccessResponse(res, { sessionLink: session.sessionLink });
     }
+
+    // 4. Check live balance
+    const [student] = await db
+        .select({ liveBalance: Student.livebalance })
+        .from(Student)
+        .where(eq(Student.id, studentId));
+
+    if (!student || student.liveBalance <= 0) {
+        throw new BadRequest("Insufficient live balance");
+    }
+
+    // 5. Upsert attendance + deduct 1 from live balance
+    await db.transaction(async (tx) => {
+        if (existing) {
+            await tx.update(sessionAttendance)
+                .set({ status: "present", attendedAt: new Date() })
+                .where(eq(sessionAttendance.id, existing.id));
+        } else {
+            await tx.insert(sessionAttendance).values({
+                sessionId,
+                studentId,
+                status: "present",
+                attendedAt: new Date(),
+            });
+        }
+
+        await tx.update(Student)
+            .set({ livebalance: sql`${Student.livebalance} - 1` })
+            .where(eq(Student.id, studentId));
+    });
 
     SuccessResponse(res, { sessionLink: session.sessionLink });
 };

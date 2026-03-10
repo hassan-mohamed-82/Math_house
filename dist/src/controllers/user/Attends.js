@@ -8,6 +8,7 @@ const Groups_1 = require("../../models/schema/admin/Groups");
 const teacher_1 = require("../../models/schema/admin/teacher");
 const category_1 = require("../../models/schema/admin/category");
 const courses_1 = require("../../models/schema/admin/courses");
+const Student_1 = require("../../models/schema/admin/Student");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
@@ -40,8 +41,14 @@ const getUpcomingSessions = async (req, res) => {
     if (groupIds.length > 0) {
         conditions.push((0, drizzle_orm_1.inArray)(Session_1.sessions.groupId, groupIds));
     }
+    // Get student's live balance
+    const [student] = await connection_1.db
+        .select({ liveBalance: Student_1.Student.livebalance })
+        .from(Student_1.Student)
+        .where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
+    const liveBalance = student?.liveBalance ?? 0;
     if (conditions.length === 0) {
-        return (0, response_1.SuccessResponse)(res, []);
+        return (0, response_1.SuccessResponse)(res, { liveBalance, sessions: [] });
     }
     const upcomingSessions = await connection_1.db
         .select({
@@ -66,7 +73,7 @@ const getUpcomingSessions = async (req, res) => {
         .leftJoin(teacher_1.teachers, (0, drizzle_orm_1.eq)(Session_1.sessions.teacherId, teacher_1.teachers.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.gte)(Session_1.sessions.sessionDate, new Date(today)), (0, drizzle_orm_1.or)(...conditions)))
         .orderBy(Session_1.sessions.sessionDate, Session_1.sessions.timeFrom);
-    (0, response_1.SuccessResponse)(res, upcomingSessions);
+    (0, response_1.SuccessResponse)(res, { liveBalance, sessions: upcomingSessions });
 };
 exports.getUpcomingSessions = getUpcomingSessions;
 // ===================== GET SESSION HISTORY =====================
@@ -154,24 +161,41 @@ const joinSession = async (req, res) => {
     if (!hasAccess) {
         throw new Errors_1.NotFound("You are not enrolled in this session");
     }
-    // 3. Upsert attendance — mark as present
+    // 3. Check if already attended (don't deduct again)
     const [existing] = await connection_1.db
-        .select({ id: SessionAttendance_1.sessionAttendance.id })
+        .select({ id: SessionAttendance_1.sessionAttendance.id, status: SessionAttendance_1.sessionAttendance.status })
         .from(SessionAttendance_1.sessionAttendance)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(SessionAttendance_1.sessionAttendance.sessionId, sessionId), (0, drizzle_orm_1.eq)(SessionAttendance_1.sessionAttendance.studentId, studentId)));
-    if (existing) {
-        await connection_1.db.update(SessionAttendance_1.sessionAttendance)
-            .set({ status: "present", attendedAt: new Date() })
-            .where((0, drizzle_orm_1.eq)(SessionAttendance_1.sessionAttendance.id, existing.id));
+    if (existing && existing.status === "present") {
+        return (0, response_1.SuccessResponse)(res, { sessionLink: session.sessionLink });
     }
-    else {
-        await connection_1.db.insert(SessionAttendance_1.sessionAttendance).values({
-            sessionId,
-            studentId,
-            status: "present",
-            attendedAt: new Date(),
-        });
+    // 4. Check live balance
+    const [student] = await connection_1.db
+        .select({ liveBalance: Student_1.Student.livebalance })
+        .from(Student_1.Student)
+        .where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
+    if (!student || student.liveBalance <= 0) {
+        throw new Errors_1.BadRequest("Insufficient live balance");
     }
+    // 5. Upsert attendance + deduct 1 from live balance
+    await connection_1.db.transaction(async (tx) => {
+        if (existing) {
+            await tx.update(SessionAttendance_1.sessionAttendance)
+                .set({ status: "present", attendedAt: new Date() })
+                .where((0, drizzle_orm_1.eq)(SessionAttendance_1.sessionAttendance.id, existing.id));
+        }
+        else {
+            await tx.insert(SessionAttendance_1.sessionAttendance).values({
+                sessionId,
+                studentId,
+                status: "present",
+                attendedAt: new Date(),
+            });
+        }
+        await tx.update(Student_1.Student)
+            .set({ livebalance: (0, drizzle_orm_1.sql) `${Student_1.Student.livebalance} - 1` })
+            .where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
+    });
     (0, response_1.SuccessResponse)(res, { sessionLink: session.sessionLink });
 };
 exports.joinSession = joinSession;
