@@ -1,0 +1,14 @@
+import { Router } from "express";
+import { catchAsync } from "../../utils/catchAsync";
+import { authorizeRoles } from "../../middlewares/authorized";
+import { getUpcomingSessions, getSessionHistory, joinSession } from "../../controllers/user/Attends";
+
+const router = Router();
+
+router.use(authorizeRoles("student"));
+
+router.get("/upcoming", catchAsync(getUpcomingSessions));
+router.get("/history", catchAsync(getSessionHistory));
+router.post("/:sessionId/join", catchAsync(joinSession));
+
+export default router;

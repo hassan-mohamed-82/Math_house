@@ -22,6 +22,7 @@ export * from "./schema/admin/conversionRate";
 export * from "./schema/admin/Popup";
 export * from "./schema/admin/SessionRating";
 export * from "./schema/admin/Session";
+export * from "./schema/admin/SessionAttendance";
 export * from "./schema/admin/Groups";
 export * from "./schema/admin/Package";
 export * from "./schema/admin/Notfication";
