@@ -7,4 +7,5 @@ const router = (0, express_1.Router)();
 router.get("/transactions", (0, catchAsync_1.catchAsync)(wallet_1.getWalletTransactions));
 router.post("/recharge", (0, catchAsync_1.catchAsync)(wallet_1.rechargeWalletRequest));
 router.post("/recharge/automatic", (0, catchAsync_1.catchAsync)(wallet_1.initiateAutomaticWalletRecharge));
+router.get("/balance", (0, catchAsync_1.catchAsync)(wallet_1.getWalletBalance));
 exports.default = router;

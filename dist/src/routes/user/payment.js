@@ -7,4 +7,5 @@ const router = (0, express_1.Router)();
 router.get("/package-buy/history", (0, catchAsync_1.catchAsync)(payment_1.getPackageBuyHistory));
 router.post("/package-buy", (0, catchAsync_1.catchAsync)(payment_1.requestPackageBuy));
 router.post("/package-buy/automatic", (0, catchAsync_1.catchAsync)(payment_1.initiateAutomaticPackageBuy));
+router.get("/payment-methods", (0, catchAsync_1.catchAsync)(payment_1.selectPaymentMethods));
 exports.default = router;
