@@ -5,6 +5,7 @@ import walletRouter from "./wallet";
 import paymentRouter from "./payment";
 import attendsRouter from "./Attends";
 import packagesRouter from "./packages";
+import examsRouter from "./exams";
 import { authorizeRoles } from "../../middlewares/authorized";
 import { authenticated } from "../../middlewares/authenticated";
 const router=Router()
@@ -15,4 +16,5 @@ router.use("/wallet", walletRouter)
 router.use("/payment", paymentRouter)
 router.use("/sessions", attendsRouter)
 router.use("/packages", packagesRouter)
+router.use("/exams", examsRouter)
 export default router

@@ -29,6 +29,8 @@ export * from "./schema/admin/Notfication";
 export * from "./schema/admin/promoCodes";
 export * from "./schema/admin/paymentMethod";
 export * from "./schema/admin/payment";
+export * from "./schema/admin/examAttempts";
+export * from "./schema/admin/studentAnswers";
 export * from "./schema/user/Wallet";
 
 
