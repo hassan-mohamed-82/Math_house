@@ -93,15 +93,33 @@ const getAllQuestions = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     const search = req.query.search;
+    const difficulty = req.query.difficulty;
+    const questionType = req.query.questionType;
+    const answerType = req.query.answerType;
+    const year = req.query.year;
+    const month = req.query.month;
+    const sectionId = req.query.sectionId;
+    const codeId = req.query.codeId;
     const searchCondition = search
         ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.questions.question, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.lessons.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.examCodes.code, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.Sections.sectionName, `%${search}%`))
         : undefined;
+    const conditions = [
+        searchCondition,
+        difficulty ? (0, drizzle_orm_1.eq)(schema_1.questions.difficulty, difficulty) : undefined,
+        questionType ? (0, drizzle_orm_1.eq)(schema_1.questions.questionType, questionType) : undefined,
+        answerType ? (0, drizzle_orm_1.eq)(schema_1.questions.answerType, answerType) : undefined,
+        year ? (0, drizzle_orm_1.eq)(schema_1.questions.year, parseInt(year)) : undefined,
+        month ? (0, drizzle_orm_1.eq)(schema_1.questions.month, month) : undefined,
+        sectionId ? (0, drizzle_orm_1.eq)(schema_1.questions.sectionId, sectionId) : undefined,
+        codeId ? (0, drizzle_orm_1.eq)(schema_1.questions.codeId, codeId) : undefined,
+    ].filter(Boolean);
+    const finalCondition = conditions.length > 0 ? (conditions.length > 1 ? (0, drizzle_orm_1.and)(...conditions) : conditions[0]) : undefined;
     const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() })
         .from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
         .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
         .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
-        .where(searchCondition);
+        .where(finalCondition);
     const total = totalQueries.count;
     const totalPages = Math.ceil(total / limit);
     const Allquestions = await connection_1.db.select({
@@ -133,7 +151,7 @@ const getAllQuestions = async (req, res) => {
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
         .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
         .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
-        .where(searchCondition)
+        .where(finalCondition)
         .limit(limit)
         .offset(offset)
         .orderBy((0, drizzle_orm_1.desc)(schema_1.questions.createdAt));
@@ -332,12 +350,28 @@ const getQuestionsbyLessonId = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     const search = req.query.search;
+    const difficulty = req.query.difficulty;
+    const questionType = req.query.questionType;
+    const answerType = req.query.answerType;
+    const year = req.query.year;
+    const month = req.query.month;
+    const sectionId = req.query.sectionId;
+    const codeId = req.query.codeId;
     const searchCondition = search
         ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.questions.question, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.examCodes.code, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.Sections.sectionName, `%${search}%`))
         : undefined;
-    const finalCondition = searchCondition
-        ? (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.questions.lessonId, id), searchCondition)
-        : (0, drizzle_orm_1.eq)(schema_1.questions.lessonId, id);
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.questions.lessonId, id),
+        searchCondition,
+        difficulty ? (0, drizzle_orm_1.eq)(schema_1.questions.difficulty, difficulty) : undefined,
+        questionType ? (0, drizzle_orm_1.eq)(schema_1.questions.questionType, questionType) : undefined,
+        answerType ? (0, drizzle_orm_1.eq)(schema_1.questions.answerType, answerType) : undefined,
+        year ? (0, drizzle_orm_1.eq)(schema_1.questions.year, parseInt(year)) : undefined,
+        month ? (0, drizzle_orm_1.eq)(schema_1.questions.month, month) : undefined,
+        sectionId ? (0, drizzle_orm_1.eq)(schema_1.questions.sectionId, sectionId) : undefined,
+        codeId ? (0, drizzle_orm_1.eq)(schema_1.questions.codeId, codeId) : undefined,
+    ].filter(Boolean);
+    const finalCondition = conditions.length > 1 ? (0, drizzle_orm_1.and)(...conditions) : conditions[0];
     const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() })
         .from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
@@ -657,14 +691,24 @@ const getAllParallelQuestions = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     const search = req.query.search;
+    const difficulty = req.query.difficulty;
+    const answerType = req.query.answerType;
+    const lessonId = req.query.lessonId;
     const searchCondition = search
         ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.ParallelQuestion.question, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.lessons.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.questions.question, `%${search}%`))
         : undefined;
+    const conditions = [
+        searchCondition,
+        difficulty ? (0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.difficulty, difficulty) : undefined,
+        answerType ? (0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.answerType, answerType) : undefined,
+        lessonId ? (0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.lessonId, lessonId) : undefined,
+    ].filter(Boolean);
+    const finalCondition = conditions.length > 0 ? (conditions.length > 1 ? (0, drizzle_orm_1.and)(...conditions) : conditions[0]) : undefined;
     const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() })
         .from(schema_1.ParallelQuestion)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.ParallelQuestion.lessonId))
         .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.questions.id, schema_1.ParallelQuestion.origianlQuestionId))
-        .where(searchCondition);
+        .where(finalCondition);
     const total = totalQueries.count;
     const totalPages = Math.ceil(total / limit);
     const allParallelQuestions = await connection_1.db.select({
@@ -687,7 +731,7 @@ const getAllParallelQuestions = async (req, res) => {
     }).from(schema_1.ParallelQuestion)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.ParallelQuestion.lessonId))
         .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.questions.id, schema_1.ParallelQuestion.origianlQuestionId))
-        .where(searchCondition)
+        .where(finalCondition)
         .limit(limit)
         .offset(offset)
         .orderBy((0, drizzle_orm_1.desc)(schema_1.ParallelQuestion.createdAt));
@@ -747,12 +791,20 @@ const getParallelQuestionsByOriginalId = async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const offset = (page - 1) * limit;
     const search = req.query.search;
+    const difficulty = req.query.difficulty;
+    const answerType = req.query.answerType;
+    const lessonId = req.query.lessonId;
     const searchCondition = search
         ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.ParallelQuestion.question, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.lessons.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.questions.question, `%${search}%`))
         : undefined;
-    const finalCondition = searchCondition
-        ? (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.origianlQuestionId, id), searchCondition)
-        : (0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.origianlQuestionId, id);
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.origianlQuestionId, id),
+        searchCondition,
+        difficulty ? (0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.difficulty, difficulty) : undefined,
+        answerType ? (0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.answerType, answerType) : undefined,
+        lessonId ? (0, drizzle_orm_1.eq)(schema_1.ParallelQuestion.lessonId, lessonId) : undefined,
+    ].filter(Boolean);
+    const finalCondition = conditions.length > 1 ? (0, drizzle_orm_1.and)(...conditions) : conditions[0];
     const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() })
         .from(schema_1.ParallelQuestion)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.ParallelQuestion.lessonId))

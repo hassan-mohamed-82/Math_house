@@ -112,6 +112,13 @@ export const getAllQuestions = async (req: Request, res: Response) => {
     const offset = (page - 1) * limit;
 
     const search = req.query.search as string | undefined;
+    const difficulty = req.query.difficulty as string | undefined;
+    const questionType = req.query.questionType as string | undefined;
+    const answerType = req.query.answerType as string | undefined;
+    const year = req.query.year as string | undefined;
+    const month = req.query.month as string | undefined;
+    const sectionId = req.query.sectionId as string | undefined;
+    const codeId = req.query.codeId as string | undefined;
 
     const searchCondition: SQL | undefined = search
         ? or(
@@ -122,12 +129,25 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         )
         : undefined;
 
+    const conditions = [
+        searchCondition,
+        difficulty ? eq(questions.difficulty, difficulty as any) : undefined,
+        questionType ? eq(questions.questionType, questionType as any) : undefined,
+        answerType ? eq(questions.answerType, answerType as any) : undefined,
+        year ? eq(questions.year, parseInt(year)) : undefined,
+        month ? eq(questions.month, month as any) : undefined,
+        sectionId ? eq(questions.sectionId, sectionId) : undefined,
+        codeId ? eq(questions.codeId, codeId) : undefined,
+    ].filter(Boolean) as SQL[];
+
+    const finalCondition = conditions.length > 0 ? (conditions.length > 1 ? and(...conditions) : conditions[0]) : undefined;
+
     const [totalQueries] = await db.select({ count: count() })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
         .innerJoin(Sections, eq(Sections.id, questions.sectionId))
-        .where(searchCondition);
+        .where(finalCondition);
 
     const total = totalQueries.count;
     const totalPages = Math.ceil(total / limit);
@@ -161,7 +181,7 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
         .innerJoin(Sections, eq(Sections.id, questions.sectionId))
-        .where(searchCondition)
+        .where(finalCondition)
         .limit(limit)
         .offset(offset)
         .orderBy(desc(questions.createdAt));
@@ -367,6 +387,13 @@ export const getQuestionsbyLessonId = async (req: Request, res: Response) => {
     const offset = (page - 1) * limit;
 
     const search = req.query.search as string | undefined;
+    const difficulty = req.query.difficulty as string | undefined;
+    const questionType = req.query.questionType as string | undefined;
+    const answerType = req.query.answerType as string | undefined;
+    const year = req.query.year as string | undefined;
+    const month = req.query.month as string | undefined;
+    const sectionId = req.query.sectionId as string | undefined;
+    const codeId = req.query.codeId as string | undefined;
 
     const searchCondition: SQL | undefined = search
         ? or(
@@ -376,9 +403,19 @@ export const getQuestionsbyLessonId = async (req: Request, res: Response) => {
         )
         : undefined;
 
-    const finalCondition = searchCondition
-        ? and(eq(questions.lessonId, id), searchCondition)
-        : eq(questions.lessonId, id);
+    const conditions = [
+        eq(questions.lessonId, id),
+        searchCondition,
+        difficulty ? eq(questions.difficulty, difficulty as any) : undefined,
+        questionType ? eq(questions.questionType, questionType as any) : undefined,
+        answerType ? eq(questions.answerType, answerType as any) : undefined,
+        year ? eq(questions.year, parseInt(year)) : undefined,
+        month ? eq(questions.month, month as any) : undefined,
+        sectionId ? eq(questions.sectionId, sectionId) : undefined,
+        codeId ? eq(questions.codeId, codeId) : undefined,
+    ].filter(Boolean) as SQL[];
+
+    const finalCondition = conditions.length > 1 ? and(...conditions) : conditions[0];
 
     const [totalQueries] = await db.select({ count: count() })
         .from(questions)
@@ -740,6 +777,9 @@ export const getAllParallelQuestions = async (req: Request, res: Response) => {
     const offset = (page - 1) * limit;
 
     const search = req.query.search as string | undefined;
+    const difficulty = req.query.difficulty as string | undefined;
+    const answerType = req.query.answerType as string | undefined;
+    const lessonId = req.query.lessonId as string | undefined;
 
     const searchCondition: SQL | undefined = search
         ? or(
@@ -749,11 +789,20 @@ export const getAllParallelQuestions = async (req: Request, res: Response) => {
         )
         : undefined;
 
+    const conditions = [
+        searchCondition,
+        difficulty ? eq(ParallelQuestion.difficulty, difficulty as any) : undefined,
+        answerType ? eq(ParallelQuestion.answerType, answerType as any) : undefined,
+        lessonId ? eq(ParallelQuestion.lessonId, lessonId) : undefined,
+    ].filter(Boolean) as SQL[];
+
+    const finalCondition = conditions.length > 0 ? (conditions.length > 1 ? and(...conditions) : conditions[0]) : undefined;
+
     const [totalQueries] = await db.select({ count: count() })
         .from(ParallelQuestion)
         .innerJoin(lessons, eq(lessons.id, ParallelQuestion.lessonId))
         .innerJoin(questions, eq(questions.id, ParallelQuestion.origianlQuestionId))
-        .where(searchCondition);
+        .where(finalCondition);
 
     const total = totalQueries.count;
     const totalPages = Math.ceil(total / limit);
@@ -778,7 +827,7 @@ export const getAllParallelQuestions = async (req: Request, res: Response) => {
     }).from(ParallelQuestion)
         .innerJoin(lessons, eq(lessons.id, ParallelQuestion.lessonId))
         .innerJoin(questions, eq(questions.id, ParallelQuestion.origianlQuestionId))
-        .where(searchCondition)
+        .where(finalCondition)
         .limit(limit)
         .offset(offset)
         .orderBy(desc(ParallelQuestion.createdAt));
@@ -844,6 +893,9 @@ export const getParallelQuestionsByOriginalId = async (req: Request, res: Respon
     const offset = (page - 1) * limit;
 
     const search = req.query.search as string | undefined;
+    const difficulty = req.query.difficulty as string | undefined;
+    const answerType = req.query.answerType as string | undefined;
+    const lessonId = req.query.lessonId as string | undefined;
 
     const searchCondition: SQL | undefined = search
         ? or(
@@ -853,9 +905,15 @@ export const getParallelQuestionsByOriginalId = async (req: Request, res: Respon
         )
         : undefined;
 
-    const finalCondition = searchCondition
-        ? and(eq(ParallelQuestion.origianlQuestionId, id), searchCondition)
-        : eq(ParallelQuestion.origianlQuestionId, id);
+    const conditions = [
+        eq(ParallelQuestion.origianlQuestionId, id),
+        searchCondition,
+        difficulty ? eq(ParallelQuestion.difficulty, difficulty as any) : undefined,
+        answerType ? eq(ParallelQuestion.answerType, answerType as any) : undefined,
+        lessonId ? eq(ParallelQuestion.lessonId, lessonId) : undefined,
+    ].filter(Boolean) as SQL[];
+
+    const finalCondition = conditions.length > 1 ? and(...conditions) : conditions[0];
 
     const [totalQueries] = await db.select({ count: count() })
         .from(ParallelQuestion)
