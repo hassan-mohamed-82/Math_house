@@ -40,8 +40,9 @@ exports.selectOptions = selectOptions;
 // ===================== SEARCH API =====================
 // البحث في الـ Students
 const searchStudents = async (req, res) => {
-    const { q } = req.query;
-    const searchTerm = `%${q || ""}%`;
+    const { q = "", page = 1, limit = 20 } = req.query;
+    const searchTerm = `%${q}%`;
+    const offset = (Number(page) - 1) * Number(limit);
     const students = await connection_1.db
         .select({
         id: Student_1.Student.id,
@@ -53,13 +54,27 @@ const searchStudents = async (req, res) => {
     })
         .from(Student_1.Student)
         .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(Student_1.Student.firstname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.lastname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.nickname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.email, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.phone, searchTerm)))
-        .limit(20);
-    (0, response_1.SuccessResponse)(res, students.map(s => ({
-        value: s.id,
-        label: `${s.firstname} ${s.lastname}`,
-        nickname: s.nickname,
-        email: s.email
-    })));
+        .limit(Number(limit))
+        .offset(offset);
+    // Get total count for pagination metadata
+    const [{ total }] = await connection_1.db
+        .select({ total: (0, drizzle_orm_1.sql) `count(*)` })
+        .from(Student_1.Student)
+        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(Student_1.Student.firstname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.lastname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.nickname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.email, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.phone, searchTerm)));
+    (0, response_1.SuccessResponse)(res, {
+        data: students.map(s => ({
+            value: s.id,
+            label: `${s.firstname} ${s.lastname}`,
+            nickname: s.nickname,
+            email: s.email
+        })),
+        pagination: {
+            total: Number(total),
+            page: Number(page),
+            limit: Number(limit),
+            totalPages: Math.ceil(Number(total) / Number(limit))
+        }
+    });
 };
 exports.searchStudents = searchStudents;
 // ===================== GROUPS CRUD =====================

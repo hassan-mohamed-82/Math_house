@@ -87,17 +87,16 @@ const searchUsers = async (req, res) => {
 exports.searchUsers = searchUsers;
 // ===================== SESSIONS CRUD =====================
 const createSession = async (req, res) => {
-    const { name, sessionDate, timeFrom, timeTo, categoryId, courseId, lessonId, lessonName, type, groupId, teacherId, session_link, material_link, teacher_material_link, userIds } = req.body;
+    const { name, sessionDate, timeFrom, timeTo, lessonId, type, groupId, teacherId, session_link, material_link, teacher_material_link, userIds } = req.body;
     const trimmedName = typeof name === "string" ? name.trim() : "";
     const trimmedLessonId = typeof lessonId === "string" ? lessonId.trim() : "";
-    const trimmedLessonName = typeof lessonName === "string" ? lessonName.trim() : "";
     const trimmedGroupId = typeof groupId === "string" ? groupId.trim() : "";
     const trimmedSessionLink = typeof session_link === "string" ? session_link.trim() : "";
     const trimmedMaterialLink = typeof material_link === "string" ? material_link.trim() : "";
     const trimmedTeacherMaterialLink = typeof teacher_material_link === "string" ? teacher_material_link.trim() : "";
-    // Validation for NOT NULL fields
-    if (!trimmedName || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !categoryId || !courseId || !trimmedSessionLink) {
-        throw new BadRequest_1.BadRequest("Missing required fields (Check categoryId, courseId, or session_link)");
+    // Validation for NOT NULL fields that can't be deduced
+    if (!trimmedName || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !trimmedSessionLink || !trimmedLessonId) {
+        throw new BadRequest_1.BadRequest("Missing required fields (Check name, dates, type, teacher, link, or lessonId)");
     }
     if (!["session", "private", "group"].includes(type)) {
         throw new BadRequest_1.BadRequest("Invalid session type");
@@ -112,43 +111,23 @@ const createSession = async (req, res) => {
     if (Number.isNaN(parsedSessionDate.getTime())) {
         throw new BadRequest_1.BadRequest("Invalid sessionDate");
     }
-    const [existingCategory, existingCourse, existingTeacher, existingGroup, existingLesson] = await Promise.all([
-        connection_1.db.select({ id: category_1.category.id }).from(category_1.category).where((0, drizzle_orm_1.eq)(category_1.category.id, categoryId)).limit(1),
-        connection_1.db.select({ id: courses_1.courses.id, categoryId: courses_1.courses.categoryId }).from(courses_1.courses).where((0, drizzle_orm_1.eq)(courses_1.courses.id, courseId)).limit(1),
+    const [existingTeacher, existingGroup, existingLesson] = await Promise.all([
         connection_1.db.select({ id: teacher_1.teachers.id }).from(teacher_1.teachers).where((0, drizzle_orm_1.eq)(teacher_1.teachers.id, teacherId)).limit(1),
         type === "group" && trimmedGroupId
             ? connection_1.db.select({ id: Groups_1.groups.id }).from(Groups_1.groups).where((0, drizzle_orm_1.eq)(Groups_1.groups.id, trimmedGroupId)).limit(1)
             : Promise.resolve([]),
-        trimmedLessonId
-            ? connection_1.db.select({ id: lessons_1.lessons.id, categoryId: lessons_1.lessons.categoryId, courseId: lessons_1.lessons.courseId }).from(lessons_1.lessons).where((0, drizzle_orm_1.eq)(lessons_1.lessons.id, trimmedLessonId)).limit(1)
-            : Promise.resolve([]),
+        connection_1.db.select({ id: lessons_1.lessons.id, categoryId: lessons_1.lessons.categoryId, courseId: lessons_1.lessons.courseId, name: lessons_1.lessons.name }).from(lessons_1.lessons).where((0, drizzle_orm_1.eq)(lessons_1.lessons.id, trimmedLessonId)).limit(1)
     ]);
-    if (existingCategory.length === 0) {
-        throw new BadRequest_1.BadRequest("Category not found");
-    }
-    if (existingCourse.length === 0) {
-        throw new BadRequest_1.BadRequest("Course not found");
-    }
-    if (existingCourse[0].categoryId !== categoryId) {
-        throw new BadRequest_1.BadRequest("The selected course does not belong to the selected category");
-    }
     if (existingTeacher.length === 0) {
         throw new BadRequest_1.BadRequest("Teacher not found");
     }
     if (type === "group" && existingGroup.length === 0) {
         throw new BadRequest_1.BadRequest("Group not found");
     }
-    if (trimmedLessonId && existingLesson.length === 0) {
+    if (existingLesson.length === 0) {
         throw new BadRequest_1.BadRequest("Lesson not found");
     }
-    if (trimmedLessonId && existingLesson.length > 0) {
-        if (existingLesson[0].categoryId !== categoryId) {
-            throw new BadRequest_1.BadRequest("The selected lesson does not belong to the selected category");
-        }
-        if (existingLesson[0].courseId !== courseId) {
-            throw new BadRequest_1.BadRequest("The selected lesson does not belong to the selected course");
-        }
-    }
+    const { categoryId, courseId, name: fetchedLessonName } = existingLesson[0];
     const sessionId = (0, crypto_1.randomUUID)();
     await connection_1.db.transaction(async (tx) => {
         // 1. إنشاء الـ Object الأساسي بالحقول الإجبارية فقط
@@ -165,10 +144,8 @@ const createSession = async (req, res) => {
             session_link: trimmedSessionLink,
         };
         // 2. حقن الحقول الاختيارية ديناميكياً فقط في حال وجودها وكانت غير فارغة
-        if (trimmedLessonId)
-            newSessionData.lessonId = trimmedLessonId;
-        if (trimmedLessonName)
-            newSessionData.lessonName = trimmedLessonName;
+        newSessionData.lessonId = trimmedLessonId;
+        newSessionData.lessonName = fetchedLessonName;
         if (type === "group" && trimmedGroupId)
             newSessionData.groupId = trimmedGroupId;
         if (trimmedMaterialLink)

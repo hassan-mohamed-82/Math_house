@@ -43,8 +43,9 @@ export const selectOptions = async (req: Request, res: Response) => {
 
 // البحث في الـ Students
 export const searchStudents = async (req: Request, res: Response) => {
-    const { q } = req.query;
-    const searchTerm = `%${q || ""}%`;
+    const { q = "", page = 1, limit = 20 } = req.query;
+    const searchTerm = `%${q}%`;
+    const offset = (Number(page) - 1) * Number(limit);
 
     const students = await db
         .select({
@@ -65,14 +66,37 @@ export const searchStudents = async (req: Request, res: Response) => {
                 like(Student.phone, searchTerm)
             )
         )
-        .limit(20);
+        .limit(Number(limit))
+        .offset(offset);
 
-    SuccessResponse(res, students.map(s => ({
-        value: s.id,
-        label: `${s.firstname} ${s.lastname}`,
-        nickname: s.nickname,
-        email: s.email
-    })));
+    // Get total count for pagination metadata
+    const [{ total }] = await db
+        .select({ total: sql<number>`count(*)` })
+        .from(Student)
+        .where(
+            or(
+                like(Student.firstname, searchTerm),
+                like(Student.lastname, searchTerm),
+                like(Student.nickname, searchTerm),
+                like(Student.email, searchTerm),
+                like(Student.phone, searchTerm)
+            )
+        );
+
+    SuccessResponse(res, {
+        data: students.map(s => ({
+            value: s.id,
+            label: `${s.firstname} ${s.lastname}`,
+            nickname: s.nickname,
+            email: s.email
+        })),
+        pagination: {
+            total: Number(total),
+            page: Number(page),
+            limit: Number(limit),
+            totalPages: Math.ceil(Number(total) / Number(limit))
+        }
+    });
 
 };
 

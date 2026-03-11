@@ -106,10 +106,7 @@ export const createSession = async (req: Request, res: Response) => {
         sessionDate,
         timeFrom,
         timeTo,
-        categoryId,
-        courseId,
         lessonId,
-        lessonName,
         type,
         groupId,
         teacherId,
@@ -121,15 +118,14 @@ export const createSession = async (req: Request, res: Response) => {
 
     const trimmedName = typeof name === "string" ? name.trim() : "";
     const trimmedLessonId = typeof lessonId === "string" ? lessonId.trim() : "";
-    const trimmedLessonName = typeof lessonName === "string" ? lessonName.trim() : "";
     const trimmedGroupId = typeof groupId === "string" ? groupId.trim() : "";
     const trimmedSessionLink = typeof session_link === "string" ? session_link.trim() : "";
     const trimmedMaterialLink = typeof material_link === "string" ? material_link.trim() : "";
     const trimmedTeacherMaterialLink = typeof teacher_material_link === "string" ? teacher_material_link.trim() : "";
 
-    // Validation for NOT NULL fields
-    if (!trimmedName || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !categoryId || !courseId || !trimmedSessionLink) {
-        throw new BadRequest("Missing required fields (Check categoryId, courseId, or session_link)");
+    // Validation for NOT NULL fields that can't be deduced
+    if (!trimmedName || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !trimmedSessionLink || !trimmedLessonId) {
+        throw new BadRequest("Missing required fields (Check name, dates, type, teacher, link, or lessonId)");
     }
 
     if (!["session", "private", "group"].includes(type)) {
@@ -149,29 +145,13 @@ export const createSession = async (req: Request, res: Response) => {
         throw new BadRequest("Invalid sessionDate");
     }
 
-    const [existingCategory, existingCourse, existingTeacher, existingGroup, existingLesson] = await Promise.all([
-        db.select({ id: category.id }).from(category).where(eq(category.id, categoryId)).limit(1),
-        db.select({ id: courses.id, categoryId: courses.categoryId }).from(courses).where(eq(courses.id, courseId)).limit(1),
+    const [existingTeacher, existingGroup, existingLesson] = await Promise.all([
         db.select({ id: teachers.id }).from(teachers).where(eq(teachers.id, teacherId)).limit(1),
         type === "group" && trimmedGroupId
             ? db.select({ id: groups.id }).from(groups).where(eq(groups.id, trimmedGroupId)).limit(1)
             : Promise.resolve([]),
-        trimmedLessonId
-            ? db.select({ id: lessons.id, categoryId: lessons.categoryId, courseId: lessons.courseId }).from(lessons).where(eq(lessons.id, trimmedLessonId)).limit(1)
-            : Promise.resolve([]),
+        db.select({ id: lessons.id, categoryId: lessons.categoryId, courseId: lessons.courseId, name: lessons.name }).from(lessons).where(eq(lessons.id, trimmedLessonId)).limit(1)
     ]);
-
-    if (existingCategory.length === 0) {
-        throw new BadRequest("Category not found");
-    }
-
-    if (existingCourse.length === 0) {
-        throw new BadRequest("Course not found");
-    }
-
-    if (existingCourse[0].categoryId !== categoryId) {
-        throw new BadRequest("The selected course does not belong to the selected category");
-    }
 
     if (existingTeacher.length === 0) {
         throw new BadRequest("Teacher not found");
@@ -181,19 +161,11 @@ export const createSession = async (req: Request, res: Response) => {
         throw new BadRequest("Group not found");
     }
 
-    if (trimmedLessonId && existingLesson.length === 0) {
+    if (existingLesson.length === 0) {
         throw new BadRequest("Lesson not found");
     }
 
-    if (trimmedLessonId && existingLesson.length > 0) {
-        if (existingLesson[0].categoryId !== categoryId) {
-            throw new BadRequest("The selected lesson does not belong to the selected category");
-        }
-
-        if (existingLesson[0].courseId !== courseId) {
-            throw new BadRequest("The selected lesson does not belong to the selected course");
-        }
-    }
+    const { categoryId, courseId, name: fetchedLessonName } = existingLesson[0];
 
     const sessionId = randomUUID();
 
@@ -213,8 +185,8 @@ export const createSession = async (req: Request, res: Response) => {
         };
 
         // 2. حقن الحقول الاختيارية ديناميكياً فقط في حال وجودها وكانت غير فارغة
-        if (trimmedLessonId) newSessionData.lessonId = trimmedLessonId;
-        if (trimmedLessonName) newSessionData.lessonName = trimmedLessonName;
+        newSessionData.lessonId = trimmedLessonId;
+        newSessionData.lessonName = fetchedLessonName;
         if (type === "group" && trimmedGroupId) newSessionData.groupId = trimmedGroupId;
         if (trimmedMaterialLink) newSessionData.material_link = trimmedMaterialLink;
         if (trimmedTeacherMaterialLink) newSessionData.teacher_material_link = trimmedTeacherMaterialLink;
