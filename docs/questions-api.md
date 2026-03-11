@@ -17,21 +17,21 @@ Creates a new question.
 
 **Request Body:**
 
-| Field          | Type   | Required | Description                          |
-| -------------- | ------ | -------- | ------------------------------------ |
-| `question`     | string | ✅        | The question text                    |
-| `image`        | string | ❌        | Base64 encoded image or URL          |
-| `answerType`   | enum   | ✅        | `MCQ` or `Grid in`                   |
-| `difficulty`   | enum   | ✅        | `A`, `B`, `C`, `D`, `E`              |
-| `questionType` | enum   | ✅        | `Trail` or `Extra`                   |
-| `lessonId`     | string | ✅        | Lesson UUID                          |
-| `year`         | number | ✅        | Year                                 |
-| `month`        | enum   | ✅        | `Jan`, `Feb`, `Mar`, ...             |
-| `section`      | enum   | ✅        | `1`, `2`, `3`, `4`                   |
-| `codeId`       | string | ✅        | Exam Code UUID                       |
+| Field          | Type   | Required | Description                                    |
+| -------------- | ------ | -------- | ---------------------------------------------- |
+| `question`     | string | ✅        | The question text                              |
+| `image`        | string | ❌        | Base64 encoded image or URL                    |
+| `answerType`   | enum   | ✅        | `MCQ` or `Grid in`                             |
+| `difficulty`   | enum   | ✅        | `A`, `B`, `C`, `D`, `E`                        |
+| `questionType` | enum   | ✅        | `Trail` or `Extra`                             |
+| `lessonId`     | string | ✅        | Lesson UUID                                    |
+| `year`         | number | ✅        | Year                                           |
+| `month`        | enum   | ✅        | `Jan`, `Feb`, `Mar`, ...                       |
+| `section`      | enum   | ✅        | `1`, `2`, `3`, `4`                             |
+| `codeId`       | string | ✅        | Exam Code UUID                                 |
 | `options`      | array  | ⚠️        | Required if `answerType` is `MCQ` or `Grid in` |
-| `answerPdf`    | string | ❌        | PDF URL for the answer explanation   |
-| `answerVideo`  | string | ❌        | Video URL for the answer explanation |
+| `answerPdf`    | string | ❌        | PDF URL for the answer explanation             |
+| `answerVideo`  | string | ❌        | Video URL for the answer explanation           |
 
 **Options Array Item (MCQ):**
 
@@ -68,11 +68,11 @@ For `Grid in` questions, the `options` array must contain all acceptable correct
 
 **Error Responses:**
 
-| Status | Condition                     |
-| ------ | ----------------------------- |
-| 400    | Missing required fields       |
-| 400    | Options missing for MCQ or Grid in       |
-| 404    | Lesson or Exam code not found |
+| Status | Condition                          |
+| ------ | ---------------------------------- |
+| 400    | Missing required fields            |
+| 400    | Options missing for MCQ or Grid in |
+| 404    | Lesson or Exam code not found      |
 
 ---
 
@@ -84,10 +84,18 @@ Returns a paginated list of all questions.
 
 **Query Parameters:**
 
-| Param   | Type   | Description                            |
-| ------- | ------ | -------------------------------------- |
-| `page`  | number | Page number (default: 1)               |
-| `limit` | number | Number of items per page (default: 10) |
+| Param          | Type   | Description                            |
+| -------------- | ------ | -------------------------------------- |
+| `page`         | number | Page number (default: 1)               |
+| `limit`        | number | Number of items per page (default: 10) |
+| `search`       | string | Optional search keyword                |
+| `difficulty`   | enum   | Optional (`A`, `B`, `C`, `D`, `E`)     |
+| `questionType` | enum   | Optional (`Trail` or `Extra`)          |
+| `answerType`   | enum   | Optional (`MCQ` or `Grid in`)          |
+| `year`         | number | Optional year                          |
+| `month`        | enum   | Optional (`Jan`, `Feb`, `Mar`, ...)    |
+| `sectionId`    | string | Optional Section UUID                  |
+| `codeId`       | string | Optional Exam Code UUID                |
 
 **Success Response (200):**
 
@@ -229,13 +237,13 @@ Manually creates a parallel question.
 
 **Request Body:**
 
-| Field                | Type   | Required | Description                       |
-| -------------------- | ------ | -------- | --------------------------------- |
-| `origianlQuestionId` | string | ✅        | Original Question UUID            |
-| `question`           | string | ✅        | Question text                     |
-| `answerType`         | enum   | ✅        | `MCQ` or `Grid in`                |
-| `difficulty`         | enum   | ✅        | `A`, `B`, `C`, `D`, `E`           |
-| `lessonId`           | string | ✅        | Lesson UUID                       |
+| Field                | Type   | Required | Description                                    |
+| -------------------- | ------ | -------- | ---------------------------------------------- |
+| `origianlQuestionId` | string | ✅        | Original Question UUID                         |
+| `question`           | string | ✅        | Question text                                  |
+| `answerType`         | enum   | ✅        | `MCQ` or `Grid in`                             |
+| `difficulty`         | enum   | ✅        | `A`, `B`, `C`, `D`, `E`                        |
+| `lessonId`           | string | ✅        | Lesson UUID                                    |
 | `options`            | array  | ⚠️        | Required if `answerType` is `MCQ` or `Grid in` |
 
 **Success Response (201):**
@@ -257,10 +265,14 @@ Returns a paginated list of all parallel questions.
 
 **Query Parameters:**
 
-| Param   | Type   | Description                            |
-| ------- | ------ | -------------------------------------- |
-| `page`  | number | Page number (default: 1)               |
-| `limit` | number | Number of items per page (default: 10) |
+| Param        | Type   | Description                            |
+| ------------ | ------ | -------------------------------------- |
+| `page`       | number | Page number (default: 1)               |
+| `limit`      | number | Number of items per page (default: 10) |
+| `search`     | string | Optional search keyword                |
+| `difficulty` | enum   | Optional (`A`, `B`, `C`, `D`, `E`)     |
+| `answerType` | enum   | Optional (`MCQ` or `Grid in`)          |
+| `lessonId`   | string | Optional Lesson UUID                   |
 
 **Success Response (200):**
 
