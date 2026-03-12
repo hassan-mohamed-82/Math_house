@@ -13,6 +13,7 @@ import {
     updateLessonIdea,
     deleteLessonIdea,
     selectChapters,
+    getLessonsbyCourseId,
 } from "../../controllers/admin/lessons";
 import { catchAsync } from "../../utils/catchAsync";
 
@@ -24,6 +25,7 @@ router.get("/select-chapters", catchAsync(selectChapters));
 // ─── Lesson Routes ──────────────────────────────────────────────────────────
 router.post("/", catchAsync(createLesson));
 router.get("/", catchAsync(getAllLessons));
+router.get("/course/:courseId", catchAsync(getLessonsbyCourseId));
 router.patch("/swap-order", catchAsync(swapLessonOrder));
 router.get("/chapter/:chapterId", catchAsync(getLessonsByChapterId));
 router.get("/:id", catchAsync(getLessonById));

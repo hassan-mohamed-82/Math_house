@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { eq, max, asc, and, gt, sql } from "drizzle-orm";
+import { eq, max, asc, and, gt, sql, like, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
@@ -297,6 +297,52 @@ export const deleteLesson = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Lesson deleted successfully" }, 200);
 };
 
+export const getLessonsbyCourseId = async (req: Request, res: Response) => {
+    const { courseId } = req.params;
+    const { page = "1", limit = "10", search, chapterId, categoryId, teacherId } = req.query;
+
+    const pageNum = parseInt(page as string, 10) || 1;
+    const limitNum = parseInt(limit as string, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
+
+    const conditions: any[] = [eq(lessons.courseId, courseId)];
+
+    if (search) {
+        conditions.push(or(
+            like(lessons.name, `%${search}%`),
+            like(lessons.description, `%${search}%`)
+        ));
+    }
+
+    if (chapterId) conditions.push(eq(lessons.chapterId, chapterId as string));
+    if (categoryId) conditions.push(eq(lessons.categoryId, categoryId as string));
+    if (teacherId) conditions.push(eq(lessons.teacherId, teacherId as string));
+
+    const whereClause = and(...conditions);
+
+    const allLessons = await lessonDetailedQuery()
+        .where(whereClause)
+        .limit(limitNum)
+        .offset(offset)
+        .orderBy(asc(lessons.order));
+
+    const [totalResult] = await db.select({ count: sql<number>`count(*)` })
+        .from(lessons)
+        .where(whereClause);
+
+    const total = Number(totalResult?.count || 0);
+
+    return SuccessResponse(res, {
+        message: "Lessons fetched successfully",
+        lessons: allLessons,
+        pagination: {
+            total,
+            page: pageNum,
+            limit: limitNum,
+            totalPages: Math.ceil(total / limitNum)
+        }
+    }, 200);
+};
 // Lesson Ideas
 
 export const createLessonIdea = async (req: Request, res: Response) => {

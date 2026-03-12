@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.selectLessons = exports.selectChapters = exports.deleteLessonIdea = exports.updateLessonIdea = exports.swapIdeaOrder = exports.getIdeasByLessonId = exports.createLessonIdea = exports.deleteLesson = exports.updateLesson = exports.swapLessonOrder = exports.getLessonsByChapterId = exports.getAllLessons = exports.getLessonById = exports.createLesson = void 0;
+exports.selectLessons = exports.selectChapters = exports.deleteLessonIdea = exports.updateLessonIdea = exports.swapIdeaOrder = exports.getIdeasByLessonId = exports.createLessonIdea = exports.getLessonsbyCourseId = exports.deleteLesson = exports.updateLesson = exports.swapLessonOrder = exports.getLessonsByChapterId = exports.getAllLessons = exports.getLessonById = exports.createLesson = void 0;
 const connection_1 = require("../../models/connection");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
@@ -254,6 +254,44 @@ const deleteLesson = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Lesson deleted successfully" }, 200);
 };
 exports.deleteLesson = deleteLesson;
+const getLessonsbyCourseId = async (req, res) => {
+    const { courseId } = req.params;
+    const { page = "1", limit = "10", search, chapterId, categoryId, teacherId } = req.query;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
+    const offset = (pageNum - 1) * limitNum;
+    const conditions = [(0, drizzle_orm_1.eq)(schema_1.lessons.courseId, courseId)];
+    if (search) {
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.lessons.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.lessons.description, `%${search}%`)));
+    }
+    if (chapterId)
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, chapterId));
+    if (categoryId)
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.lessons.categoryId, categoryId));
+    if (teacherId)
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.lessons.teacherId, teacherId));
+    const whereClause = (0, drizzle_orm_1.and)(...conditions);
+    const allLessons = await lessonDetailedQuery()
+        .where(whereClause)
+        .limit(limitNum)
+        .offset(offset)
+        .orderBy((0, drizzle_orm_1.asc)(schema_1.lessons.order));
+    const [totalResult] = await connection_1.db.select({ count: (0, drizzle_orm_1.sql) `count(*)` })
+        .from(schema_1.lessons)
+        .where(whereClause);
+    const total = Number(totalResult?.count || 0);
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Lessons fetched successfully",
+        lessons: allLessons,
+        pagination: {
+            total,
+            page: pageNum,
+            limit: limitNum,
+            totalPages: Math.ceil(total / limitNum)
+        }
+    }, 200);
+};
+exports.getLessonsbyCourseId = getLessonsbyCourseId;
 // Lesson Ideas
 const createLessonIdea = async (req, res) => {
     const { lessonId, idea, pdf, video } = req.body;

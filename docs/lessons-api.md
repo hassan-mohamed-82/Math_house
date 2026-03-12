@@ -142,7 +142,58 @@ Returns all lessons for a specific chapter, ordered by `order`. Each lesson incl
 
 ---
 
-### 4. Get Lesson by ID
+### 4. Get Lessons by Course ID
+
+**`GET /admin/lessons/course/:courseId`**
+
+Returns all lessons for a specific course, with pagination, searching, and filtering capabilities. Lessons are ordered by their native `order`.
+
+**URL Parameters:**
+
+| Param      | Type   | Description |
+| ---------- | ------ | ----------- |
+| `courseId` | string | Course UUID |
+
+**Query Parameters (Optional):**
+
+| Param        | Type   | Default | Description                                                     |
+| ------------ | ------ | ------- | --------------------------------------------------------------- |
+| `page`       | number | `1`     | Page number for pagination                                      |
+| `limit`      | number | `10`    | Number of items per page                                        |
+| `search`     | string | -       | Search keyword (checks `name` and `description` of the lessons) |
+| `chapterId`  | string | -       | Filter by a specific chapter UUID                               |
+| `categoryId` | string | -       | Filter by a specific category UUID                              |
+| `teacherId`  | string | -       | Filter by a specific teacher UUID                               |
+
+**Success Response (200):**
+
+```json
+{
+  "success": true,
+  "data": {
+    "message": "Lessons fetched successfully",
+    "lessons": [
+      {
+        "lesson": { "id": "uuid", "name": "...", "order": 1, "..." },
+        "chapter": { "..." },
+        "course": { "..." },
+        "category": { "..." },
+        "teacher": { "..." }
+      }
+    ],
+    "pagination": {
+      "total": 45,
+      "page": 1,
+      "limit": 10,
+      "totalPages": 5
+    }
+  }
+}
+```
+
+---
+
+### 5. Get Lesson by ID
 
 **`GET /admin/lessons/:id`**
 
@@ -178,7 +229,7 @@ Returns a single lesson with full details.
 
 ---
 
-### 5. Update Lesson
+### 6. Update Lesson
 
 **`PUT /admin/lessons/:id`**
 
@@ -210,7 +261,7 @@ Updates an existing lesson. If `chapterId` changes, `courseId` and `categoryId` 
 
 ---
 
-### 6. Delete Lesson
+### 7. Delete Lesson
 
 **`DELETE /admin/lessons/:id`**
 
@@ -238,7 +289,7 @@ Deletes a lesson and re-sequences the order of remaining lessons in the same cha
 
 ---
 
-### 7. Swap Lesson Order
+### 8. Swap Lesson Order
 
 **`PATCH /admin/lessons/swap-order`**
 
@@ -271,7 +322,7 @@ Swaps the order of two lessons. Both must belong to the same chapter.
 
 ## Lesson Idea Endpoints
 
-### 8. Create Lesson Idea
+### 9. Create Lesson Idea
 
 **`POST /admin/lessons/ideas`**
 
@@ -307,7 +358,7 @@ Creates a new idea for a lesson. `ideaOrder` is auto-computed as `MAX(ideaOrder)
 
 ---
 
-### 9. Get Ideas by Lesson ID
+### 10. Get Ideas by Lesson ID
 
 **`GET /admin/lessons/ideas/lesson/:lessonId`**
 
@@ -344,7 +395,7 @@ Returns all ideas for a lesson, ordered by `ideaOrder`.
 
 ---
 
-### 10. Update Lesson Idea
+### 11. Update Lesson Idea
 
 **`PUT /admin/lessons/ideas/:id`**
 
@@ -377,7 +428,7 @@ Updates an existing lesson idea.
 
 ---
 
-### 11. Delete Lesson Idea
+### 12. Delete Lesson Idea
 
 **`DELETE /admin/lessons/ideas/:id`**
 
@@ -405,7 +456,7 @@ Deletes a lesson idea and re-sequences the order of remaining ideas in the same 
 
 ---
 
-### 12. Swap Idea Order
+### 13. Swap Idea Order
 
 **`PATCH /admin/lessons/ideas/swap-order`**
 

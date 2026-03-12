@@ -9,6 +9,7 @@ router.get("/select-chapters", (0, catchAsync_1.catchAsync)(lessons_1.selectChap
 // ─── Lesson Routes ──────────────────────────────────────────────────────────
 router.post("/", (0, catchAsync_1.catchAsync)(lessons_1.createLesson));
 router.get("/", (0, catchAsync_1.catchAsync)(lessons_1.getAllLessons));
+router.get("/course/:courseId", (0, catchAsync_1.catchAsync)(lessons_1.getLessonsbyCourseId));
 router.patch("/swap-order", (0, catchAsync_1.catchAsync)(lessons_1.swapLessonOrder));
 router.get("/chapter/:chapterId", (0, catchAsync_1.catchAsync)(lessons_1.getLessonsByChapterId));
 router.get("/:id", (0, catchAsync_1.catchAsync)(lessons_1.getLessonById));
