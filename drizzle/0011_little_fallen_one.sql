@@ -1,1 +1,0 @@
-ALTER TABLE `student` ADD `avatar` varchar(255);

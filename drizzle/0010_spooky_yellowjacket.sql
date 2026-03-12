@@ -1,1 +1,0 @@
-ALTER TABLE `student` ADD `is_verified` boolean DEFAULT false NOT NULL;

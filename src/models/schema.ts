@@ -32,7 +32,8 @@ export * from "./schema/admin/payment";
 export * from "./schema/admin/examAttempts";
 export * from "./schema/admin/studentAnswers";
 export * from "./schema/user/Wallet";
-
+export * from "./schema/user/StudentDiagnosticExam";
+export * from "./schema/user/studentDiagnosticAnswers";
 
 // Drive schema
 export * from "../drive/models/drive";

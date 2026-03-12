@@ -16,10 +16,10 @@ exports.questions = (0, mysql_core_1.mysqlTable)("questions", {
     // Linking
     lessonId: (0, mysql_core_1.char)("lesson_id", { length: 255 }).notNull().references(() => lessons_1.lessons.id),
     // Meta
-    year: (0, mysql_core_1.year)("year").notNull(),
-    month: (0, mysql_core_1.mysqlEnum)("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]).notNull(),
-    sectionId: (0, mysql_core_1.char)("section_id", { length: 255 }).notNull().references(() => sections_1.Sections.id),
-    codeId: (0, mysql_core_1.char)("code_id", { length: 255 }).notNull().references(() => examCodes_1.examCodes.id),
+    year: (0, mysql_core_1.year)("year"),
+    month: (0, mysql_core_1.mysqlEnum)("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]),
+    sectionId: (0, mysql_core_1.char)("section_id", { length: 255 }).references(() => sections_1.Sections.id),
+    codeId: (0, mysql_core_1.char)("code_id", { length: 255 }).references(() => examCodes_1.examCodes.id),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

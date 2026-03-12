@@ -1,1 +1,0 @@
-ALTER TABLE `sessions` ADD `session_relational_type` enum('Explanation','Re-Exeplanation','Mistakes','Exam') DEFAULT 'Explanation';

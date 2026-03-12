@@ -5,99 +5,15 @@
     {
       "idx": 0,
       "version": "5",
-      "when": 1770289994317,
-      "tag": "0000_silky_sentinel",
+      "when": 1773328476826,
+      "tag": "0000_mature_pixie",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "5",
-      "when": 1771144222739,
-      "tag": "0001_tired_omega_sentinel",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1771156171966,
-      "tag": "0002_pretty_vision",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "5",
-      "when": 1771840975646,
-      "tag": "0003_ancient_jean_grey",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "5",
-      "when": 1771844275873,
-      "tag": "0004_silent_mandarin",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "5",
-      "when": 1771844404494,
-      "tag": "0005_overrated_freak",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "5",
-      "when": 1771924963948,
-      "tag": "0006_sudden_firedrake",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "5",
-      "when": 1771927000146,
-      "tag": "0007_thin_jackpot",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "5",
-      "when": 1771933461933,
-      "tag": "0008_nosy_mister_sinister",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "5",
-      "when": 1772894149335,
-      "tag": "0009_boring_calypso",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "5",
-      "when": 1772903310497,
-      "tag": "0010_spooky_yellowjacket",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "5",
-      "when": 1772961439488,
-      "tag": "0011_little_fallen_one",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "5",
-      "when": 1773136808320,
-      "tag": "0012_exotic_siren",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "5",
-      "when": 1773220090842,
-      "tag": "0013_yielding_human_robot",
+      "when": 1773328841720,
+      "tag": "0001_sturdy_silk_fever",
       "breakpoints": true
     }
   ]

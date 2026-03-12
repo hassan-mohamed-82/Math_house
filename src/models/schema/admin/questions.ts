@@ -16,10 +16,10 @@ export const questions = mysqlTable("questions", {
     lessonId: char("lesson_id", { length: 255 }).notNull().references(() => lessons.id),
 
     // Meta
-    year: year("year").notNull(),
-    month: mysqlEnum("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]).notNull(),
-    sectionId: char("section_id", { length: 255 }).notNull().references(() => Sections.id),
-    codeId: char("code_id", { length: 255 }).notNull().references(() => examCodes.id),
+    year: year("year"),
+    month: mysqlEnum("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]),
+    sectionId: char("section_id", { length: 255 }).references(() => Sections.id),
+    codeId: char("code_id", { length: 255 }).references(() => examCodes.id),
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

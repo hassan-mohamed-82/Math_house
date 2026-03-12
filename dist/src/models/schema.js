@@ -48,5 +48,7 @@ __exportStar(require("./schema/admin/payment"), exports);
 __exportStar(require("./schema/admin/examAttempts"), exports);
 __exportStar(require("./schema/admin/studentAnswers"), exports);
 __exportStar(require("./schema/user/Wallet"), exports);
+__exportStar(require("./schema/user/StudentDiagnosticExam"), exports);
+__exportStar(require("./schema/user/studentDiagnosticAnswers"), exports);
 // Drive schema
 __exportStar(require("../drive/models/drive"), exports);
