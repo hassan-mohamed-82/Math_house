@@ -1,292 +1,414 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSession = exports.updateSession = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.searchUsers = exports.getGroupUsers = exports.selectOptions = void 0;
+exports.deleteSession = exports.updateSession = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.selectStudents = exports.selectLesson = exports.selectChapter = exports.selectCourse = exports.selectCategory = void 0;
 const crypto_1 = require("crypto");
 const connection_1 = require("../../models/connection");
 const Session_1 = require("../../models/schema/admin/Session");
 const Groups_1 = require("../../models/schema/admin/Groups");
-const Student_1 = require("../../models/schema/admin/Student");
-const teacher_1 = require("../../models/schema/admin/teacher");
-const category_1 = require("../../models/schema/admin/category");
-const courses_1 = require("../../models/schema/admin/courses");
-const lessons_1 = require("../../models/schema/admin/lessons");
+const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
-// ===================== SELECT OPTIONS =====================
-const selectOptions = async (req, res) => {
-    const [groupsList, teachersList, categoriesList, coursesList] = await Promise.all([
-        connection_1.db.select({ id: Groups_1.groups.id, name: Groups_1.groups.name }).from(Groups_1.groups).where((0, drizzle_orm_1.eq)(Groups_1.groups.isActive, true)),
-        connection_1.db.select({ id: teacher_1.teachers.id, name: teacher_1.teachers.name }).from(teacher_1.teachers),
-        connection_1.db.select({ id: category_1.category.id, name: category_1.category.name }).from(category_1.category),
-        connection_1.db.select({ id: courses_1.courses.id, name: courses_1.courses.name, categoryId: courses_1.courses.categoryId }).from(courses_1.courses),
-    ]);
-    (0, response_1.SuccessResponse)(res, {
-        groups: groupsList.map(g => ({ value: g.id, label: g.name })),
-        teachers: teachersList.map(t => ({ value: t.id, label: t.name })),
-        categories: categoriesList.map(c => ({ value: c.id, label: c.name })),
-        courses: coursesList.map(c => ({ value: c.id, label: c.name, categoryId: c.categoryId })),
+// Selections
+const selectCategory = async (req, res) => {
+    const allCategories = await connection_1.db.select({
+        id: schema_1.category.id,
+        name: schema_1.category.name,
+        parentCategoryId: schema_1.category.parentCategoryId,
+    }).from(schema_1.category);
+    const categoryMap = new Map();
+    const parentIds = new Set();
+    allCategories.forEach(cat => {
+        categoryMap.set(cat.id, cat);
+        if (cat.parentCategoryId) {
+            parentIds.add(cat.parentCategoryId);
+        }
     });
+    const leafCategories = allCategories.filter(cat => !parentIds.has(cat.id));
+    const formattedCategories = leafCategories.map(leaf => {
+        let current = leaf;
+        const ancestors = [];
+        while (current) {
+            ancestors.unshift(current.name);
+            if (current.parentCategoryId && categoryMap.has(current.parentCategoryId)) {
+                current = categoryMap.get(current.parentCategoryId);
+            }
+            else {
+                break;
+            }
+        }
+        return {
+            id: leaf.id,
+            name: ancestors.join(" > "),
+            root: ancestors[0] || leaf.name
+        };
+    });
+    const groupedCategories = formattedCategories.reduce((acc, curr) => {
+        const { root, ...rest } = curr;
+        if (!acc[root]) {
+            acc[root] = [];
+        }
+        acc[root].push(rest);
+        return acc;
+    }, {});
+    const result = Object.keys(groupedCategories).map(key => ({
+        root: key,
+        children: groupedCategories[key]
+    }));
+    return (0, response_1.SuccessResponse)(res, { categories: result });
 };
-exports.selectOptions = selectOptions;
-// ===================== USERS APIs =====================
-const getGroupUsers = async (req, res) => {
-    const { groupId } = req.params;
-    const users = await connection_1.db
-        .select({
-        id: Student_1.Student.id,
-        firstname: Student_1.Student.firstname,
-        lastname: Student_1.Student.lastname,
-        nickname: Student_1.Student.nickname,
-        email: Student_1.Student.email,
-        phone: Student_1.Student.phone,
-    })
-        .from(Groups_1.groupStudents)
-        .innerJoin(Student_1.Student, (0, drizzle_orm_1.eq)(Groups_1.groupStudents.studentId, Student_1.Student.id))
-        .where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.groupId, groupId));
-    (0, response_1.SuccessResponse)(res, users.map(u => ({
-        value: u.id,
-        label: `${u.firstname} ${u.lastname}`,
-        nickname: u.nickname,
-        email: u.email,
-        phone: u.phone
-    })));
+exports.selectCategory = selectCategory;
+const selectCourse = async (req, res) => {
+    const coursesList = await connection_1.db.select({
+        id: schema_1.courses.id,
+        name: schema_1.courses.name,
+        categoryId: schema_1.courses.categoryId,
+    }).from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.categoryId, req.params.categoryId));
+    return (0, response_1.SuccessResponse)(res, { courses: coursesList });
 };
-exports.getGroupUsers = getGroupUsers;
-const searchUsers = async (req, res) => {
-    const { q, excludeIds } = req.query;
-    const searchValue = (q ?? "").toString().trim().toLowerCase();
-    const searchTerm = `%${searchValue}%`;
-    let excludeIdsList = [];
-    if (excludeIds && typeof excludeIds === "string" && excludeIds.trim() !== "") {
-        excludeIdsList = excludeIds.split(",");
+exports.selectCourse = selectCourse;
+const selectChapter = async (req, res) => {
+    const { courseId } = req.params;
+    const chaptersList = await connection_1.db.select({
+        id: schema_1.chapters.id,
+        name: schema_1.chapters.name,
+    }).from(schema_1.chapters).where((0, drizzle_orm_1.eq)(schema_1.chapters.courseId, courseId));
+    return (0, response_1.SuccessResponse)(res, { chapters: chaptersList });
+};
+exports.selectChapter = selectChapter;
+const selectLesson = async (req, res) => {
+    const lessonsList = await connection_1.db.select({
+        id: schema_1.lessons.id,
+        name: schema_1.lessons.name,
+    }).from(schema_1.lessons).where((0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, req.params.chapterId));
+    return (0, response_1.SuccessResponse)(res, { lessons: lessonsList });
+};
+exports.selectLesson = selectLesson;
+const selectStudents = async (req, res) => {
+    const { grade, categoryId, search } = req.query;
+    const conditions = [];
+    if (grade) {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.Student.grade, grade));
     }
-    let users = await connection_1.db
-        .select({
-        id: Student_1.Student.id,
-        firstname: Student_1.Student.firstname,
-        lastname: Student_1.Student.lastname,
-        nickname: Student_1.Student.nickname,
-        email: Student_1.Student.email,
-        phone: Student_1.Student.phone,
-    })
-        .from(Student_1.Student)
-        .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(Student_1.Student.firstname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.lastname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.nickname, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.email, searchTerm), (0, drizzle_orm_1.like)(Student_1.Student.phone, searchTerm)))
-        .limit(20);
-    if (excludeIdsList.length > 0) {
-        users = users.filter(u => !excludeIdsList.includes(u.id));
+    if (categoryId) {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.Student.category, categoryId));
     }
-    (0, response_1.SuccessResponse)(res, users.map(u => ({
-        value: u.id,
-        label: `${u.firstname} ${u.lastname}`,
-        nickname: u.nickname,
-        email: u.email
-    })));
+    if (search) {
+        const d_search = search;
+        conditions.push((0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.Student.firstname, `%${d_search}%`), (0, drizzle_orm_1.like)(schema_1.Student.lastname, `%${d_search}%`), (0, drizzle_orm_1.like)(schema_1.Student.email, `%${d_search}%`), (0, drizzle_orm_1.like)(schema_1.Student.phone, `%${d_search}%`)));
+    }
+    const studentsList = await connection_1.db.select({
+        id: schema_1.Student.id,
+        name: (0, drizzle_orm_1.sql) `CONCAT(${schema_1.Student.firstname}, ' ', ${schema_1.Student.lastname})`.as("name"),
+    })
+        .from(schema_1.Student)
+        .where(conditions.length > 0 ? (0, drizzle_orm_1.and)(...conditions) : undefined);
+    return (0, response_1.SuccessResponse)(res, { students: studentsList });
 };
-exports.searchUsers = searchUsers;
-// ===================== SESSIONS CRUD =====================
+exports.selectStudents = selectStudents;
 const createSession = async (req, res) => {
-    const { name, sessionDate, timeFrom, timeTo, lessonId, type, groupId, teacherId, session_link, material_link, teacher_material_link, userIds } = req.body;
-    const trimmedName = typeof name === "string" ? name.trim() : "";
-    const trimmedLessonId = typeof lessonId === "string" ? lessonId.trim() : "";
-    const trimmedGroupId = typeof groupId === "string" ? groupId.trim() : "";
-    const trimmedSessionLink = typeof session_link === "string" ? session_link.trim() : "";
-    const trimmedMaterialLink = typeof material_link === "string" ? material_link.trim() : "";
-    const trimmedTeacherMaterialLink = typeof teacher_material_link === "string" ? teacher_material_link.trim() : "";
-    // Validation for NOT NULL fields that can't be deduced
-    if (!trimmedName || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !trimmedSessionLink || !trimmedLessonId) {
-        throw new BadRequest_1.BadRequest("Missing required fields (Check name, dates, type, teacher, link, or lessonId)");
+    const { name, sessionDate, timeFrom, timeTo, type, groupId, teacherId, session_link, material_link, teacher_material_link, sessionRelationalType, lessonIds, studentIds } = req.body;
+    if (!name ||
+        !sessionDate ||
+        !timeFrom ||
+        !timeTo ||
+        !type ||
+        !teacherId ||
+        !session_link ||
+        !sessionRelationalType ||
+        !lessonIds ||
+        !Array.isArray(lessonIds) ||
+        lessonIds.length === 0) {
+        throw new BadRequest_1.BadRequest("Missing or invalid required fields");
     }
-    if (!["session", "private", "group"].includes(type)) {
-        throw new BadRequest_1.BadRequest("Invalid session type");
+    // Time Validations
+    if (new Date(`${sessionDate}T${timeFrom}`) >= new Date(`${sessionDate}T${timeTo}`)) {
+        throw new BadRequest_1.BadRequest("timeFrom must be before timeTo");
     }
-    if (type === "group" && !trimmedGroupId) {
-        throw new BadRequest_1.BadRequest("groupId is required for group sessions");
-    }
-    if (userIds !== undefined && !Array.isArray(userIds)) {
-        throw new BadRequest_1.BadRequest("userIds must be an array of student ids");
-    }
-    const parsedSessionDate = new Date(sessionDate);
-    if (Number.isNaN(parsedSessionDate.getTime())) {
-        throw new BadRequest_1.BadRequest("Invalid sessionDate");
-    }
-    const [existingTeacher, existingGroup, existingLesson] = await Promise.all([
-        connection_1.db.select({ id: teacher_1.teachers.id }).from(teacher_1.teachers).where((0, drizzle_orm_1.eq)(teacher_1.teachers.id, teacherId)).limit(1),
-        type === "group" && trimmedGroupId
-            ? connection_1.db.select({ id: Groups_1.groups.id }).from(Groups_1.groups).where((0, drizzle_orm_1.eq)(Groups_1.groups.id, trimmedGroupId)).limit(1)
-            : Promise.resolve([]),
-        connection_1.db.select({ id: lessons_1.lessons.id, categoryId: lessons_1.lessons.categoryId, courseId: lessons_1.lessons.courseId, name: lessons_1.lessons.name }).from(lessons_1.lessons).where((0, drizzle_orm_1.eq)(lessons_1.lessons.id, trimmedLessonId)).limit(1)
-    ]);
-    if (existingTeacher.length === 0) {
+    // Validations
+    const teacher = await connection_1.db.select().from(schema_1.teachers).where((0, drizzle_orm_1.eq)(schema_1.teachers.id, teacherId)).limit(1);
+    if (teacher.length === 0) {
         throw new BadRequest_1.BadRequest("Teacher not found");
     }
-    if (type === "group" && existingGroup.length === 0) {
-        throw new BadRequest_1.BadRequest("Group not found");
+    const lessonsList = await connection_1.db.select().from(schema_1.lessons).where((0, drizzle_orm_1.inArray)(schema_1.lessons.id, lessonIds));
+    if (lessonsList.length !== lessonIds.length) {
+        throw new BadRequest_1.BadRequest("One or more lessons not found");
     }
-    if (existingLesson.length === 0) {
-        throw new BadRequest_1.BadRequest("Lesson not found");
-    }
-    const { categoryId, courseId, name: fetchedLessonName } = existingLesson[0];
     const sessionId = (0, crypto_1.randomUUID)();
-    await connection_1.db.transaction(async (tx) => {
-        // 1. إنشاء الـ Object الأساسي بالحقول الإجبارية فقط
-        const newSessionData = {
-            id: sessionId,
-            name: trimmedName,
-            sessionDate: parsedSessionDate.toISOString().split('T')[0],
-            timeFrom,
-            timeTo,
-            categoryId,
-            courseId,
-            type,
-            teacherId,
-            session_link: trimmedSessionLink,
-        };
-        // 2. حقن الحقول الاختيارية ديناميكياً فقط في حال وجودها وكانت غير فارغة
-        newSessionData.lessonId = trimmedLessonId;
-        newSessionData.lessonName = fetchedLessonName;
-        if (type === "group" && trimmedGroupId)
-            newSessionData.groupId = trimmedGroupId;
-        if (trimmedMaterialLink)
-            newSessionData.material_link = trimmedMaterialLink;
-        if (trimmedTeacherMaterialLink)
-            newSessionData.teacher_material_link = trimmedTeacherMaterialLink;
-        // 3. التنفيذ
-        await tx.insert(Session_1.sessions).values(newSessionData);
-        let finalUserIds = userIds || [];
-        if (type === "group" && trimmedGroupId && finalUserIds.length === 0) {
-            const groupUsersList = await tx
-                .select({ studentId: Groups_1.groupStudents.studentId })
+    const lessonInserts = lessonIds.map((lessonId) => ({
+        id: (0, crypto_1.randomUUID)(),
+        sessionId,
+        lessonId,
+    }));
+    switch (type) {
+        case "private":
+            if (!Array.isArray(studentIds) || studentIds.length !== 1) {
+                throw new BadRequest_1.BadRequest("Private sessions must have exactly one student");
+            }
+            const student = await connection_1.db.select().from(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, studentIds[0])).limit(1);
+            if (student.length === 0) {
+                throw new BadRequest_1.BadRequest("Student not found");
+            }
+            await connection_1.db.transaction(async (tx) => {
+                await tx.insert(Session_1.sessions).values({
+                    id: sessionId,
+                    name,
+                    sessionDate,
+                    timeFrom,
+                    timeTo,
+                    type,
+                    teacherId,
+                    session_link,
+                    material_link,
+                    teacher_material_link,
+                    sessionRelationalType,
+                });
+                await tx.insert(Session_1.sessionUsers).values({
+                    id: (0, crypto_1.randomUUID)(),
+                    sessionId,
+                    studentId: studentIds[0],
+                });
+                // Bulk insert session lessons
+                await tx.insert(schema_1.sessionLessons).values(lessonInserts);
+            });
+            return (0, response_1.SuccessResponse)(res, { message: "Private session created successfully" }, 201);
+        case "group":
+            if (!groupId) {
+                throw new BadRequest_1.BadRequest("Group sessions must have a groupId");
+            }
+            const group = await connection_1.db.select().from(Groups_1.groups).where((0, drizzle_orm_1.eq)(Groups_1.groups.id, groupId)).limit(1);
+            if (group.length === 0) {
+                throw new BadRequest_1.BadRequest("Group not found");
+            }
+            const groupStudentsList = await connection_1.db.select({ studentId: Groups_1.groupStudents.studentId })
                 .from(Groups_1.groupStudents)
-                .where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.groupId, trimmedGroupId));
-            finalUserIds = groupUsersList.map(u => u.studentId);
-        }
-        if (finalUserIds.length > 0) {
-            const sessionUserRecords = finalUserIds.map((uId) => ({
-                sessionId: sessionId,
-                studentId: uId
+                .where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.groupId, groupId));
+            // Merge group students with explicitly provided studentIds
+            const uniqueStudentIds = new Set(groupStudentsList.map(gs => gs.studentId));
+            if (Array.isArray(studentIds)) {
+                studentIds.forEach(id => uniqueStudentIds.add(id));
+            }
+            const sessionUsersInserts = Array.from(uniqueStudentIds).map(id => ({
+                id: (0, crypto_1.randomUUID)(),
+                sessionId,
+                studentId: id,
             }));
-            await tx.insert(Session_1.sessionUsers).values(sessionUserRecords);
-        }
-    });
-    (0, response_1.SuccessResponse)(res, { id: sessionId }, 201);
+            await connection_1.db.transaction(async (tx) => {
+                await tx.insert(Session_1.sessions).values({
+                    id: sessionId,
+                    name,
+                    sessionDate,
+                    timeFrom,
+                    timeTo,
+                    type,
+                    groupId,
+                    teacherId,
+                    session_link,
+                    material_link,
+                    teacher_material_link,
+                    sessionRelationalType,
+                });
+                if (sessionUsersInserts.length > 0) {
+                    await tx.insert(Session_1.sessionUsers).values(sessionUsersInserts);
+                }
+                // Bulk insert session lessons
+                await tx.insert(schema_1.sessionLessons).values(lessonInserts);
+            });
+            return (0, response_1.SuccessResponse)(res, { message: "Group session created successfully" }, 201);
+        default:
+            throw new BadRequest_1.BadRequest("Invalid session type");
+    }
 };
 exports.createSession = createSession;
 const getAllSessions = async (req, res) => {
-    const { page = 1, limit = 10, date, type, teacherId } = req.query;
-    const offset = (Number(page) - 1) * Number(limit);
-    const conditions = [];
-    if (date)
-        conditions.push((0, drizzle_orm_1.eq)(Session_1.sessions.sessionDate, new Date(date)));
-    if (type)
-        conditions.push((0, drizzle_orm_1.eq)(Session_1.sessions.type, type));
-    if (teacherId)
-        conditions.push((0, drizzle_orm_1.eq)(Session_1.sessions.teacherId, teacherId));
-    const sessionsList = await connection_1.db
-        .select({
+    const sessionsList = await connection_1.db.select({
         id: Session_1.sessions.id,
         name: Session_1.sessions.name,
         sessionDate: Session_1.sessions.sessionDate,
         timeFrom: Session_1.sessions.timeFrom,
         timeTo: Session_1.sessions.timeTo,
-        categoryName: category_1.category.name,
-        courseName: courses_1.courses.name,
-        lessonName: Session_1.sessions.lessonName,
-        type: Session_1.sessions.type,
-        groupName: Groups_1.groups.name,
-        teacherName: teacher_1.teachers.name,
-        session_link: Session_1.sessions.session_link,
-    })
-        .from(Session_1.sessions)
-        .leftJoin(category_1.category, (0, drizzle_orm_1.eq)(Session_1.sessions.categoryId, category_1.category.id))
-        .leftJoin(courses_1.courses, (0, drizzle_orm_1.eq)(Session_1.sessions.courseId, courses_1.courses.id))
-        .leftJoin(Groups_1.groups, (0, drizzle_orm_1.eq)(Session_1.sessions.groupId, Groups_1.groups.id))
-        .leftJoin(teacher_1.teachers, (0, drizzle_orm_1.eq)(Session_1.sessions.teacherId, teacher_1.teachers.id))
-        .where(conditions.length > 0 ? (0, drizzle_orm_1.and)(...conditions) : undefined)
-        .orderBy(Session_1.sessions.sessionDate)
-        .limit(Number(limit))
-        .offset(offset);
-    (0, response_1.SuccessResponse)(res, sessionsList);
-};
-exports.getAllSessions = getAllSessions;
-const getSessionById = async (req, res) => {
-    const { id } = req.params;
-    const [session] = await connection_1.db
-        .select({
-        id: Session_1.sessions.id,
-        name: Session_1.sessions.name,
-        sessionDate: Session_1.sessions.sessionDate,
-        timeFrom: Session_1.sessions.timeFrom,
-        timeTo: Session_1.sessions.timeTo,
-        categoryId: Session_1.sessions.categoryId,
-        courseId: Session_1.sessions.courseId,
-        lessonId: Session_1.sessions.lessonId,
-        lessonName: Session_1.sessions.lessonName,
         type: Session_1.sessions.type,
         groupId: Session_1.sessions.groupId,
         teacherId: Session_1.sessions.teacherId,
         session_link: Session_1.sessions.session_link,
         material_link: Session_1.sessions.material_link,
         teacher_material_link: Session_1.sessions.teacher_material_link,
+        sessionRelationalType: Session_1.sessions.sessionRelationalType,
+        createdAt: Session_1.sessions.createdAt,
+        updatedAt: Session_1.sessions.updatedAt,
+        groups: {
+            id: Groups_1.groups.id,
+            name: Groups_1.groups.name,
+        },
+        teacher: {
+            id: schema_1.teachers.id,
+            name: schema_1.teachers.name,
+        }
     })
         .from(Session_1.sessions)
-        .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, id));
-    if (!session)
-        throw new Errors_1.NotFound("Session not found");
-    const users = await connection_1.db
-        .select({
-        id: Student_1.Student.id,
-        firstname: Student_1.Student.firstname,
-        lastname: Student_1.Student.lastname,
-    })
-        .from(Session_1.sessionUsers)
-        .innerJoin(Student_1.Student, (0, drizzle_orm_1.eq)(Session_1.sessionUsers.studentId, Student_1.Student.id))
-        .where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.sessionId, id));
-    (0, response_1.SuccessResponse)(res, {
-        ...session,
-        users: users.map(u => ({ value: u.id, label: `${u.firstname} ${u.lastname}` }))
-    });
+        .leftJoin(Groups_1.groups, (0, drizzle_orm_1.eq)(Session_1.sessions.groupId, Groups_1.groups.id))
+        .leftJoin(schema_1.teachers, (0, drizzle_orm_1.eq)(Session_1.sessions.teacherId, schema_1.teachers.id));
+    return (0, response_1.SuccessResponse)(res, { sessions: sessionsList }, 200);
+};
+exports.getAllSessions = getAllSessions;
+const getSessionById = async (req, res) => {
+    const { id } = req.params;
+    const session = await connection_1.db.select({
+        id: Session_1.sessions.id,
+        name: Session_1.sessions.name,
+        sessionDate: Session_1.sessions.sessionDate,
+        timeFrom: Session_1.sessions.timeFrom,
+        timeTo: Session_1.sessions.timeTo,
+        type: Session_1.sessions.type,
+        groupId: Session_1.sessions.groupId,
+        teacherId: Session_1.sessions.teacherId,
+        session_link: Session_1.sessions.session_link,
+        material_link: Session_1.sessions.material_link,
+        teacher_material_link: Session_1.sessions.teacher_material_link,
+        sessionRelationalType: Session_1.sessions.sessionRelationalType,
+        createdAt: Session_1.sessions.createdAt,
+        updatedAt: Session_1.sessions.updatedAt,
+        groups: {
+            id: Groups_1.groups.id,
+            name: Groups_1.groups.name,
+        },
+        teacher: {
+            id: schema_1.teachers.id,
+            name: schema_1.teachers.name,
+        },
+        lessons: {
+            id: schema_1.lessons.id,
+            name: schema_1.lessons.name,
+        },
+        students: {
+            id: schema_1.Student.id,
+            name: (0, drizzle_orm_1.sql) `CONCAT(${schema_1.Student.firstname}, ' ', ${schema_1.Student.lastname})`.as("name"),
+        }
+    }).from(Session_1.sessions)
+        .leftJoin(Groups_1.groups, (0, drizzle_orm_1.eq)(Session_1.sessions.groupId, Groups_1.groups.id))
+        .leftJoin(schema_1.teachers, (0, drizzle_orm_1.eq)(Session_1.sessions.teacherId, schema_1.teachers.id))
+        .leftJoin(schema_1.sessionLessons, (0, drizzle_orm_1.eq)(Session_1.sessions.id, schema_1.sessionLessons.sessionId))
+        .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, id)).limit(1);
+    return (0, response_1.SuccessResponse)(res, { session: session[0] }, 200);
 };
 exports.getSessionById = getSessionById;
 const updateSession = async (req, res) => {
     const { id } = req.params;
-    const { userIds, ...data } = req.body;
+    const { name, sessionDate, timeFrom, timeTo, teacherId, session_link, material_link, teacher_material_link, lessonIds, studentIds } = req.body;
+    if (!id) {
+        throw new BadRequest_1.BadRequest("Session ID is required");
+    }
+    const sessionExists = await connection_1.db.select().from(Session_1.sessions).where((0, drizzle_orm_1.eq)(Session_1.sessions.id, id)).limit(1);
+    if (sessionExists.length === 0) {
+        throw new Errors_1.NotFound("Session not found");
+    }
+    const currentSession = sessionExists[0];
+    // Validate Teacher
+    if (teacherId) {
+        const teacher = await connection_1.db.select().from(schema_1.teachers).where((0, drizzle_orm_1.eq)(schema_1.teachers.id, teacherId)).limit(1);
+        if (teacher.length === 0) {
+            throw new BadRequest_1.BadRequest("Teacher not found");
+        }
+    }
+    // Validate Lessons
+    if (lessonIds && Array.isArray(lessonIds) && lessonIds.length > 0) {
+        const lessonsList = await connection_1.db.select().from(schema_1.lessons).where((0, drizzle_orm_1.inArray)(schema_1.lessons.id, lessonIds));
+        if (lessonsList.length !== lessonIds.length) {
+            throw new BadRequest_1.BadRequest("One or more lessons not found");
+        }
+    }
+    // Validate Time
+    const newSessionDate = sessionDate || currentSession.sessionDate;
+    const newTimeFrom = timeFrom || currentSession.timeFrom;
+    const newTimeTo = timeTo || currentSession.timeTo;
+    if (new Date(`${newSessionDate}T${newTimeFrom}`) >= new Date(`${newSessionDate}T${newTimeTo}`)) {
+        throw new BadRequest_1.BadRequest("timeFrom must be before timeTo");
+    }
     await connection_1.db.transaction(async (tx) => {
-        // تجهيز بيانات التحديث
-        const updateData = { ...data, updatedAt: new Date() };
-        // تنظيف البيانات: إذا تم إرسال حقول اختيارية فارغة، نقوم بحذفها من الكائن
-        // لمنع Drizzle من محاولة إدخال قيمة فارغة في حقول لا تقبلها
-        if (updateData.lessonId !== undefined && updateData.lessonId.trim() === "")
-            delete updateData.lessonId;
-        if (updateData.lessonName !== undefined && updateData.lessonName.trim() === "")
-            delete updateData.lessonName;
-        if (updateData.groupId !== undefined && updateData.groupId.trim() === "")
-            delete updateData.groupId;
-        if (updateData.material_link !== undefined && updateData.material_link.trim() === "")
-            delete updateData.material_link;
-        if (updateData.teacher_material_link !== undefined && updateData.teacher_material_link.trim() === "")
-            delete updateData.teacher_material_link;
+        // Update basic session details
         await tx.update(Session_1.sessions)
-            .set(updateData)
+            .set({
+            ...(name && { name }),
+            ...(sessionDate && { sessionDate }),
+            ...(timeFrom && { timeFrom }),
+            ...(timeTo && { timeTo }),
+            ...(teacherId && { teacherId }),
+            ...(session_link && { session_link }),
+            ...(material_link && { material_link }),
+            ...(teacher_material_link && { teacher_material_link }),
+        })
             .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, id));
-        if (userIds !== undefined) {
+        // Update Lessons
+        if (lessonIds && Array.isArray(lessonIds)) {
+            // Remove existing
+            await tx.delete(schema_1.sessionLessons).where((0, drizzle_orm_1.eq)(schema_1.sessionLessons.sessionId, id));
+            // Insert new ones
+            if (lessonIds.length > 0) {
+                const lessonInserts = lessonIds.map((lessonId) => ({
+                    id: (0, crypto_1.randomUUID)(),
+                    sessionId: id,
+                    lessonId,
+                }));
+                await tx.insert(schema_1.sessionLessons).values(lessonInserts);
+            }
+        }
+        // Update Students (Merging logic based on session type)
+        if (studentIds && Array.isArray(studentIds)) {
+            if (currentSession.type === "private" && studentIds.length !== 1) {
+                throw new BadRequest_1.BadRequest("Private sessions must have exactly one student");
+            }
+            // Verify students exist
+            if (studentIds.length > 0) {
+                const studentsList = await connection_1.db.select().from(schema_1.Student).where((0, drizzle_orm_1.inArray)(schema_1.Student.id, studentIds));
+                if (studentsList.length !== studentIds.length) {
+                    throw new BadRequest_1.BadRequest("One or more students not found");
+                }
+            }
+            let finalStudentIds = [...studentIds];
+            if (currentSession.type === "group" && currentSession.groupId) {
+                // Ensure group students are always included and not accidentally removed
+                const groupStudentsList = await tx.select({ studentId: Groups_1.groupStudents.studentId })
+                    .from(Groups_1.groupStudents)
+                    .where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.groupId, currentSession.groupId));
+                const uniqueStudentIds = new Set(groupStudentsList.map(gs => gs.studentId));
+                studentIds.forEach(studentId => uniqueStudentIds.add(studentId));
+                finalStudentIds = Array.from(uniqueStudentIds);
+            }
+            // Remove existing session users related to this session
             await tx.delete(Session_1.sessionUsers).where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.sessionId, id));
-            if (userIds.length > 0) {
-                const records = userIds.map((uId) => ({ sessionId: id, studentId: uId }));
-                await tx.insert(Session_1.sessionUsers).values(records);
+            // Insert new merged list
+            if (finalStudentIds.length > 0) {
+                const sessionUsersInserts = finalStudentIds.map(studentId => ({
+                    id: (0, crypto_1.randomUUID)(),
+                    sessionId: id,
+                    studentId,
+                }));
+                await tx.insert(Session_1.sessionUsers).values(sessionUsersInserts);
             }
         }
     });
-    (0, response_1.SuccessResponse)(res, { message: "Session updated successfully" });
+    return (0, response_1.SuccessResponse)(res, { message: "Session updated successfully" }, 200);
 };
 exports.updateSession = updateSession;
 const deleteSession = async (req, res) => {
     const { id } = req.params;
+    if (!id) {
+        throw new BadRequest_1.BadRequest("Session ID is required");
+    }
+    const sessionExists = await connection_1.db.select().from(Session_1.sessions).where((0, drizzle_orm_1.eq)(Session_1.sessions.id, id)).limit(1);
+    if (sessionExists.length === 0) {
+        throw new Errors_1.NotFound("Session not found");
+    }
     await connection_1.db.transaction(async (tx) => {
+        // Delete related entities first due to foreign keys constraints
         await tx.delete(Session_1.sessionUsers).where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.sessionId, id));
+        await tx.delete(schema_1.sessionLessons).where((0, drizzle_orm_1.eq)(schema_1.sessionLessons.sessionId, id));
+        await tx.delete(Session_1.sessionRatings).where((0, drizzle_orm_1.eq)(Session_1.sessionRatings.sessionId, id));
+        await tx.delete(schema_1.sessionAttendance).where((0, drizzle_orm_1.eq)(schema_1.sessionAttendance.sessionId, id));
+        // Final delete of the target session
         await tx.delete(Session_1.sessions).where((0, drizzle_orm_1.eq)(Session_1.sessions.id, id));
     });
-    (0, response_1.SuccessResponse)(res, { message: "Session deleted successfully" });
+    return (0, response_1.SuccessResponse)(res, { message: "Session deleted successfully" }, 200);
 };
 exports.deleteSession = deleteSession;

@@ -1,21 +1,26 @@
 import { Router } from "express";
 import {
-    createSession, getAllSessions, getSessionById, updateSession, deleteSession,
-    selectOptions,
-    getGroupUsers, searchUsers,
+    selectCategory,
+    selectCourse,
+    selectChapter,
+    selectLesson,
+    selectStudents,
+    getAllSessions,
+    getSessionById,
+    createSession,
+    updateSession,
+    deleteSession,
 } from "../../controllers/admin/Session";
 import { catchAsync } from "../../utils/catchAsync";
 
 const router = Router();
 
-// Select dropdowns
-router.get("/select", catchAsync(selectOptions));
+router.get("/select/category", catchAsync(selectCategory));
+router.get("/select/course/:categoryId", catchAsync(selectCourse));
+router.get("/select/chapter/:courseId", catchAsync(selectChapter));
+router.get("/select/lesson/:chapterId", catchAsync(selectLesson));
+router.get("/select/students", catchAsync(selectStudents));
 
-// Users
-router.get("/:groupId", catchAsync(getGroupUsers));
-router.get("/search-users", catchAsync(searchUsers));
-
-// Sessions CRUD
 router.get("/", catchAsync(getAllSessions));
 router.get("/:id", catchAsync(getSessionById));
 router.post("/", catchAsync(createSession));

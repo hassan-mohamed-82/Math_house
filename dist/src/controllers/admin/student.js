@@ -17,7 +17,7 @@ const handleImages_1 = require("../../utils/handleImages");
 const JWT_SECRET = process.env.JWT_SECRET;
 const createStudent = async (req, res) => {
     const { firstname, lastname, nickname, email, password, phone, category: categoryId, grade, parentphone, avatar, } = req.body;
-    if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade || !parentphone) {
+    if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade) {
         throw new BadRequest_1.BadRequest("all fields are required");
     }
     const existingStudent = await connection_1.db

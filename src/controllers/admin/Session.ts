@@ -1,338 +1,517 @@
-// controllers/sessions.controller.ts
 import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { db } from "../../models/connection";
-import { sessions, sessionUsers } from "../../models/schema/admin/Session";
+import { sessionRatings, sessions, sessionUsers } from "../../models/schema/admin/Session";
 import { groups, groupStudents } from "../../models/schema/admin/Groups";
-import { Student } from "../../models/schema/admin/Student";
-import { teachers } from "../../models/schema/admin/teacher";
-import { category } from "../../models/schema/admin/category";
-import { courses } from "../../models/schema/admin/courses";
-import { lessons } from "../../models/schema/admin/lessons";
-import { eq, like, or, and } from "drizzle-orm";
+import {
+    Student,
+    teachers,
+    category,
+    courses,
+    chapters,
+    lessons,
+    sessionLessons,
+    sessionAttendance
+} from "../../models/schema";
+import { eq, like, or, and, inArray, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
 
-// ===================== SELECT OPTIONS =====================
-export const selectOptions = async (req: Request, res: Response) => {
-    const [groupsList, teachersList, categoriesList, coursesList] = await Promise.all([
-        db.select({ id: groups.id, name: groups.name }).from(groups).where(eq(groups.isActive, true)),
-        db.select({ id: teachers.id, name: teachers.name }).from(teachers),
-        db.select({ id: category.id, name: category.name }).from(category),
-        db.select({ id: courses.id, name: courses.name, categoryId: courses.categoryId }).from(courses),
-    ]);
+// Selections
+export const selectCategory = async (req: Request, res: Response) => {
+    const allCategories = await db.select({
+        id: category.id,
+        name: category.name,
+        parentCategoryId: category.parentCategoryId,
+    }).from(category);
 
-    SuccessResponse(res, {
-        groups: groupsList.map(g => ({ value: g.id, label: g.name })),
-        teachers: teachersList.map(t => ({ value: t.id, label: t.name })),
-        categories: categoriesList.map(c => ({ value: c.id, label: c.name })),
-        courses: coursesList.map(c => ({ value: c.id, label: c.name, categoryId: c.categoryId })),
+    const categoryMap = new Map<string, typeof allCategories[0]>();
+    const parentIds = new Set<string>();
+
+    allCategories.forEach(cat => {
+        categoryMap.set(cat.id, cat);
+        if (cat.parentCategoryId) {
+            parentIds.add(cat.parentCategoryId);
+        }
     });
+
+    const leafCategories = allCategories.filter(cat => !parentIds.has(cat.id));
+
+    const formattedCategories = leafCategories.map(leaf => {
+        let current = leaf;
+        const ancestors: string[] = [];
+
+        while (current) {
+            ancestors.unshift(current.name);
+            if (current.parentCategoryId && categoryMap.has(current.parentCategoryId)) {
+                current = categoryMap.get(current.parentCategoryId)!;
+            } else {
+                break;
+            }
+        }
+        return {
+            id: leaf.id,
+            name: ancestors.join(" > "),
+            root: ancestors[0] || leaf.name
+        };
+    });
+
+    const groupedCategories = formattedCategories.reduce((acc: any, curr) => {
+        const { root, ...rest } = curr;
+        if (!acc[root]) {
+            acc[root] = [];
+        }
+        acc[root].push(rest);
+        return acc;
+    }, {});
+
+    const result = Object.keys(groupedCategories).map(key => ({
+        root: key,
+        children: groupedCategories[key]
+    }));
+
+    return SuccessResponse(res, { categories: result });
 };
 
-// ===================== USERS APIs =====================
-export const getGroupUsers = async (req: Request, res: Response) => {
-    const { groupId } = req.params;
-    const users = await db
-        .select({
-            id: Student.id,
-            firstname: Student.firstname,
-            lastname: Student.lastname,
-            nickname: Student.nickname,
-            email: Student.email,
-            phone: Student.phone,
-        })
-        .from(groupStudents)
-        .innerJoin(Student, eq(groupStudents.studentId, Student.id))
-        .where(eq(groupStudents.groupId, groupId));
-
-    SuccessResponse(res, users.map(u => ({
-        value: u.id,
-        label: `${u.firstname} ${u.lastname}`,
-        nickname: u.nickname,
-        email: u.email,
-        phone: u.phone
-    })));
+export const selectCourse = async (req: Request, res: Response) => {
+    const coursesList = await db.select({
+        id: courses.id,
+        name: courses.name,
+        categoryId: courses.categoryId,
+    }).from(courses).where(eq(courses.categoryId, req.params.categoryId));
+    return SuccessResponse(res, { courses: coursesList });
 };
 
-export const searchUsers = async (req: Request, res: Response) => {
-    const { q, excludeIds } = req.query;
-    const searchValue = (q ?? "").toString().trim().toLowerCase();
-    const searchTerm = `%${searchValue}%`;
+export const selectChapter = async (req: Request, res: Response) => {
+    const { courseId } = req.params;
+    const chaptersList = await db.select({
+        id: chapters.id,
+        name: chapters.name,
+    }).from(chapters).where(eq(chapters.courseId, courseId));
+    return SuccessResponse(res, { chapters: chaptersList });
+};
 
-    let excludeIdsList: string[] = [];
-    if (excludeIds && typeof excludeIds === "string" && excludeIds.trim() !== "") {
-        excludeIdsList = excludeIds.split(",");
+export const selectLesson = async (req: Request, res: Response) => {
+    const lessonsList = await db.select({
+        id: lessons.id,
+        name: lessons.name,
+    }).from(lessons).where(eq(lessons.chapterId, req.params.chapterId));
+    return SuccessResponse(res, { lessons: lessonsList });
+};
+
+type GradeType = "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" | "10" | "11" | "12" | "13";
+
+export const selectStudents = async (req: Request, res: Response) => {
+    const { grade, categoryId, search } = req.query;
+
+    const conditions = [];
+
+    if (grade) {
+        conditions.push(eq(Student.grade, grade as GradeType));
     }
 
-    let users = await db
-        .select({
-            id: Student.id,
-            firstname: Student.firstname,
-            lastname: Student.lastname,
-            nickname: Student.nickname,
-            email: Student.email,
-            phone: Student.phone,
-        })
-        .from(Student)
-        .where(
+    if (categoryId) {
+        conditions.push(eq(Student.category, categoryId as string));
+    }
+
+    if (search) {
+        const d_search = search as string;
+        conditions.push(
             or(
-                like(Student.firstname, searchTerm),
-                like(Student.lastname, searchTerm),
-                like(Student.nickname, searchTerm),
-                like(Student.email, searchTerm),
-                like(Student.phone, searchTerm)
+                like(Student.firstname, `%${d_search}%`),
+                like(Student.lastname, `%${d_search}%`),
+                like(Student.email, `%${d_search}%`),
+                like(Student.phone, `%${d_search}%`),
             )
-        )
-        .limit(20);
-
-    if (excludeIdsList.length > 0) {
-        users = users.filter(u => !excludeIdsList.includes(u.id));
+        );
     }
 
-    SuccessResponse(res, users.map(u => ({
-        value: u.id,
-        label: `${u.firstname} ${u.lastname}`,
-        nickname: u.nickname,
-        email: u.email
-    })));
+    const studentsList = await db.select({
+        id: Student.id,
+        name: sql`CONCAT(${Student.firstname}, ' ', ${Student.lastname})`.as("name"),
+    })
+    .from(Student)
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
+
+    return SuccessResponse(res, { students: studentsList });
 };
 
-// ===================== SESSIONS CRUD =====================
+
 export const createSession = async (req: Request, res: Response) => {
     const {
         name,
         sessionDate,
         timeFrom,
         timeTo,
-        lessonId,
         type,
         groupId,
         teacherId,
         session_link,
         material_link,
         teacher_material_link,
-        userIds
+        sessionRelationalType,
+        lessonIds,
+        studentIds
     } = req.body;
 
-    const trimmedName = typeof name === "string" ? name.trim() : "";
-    const trimmedLessonId = typeof lessonId === "string" ? lessonId.trim() : "";
-    const trimmedGroupId = typeof groupId === "string" ? groupId.trim() : "";
-    const trimmedSessionLink = typeof session_link === "string" ? session_link.trim() : "";
-    const trimmedMaterialLink = typeof material_link === "string" ? material_link.trim() : "";
-    const trimmedTeacherMaterialLink = typeof teacher_material_link === "string" ? teacher_material_link.trim() : "";
-
-    // Validation for NOT NULL fields that can't be deduced
-    if (!trimmedName || !sessionDate || !timeFrom || !timeTo || !type || !teacherId || !trimmedSessionLink || !trimmedLessonId) {
-        throw new BadRequest("Missing required fields (Check name, dates, type, teacher, link, or lessonId)");
+    if (
+        !name ||
+        !sessionDate ||
+        !timeFrom ||
+        !timeTo ||
+        !type ||
+        !teacherId ||
+        !session_link ||
+        !sessionRelationalType ||
+        !lessonIds ||
+        !Array.isArray(lessonIds) ||
+        lessonIds.length === 0
+    ) {
+        throw new BadRequest("Missing or invalid required fields");
     }
 
-    if (!["session", "private", "group"].includes(type)) {
-        throw new BadRequest("Invalid session type");
+    // Time Validations
+    if (new Date(`${sessionDate}T${timeFrom}`) >= new Date(`${sessionDate}T${timeTo}`)) {
+        throw new BadRequest("timeFrom must be before timeTo");
     }
 
-    if (type === "group" && !trimmedGroupId) {
-        throw new BadRequest("groupId is required for group sessions");
-    }
-
-    if (userIds !== undefined && !Array.isArray(userIds)) {
-        throw new BadRequest("userIds must be an array of student ids");
-    }
-
-    const parsedSessionDate = new Date(sessionDate);
-    if (Number.isNaN(parsedSessionDate.getTime())) {
-        throw new BadRequest("Invalid sessionDate");
-    }
-
-    const [existingTeacher, existingGroup, existingLesson] = await Promise.all([
-        db.select({ id: teachers.id }).from(teachers).where(eq(teachers.id, teacherId)).limit(1),
-        type === "group" && trimmedGroupId
-            ? db.select({ id: groups.id }).from(groups).where(eq(groups.id, trimmedGroupId)).limit(1)
-            : Promise.resolve([]),
-        db.select({ id: lessons.id, categoryId: lessons.categoryId, courseId: lessons.courseId, name: lessons.name }).from(lessons).where(eq(lessons.id, trimmedLessonId)).limit(1)
-    ]);
-
-    if (existingTeacher.length === 0) {
+    // Validations
+    const teacher = await db.select().from(teachers).where(eq(teachers.id, teacherId)).limit(1);
+    if (teacher.length === 0) {
         throw new BadRequest("Teacher not found");
     }
 
-    if (type === "group" && existingGroup.length === 0) {
-        throw new BadRequest("Group not found");
+    const lessonsList = await db.select().from(lessons).where(inArray(lessons.id, lessonIds));
+    if (lessonsList.length !== lessonIds.length) {
+        throw new BadRequest("One or more lessons not found");
     }
-
-    if (existingLesson.length === 0) {
-        throw new BadRequest("Lesson not found");
-    }
-
-    const { categoryId, courseId, name: fetchedLessonName } = existingLesson[0];
 
     const sessionId = randomUUID();
+    const lessonInserts = lessonIds.map((lessonId: string) => ({
+        id: randomUUID(),
+        sessionId,
+        lessonId,
+    }));
 
-    await db.transaction(async (tx) => {
-        // 1. إنشاء الـ Object الأساسي بالحقول الإجبارية فقط
-        const newSessionData: any = {
-            id: sessionId,
-            name: trimmedName,
-            sessionDate: parsedSessionDate.toISOString().split('T')[0],
-            timeFrom,
-            timeTo,
-            categoryId,
-            courseId,
-            type,
-            teacherId,
-            session_link: trimmedSessionLink,
-        };
+    switch (type) {
+        case "private":
+            if (!Array.isArray(studentIds) || studentIds.length !== 1) {
+                throw new BadRequest("Private sessions must have exactly one student");
+            }
 
-        // 2. حقن الحقول الاختيارية ديناميكياً فقط في حال وجودها وكانت غير فارغة
-        newSessionData.lessonId = trimmedLessonId;
-        newSessionData.lessonName = fetchedLessonName;
-        if (type === "group" && trimmedGroupId) newSessionData.groupId = trimmedGroupId;
-        if (trimmedMaterialLink) newSessionData.material_link = trimmedMaterialLink;
-        if (trimmedTeacherMaterialLink) newSessionData.teacher_material_link = trimmedTeacherMaterialLink;
+            const student = await db.select().from(Student).where(eq(Student.id, studentIds[0])).limit(1);
+            if (student.length === 0) {
+                throw new BadRequest("Student not found");
+            }
 
-        // 3. التنفيذ
-        await tx.insert(sessions).values(newSessionData);
+            await db.transaction(async (tx) => {
+                await tx.insert(sessions).values({
+                    id: sessionId,
+                    name,
+                    sessionDate,
+                    timeFrom,
+                    timeTo,
+                    type,
+                    teacherId,
+                    session_link,
+                    material_link,
+                    teacher_material_link,
+                    sessionRelationalType,
+                });
 
-        let finalUserIds: string[] = userIds || [];
+                await tx.insert(sessionUsers).values({
+                    id: randomUUID(),
+                    sessionId,
+                    studentId: studentIds[0],
+                });
 
-        if (type === "group" && trimmedGroupId && finalUserIds.length === 0) {
-            const groupUsersList = await tx
-                .select({ studentId: groupStudents.studentId })
+                // Bulk insert session lessons
+                await tx.insert(sessionLessons).values(lessonInserts);
+            });
+
+            return SuccessResponse(res, { message: "Private session created successfully" }, 201);
+
+        case "group":
+            if (!groupId) {
+                throw new BadRequest("Group sessions must have a groupId");
+            }
+
+            const group = await db.select().from(groups).where(eq(groups.id, groupId)).limit(1);
+            if (group.length === 0) {
+                throw new BadRequest("Group not found");
+            }
+
+            const groupStudentsList = await db.select({ studentId: groupStudents.studentId })
                 .from(groupStudents)
-            .where(eq(groupStudents.groupId, trimmedGroupId));
+                .where(eq(groupStudents.groupId, groupId));
 
-            finalUserIds = groupUsersList.map(u => u.studentId);
-        }
+            // Merge group students with explicitly provided studentIds
+            const uniqueStudentIds = new Set(groupStudentsList.map(gs => gs.studentId));
+            if (Array.isArray(studentIds)) {
+                studentIds.forEach(id => uniqueStudentIds.add(id));
+            }
 
-        if (finalUserIds.length > 0) {
-            const sessionUserRecords = finalUserIds.map((uId: string) => ({
-                sessionId: sessionId,
-                studentId: uId
+            const sessionUsersInserts = Array.from(uniqueStudentIds).map(id => ({
+                id: randomUUID(),
+                sessionId,
+                studentId: id,
             }));
-            await tx.insert(sessionUsers).values(sessionUserRecords);
-        }
-    });
 
-    SuccessResponse(res, { id: sessionId }, 201);
+            await db.transaction(async (tx) => {
+                await tx.insert(sessions).values({
+                    id: sessionId,
+                    name,
+                    sessionDate,
+                    timeFrom,
+                    timeTo,
+                    type,
+                    groupId,
+                    teacherId,
+                    session_link,
+                    material_link,
+                    teacher_material_link,
+                    sessionRelationalType,
+                });
+
+                if (sessionUsersInserts.length > 0) {
+                    await tx.insert(sessionUsers).values(sessionUsersInserts);
+                }
+
+                // Bulk insert session lessons
+                await tx.insert(sessionLessons).values(lessonInserts);
+            });
+
+            return SuccessResponse(res, { message: "Group session created successfully" }, 201);
+
+        default:
+            throw new BadRequest("Invalid session type");
+    }
 };
+
 
 export const getAllSessions = async (req: Request, res: Response) => {
-    const { page = 1, limit = 10, date, type, teacherId } = req.query;
-    const offset = (Number(page) - 1) * Number(limit);
-    const conditions = [];
+    const sessionsList = await db.select({
+        id: sessions.id,
+        name: sessions.name,
+        sessionDate: sessions.sessionDate,
+        timeFrom: sessions.timeFrom,
+        timeTo: sessions.timeTo,
+        type: sessions.type,
+        groupId: sessions.groupId,
+        teacherId: sessions.teacherId,
+        session_link: sessions.session_link,
+        material_link: sessions.material_link,
+        teacher_material_link: sessions.teacher_material_link,
+        sessionRelationalType: sessions.sessionRelationalType,
+        createdAt: sessions.createdAt,
+        updatedAt: sessions.updatedAt,
+        groups: {
+            id: groups.id,
+            name: groups.name,
+        },
+        teacher: {
+            id: teachers.id,
+            name: teachers.name,
+        }
+    })
+    .from(sessions)
+    .leftJoin(groups, eq(sessions.groupId, groups.id))
+    .leftJoin(teachers, eq(sessions.teacherId, teachers.id));
 
-    if (date) conditions.push(eq(sessions.sessionDate, new Date(date as string)));
-    if (type) conditions.push(eq(sessions.type, type as any));
-    if (teacherId) conditions.push(eq(sessions.teacherId, teacherId as string));
-
-    const sessionsList = await db
-        .select({
-            id: sessions.id,
-            name: sessions.name,
-            sessionDate: sessions.sessionDate,
-            timeFrom: sessions.timeFrom,
-            timeTo: sessions.timeTo,
-            categoryName: category.name,
-            courseName: courses.name,
-            lessonName: sessions.lessonName,
-            type: sessions.type,
-            groupName: groups.name,
-            teacherName: teachers.name,
-            session_link: sessions.session_link,
-        })
-        .from(sessions)
-        .leftJoin(category, eq(sessions.categoryId, category.id))
-        .leftJoin(courses, eq(sessions.courseId, courses.id))
-        .leftJoin(groups, eq(sessions.groupId, groups.id))
-        .leftJoin(teachers, eq(sessions.teacherId, teachers.id))
-        .where(conditions.length > 0 ? and(...conditions) : undefined)
-        .orderBy(sessions.sessionDate)
-        .limit(Number(limit))
-        .offset(offset);
-
-    SuccessResponse(res, sessionsList);
-};
+    return SuccessResponse(res, { sessions: sessionsList }, 200);
+}
 
 export const getSessionById = async (req: Request, res: Response) => {
     const { id } = req.params;
-
-    const [session] = await db
-        .select({
-            id: sessions.id,
-            name: sessions.name,
-            sessionDate: sessions.sessionDate,
-            timeFrom: sessions.timeFrom,
-            timeTo: sessions.timeTo,
-            categoryId: sessions.categoryId,
-            courseId: sessions.courseId,
-            lessonId: sessions.lessonId,
-            lessonName: sessions.lessonName,
-            type: sessions.type,
-            groupId: sessions.groupId,
-            teacherId: sessions.teacherId,
-            session_link: sessions.session_link,
-            material_link: sessions.material_link,
-            teacher_material_link: sessions.teacher_material_link,
-        })
-        .from(sessions)
-        .where(eq(sessions.id, id));
-
-    if (!session) throw new NotFound("Session not found");
-
-    const users = await db
-        .select({
+    const session = await db.select({
+        id: sessions.id,
+        name: sessions.name,
+        sessionDate: sessions.sessionDate,
+        timeFrom: sessions.timeFrom,
+        timeTo: sessions.timeTo,
+        type: sessions.type,
+        groupId: sessions.groupId,
+        teacherId: sessions.teacherId,
+        session_link: sessions.session_link,
+        material_link: sessions.material_link,
+        teacher_material_link: sessions.teacher_material_link,
+        sessionRelationalType: sessions.sessionRelationalType,
+        createdAt: sessions.createdAt,
+        updatedAt: sessions.updatedAt,
+        groups: {
+            id: groups.id,
+            name: groups.name,
+        },
+        teacher: {
+            id: teachers.id,
+            name: teachers.name,
+        },
+        lessons: {
+            id: lessons.id,
+            name: lessons.name,
+        },
+        students: {
             id: Student.id,
-            firstname: Student.firstname,
-            lastname: Student.lastname,
-        })
-        .from(sessionUsers)
-        .innerJoin(Student, eq(sessionUsers.studentId, Student.id))
-        .where(eq(sessionUsers.sessionId, id));
+            name: sql`CONCAT(${Student.firstname}, ' ', ${Student.lastname})`.as("name"),
+        }
+    }).from(sessions)
+    .leftJoin(groups, eq(sessions.groupId, groups.id))
+    .leftJoin(teachers, eq(sessions.teacherId, teachers.id))
+    .leftJoin(sessionLessons, eq(sessions.id, sessionLessons.sessionId))
+    .where(eq(sessions.id, id)).limit(1);
 
-    SuccessResponse(res, {
-        ...session,
-        users: users.map(u => ({ value: u.id, label: `${u.firstname} ${u.lastname}` }))
-    });
+    return SuccessResponse(res, { session: session[0] }, 200);
 };
 
 export const updateSession = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { userIds, ...data } = req.body;
+    const {
+        name,
+        sessionDate,
+        timeFrom,
+        timeTo,
+        teacherId,
+        session_link,
+        material_link,
+        teacher_material_link,
+        lessonIds,
+        studentIds
+    } = req.body;
+
+    if (!id) {
+        throw new BadRequest("Session ID is required");
+    }
+
+    const sessionExists = await db.select().from(sessions).where(eq(sessions.id, id)).limit(1);
+    if (sessionExists.length === 0) {
+        throw new NotFound("Session not found");
+    }
+
+    const currentSession = sessionExists[0];
+
+    // Validate Teacher
+    if (teacherId) {
+        const teacher = await db.select().from(teachers).where(eq(teachers.id, teacherId)).limit(1);
+        if (teacher.length === 0) {
+            throw new BadRequest("Teacher not found");
+        }
+    }
+
+    // Validate Lessons
+    if (lessonIds && Array.isArray(lessonIds) && lessonIds.length > 0) {
+        const lessonsList = await db.select().from(lessons).where(inArray(lessons.id, lessonIds));
+        if (lessonsList.length !== lessonIds.length) {
+            throw new BadRequest("One or more lessons not found");
+        }
+    }
+
+    // Validate Time
+    const newSessionDate = sessionDate || currentSession.sessionDate;
+    const newTimeFrom = timeFrom || currentSession.timeFrom;
+    const newTimeTo = timeTo || currentSession.timeTo;
+
+    if (new Date(`${newSessionDate}T${newTimeFrom}`) >= new Date(`${newSessionDate}T${newTimeTo}`)) {
+        throw new BadRequest("timeFrom must be before timeTo");
+    }
 
     await db.transaction(async (tx) => {
-        // تجهيز بيانات التحديث
-        const updateData: any = { ...data, updatedAt: new Date() };
-
-        // تنظيف البيانات: إذا تم إرسال حقول اختيارية فارغة، نقوم بحذفها من الكائن
-        // لمنع Drizzle من محاولة إدخال قيمة فارغة في حقول لا تقبلها
-        if (updateData.lessonId !== undefined && updateData.lessonId.trim() === "") delete updateData.lessonId;
-        if (updateData.lessonName !== undefined && updateData.lessonName.trim() === "") delete updateData.lessonName;
-        if (updateData.groupId !== undefined && updateData.groupId.trim() === "") delete updateData.groupId;
-        if (updateData.material_link !== undefined && updateData.material_link.trim() === "") delete updateData.material_link;
-        if (updateData.teacher_material_link !== undefined && updateData.teacher_material_link.trim() === "") delete updateData.teacher_material_link;
-
+        // Update basic session details
         await tx.update(sessions)
-            .set(updateData)
+            .set({
+                ...(name && { name }),
+                ...(sessionDate && { sessionDate }),
+                ...(timeFrom && { timeFrom }),
+                ...(timeTo && { timeTo }),
+                ...(teacherId && { teacherId }),
+                ...(session_link && { session_link }),
+                ...(material_link && { material_link }),
+                ...(teacher_material_link && { teacher_material_link }),
+            })
             .where(eq(sessions.id, id));
 
-        if (userIds !== undefined) {
+        // Update Lessons
+        if (lessonIds && Array.isArray(lessonIds)) {
+            // Remove existing
+            await tx.delete(sessionLessons).where(eq(sessionLessons.sessionId, id));
+            
+            // Insert new ones
+            if (lessonIds.length > 0) {
+                const lessonInserts = lessonIds.map((lessonId: string) => ({
+                    id: randomUUID(),
+                    sessionId: id,
+                    lessonId,
+                }));
+                await tx.insert(sessionLessons).values(lessonInserts);
+            }
+        }
+
+        // Update Students (Merging logic based on session type)
+        if (studentIds && Array.isArray(studentIds)) {
+            if (currentSession.type === "private" && studentIds.length !== 1) {
+                throw new BadRequest("Private sessions must have exactly one student");
+            }
+
+            // Verify students exist
+            if (studentIds.length > 0) {
+                const studentsList = await db.select().from(Student).where(inArray(Student.id, studentIds));
+                if (studentsList.length !== studentIds.length) {
+                    throw new BadRequest("One or more students not found");
+                }
+            }
+
+            let finalStudentIds = [...studentIds];
+
+            if (currentSession.type === "group" && currentSession.groupId) {
+                // Ensure group students are always included and not accidentally removed
+                const groupStudentsList = await tx.select({ studentId: groupStudents.studentId })
+                    .from(groupStudents)
+                    .where(eq(groupStudents.groupId, currentSession.groupId));
+                    
+                const uniqueStudentIds = new Set(groupStudentsList.map(gs => gs.studentId));
+                studentIds.forEach(studentId => uniqueStudentIds.add(studentId));
+                finalStudentIds = Array.from(uniqueStudentIds);
+            }
+
+            // Remove existing session users related to this session
             await tx.delete(sessionUsers).where(eq(sessionUsers.sessionId, id));
-            if (userIds.length > 0) {
-                const records = userIds.map((uId: string) => ({ sessionId: id, studentId: uId }));
-                await tx.insert(sessionUsers).values(records);
+
+            // Insert new merged list
+            if (finalStudentIds.length > 0) {
+                const sessionUsersInserts = finalStudentIds.map(studentId => ({
+                    id: randomUUID(),
+                    sessionId: id,
+                    studentId,
+                }));
+                await tx.insert(sessionUsers).values(sessionUsersInserts);
             }
         }
     });
 
-    SuccessResponse(res, { message: "Session updated successfully" });
+    return SuccessResponse(res, { message: "Session updated successfully" }, 200);
 };
 
 export const deleteSession = async (req: Request, res: Response) => {
     const { id } = req.params;
+
+    if (!id) {
+        throw new BadRequest("Session ID is required");
+    }
+
+    const sessionExists = await db.select().from(sessions).where(eq(sessions.id, id)).limit(1);
+    if (sessionExists.length === 0) {
+        throw new NotFound("Session not found");
+    }
+
     await db.transaction(async (tx) => {
+        // Delete related entities first due to foreign keys constraints
         await tx.delete(sessionUsers).where(eq(sessionUsers.sessionId, id));
+        await tx.delete(sessionLessons).where(eq(sessionLessons.sessionId, id));
+        await tx.delete(sessionRatings).where(eq(sessionRatings.sessionId, id));
+        await tx.delete(sessionAttendance).where(eq(sessionAttendance.sessionId, id));
+        // Final delete of the target session
         await tx.delete(sessions).where(eq(sessions.id, id));
     });
-    SuccessResponse(res, { message: "Session deleted successfully" });
+
+    return SuccessResponse(res, { message: "Session deleted successfully" }, 200);
 };

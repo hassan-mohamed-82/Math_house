@@ -26,7 +26,7 @@ export const createStudent = async (req: Request, res: Response) => {
         avatar,
     } = req.body;
 
-    if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade || !parentphone) {
+    if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade ) {
         throw new BadRequest("all fields are required");
     }
 

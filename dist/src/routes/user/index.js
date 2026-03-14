@@ -8,7 +8,7 @@ const studentauth_1 = __importDefault(require("./studentauth"));
 const profile_1 = __importDefault(require("./profile"));
 const wallet_1 = __importDefault(require("./wallet"));
 const payment_1 = __importDefault(require("./payment"));
-const Attends_1 = __importDefault(require("./Attends"));
+// import attendsRouter from "./Attends";
 const packages_1 = __importDefault(require("./packages"));
 const exams_1 = __importDefault(require("./exams"));
 const diagnosticExams_1 = __importDefault(require("./diagnosticExams"));
@@ -20,7 +20,7 @@ router.use(authenticated_1.authenticated, (0, authorized_1.authorizeRoles)("stud
 router.use("/profile", profile_1.default);
 router.use("/wallet", wallet_1.default);
 router.use("/payment", payment_1.default);
-router.use("/sessions", Attends_1.default);
+// router.use("/sessions", attendsRouter)
 router.use("/packages", packages_1.default);
 router.use("/exams", exams_1.default);
 router.use("/diagnostic-exams", diagnosticExams_1.default);
