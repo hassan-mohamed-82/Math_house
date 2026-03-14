@@ -3,15 +3,20 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { parents } from "../../models/schema";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import bcrypt from "bcrypt";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
+import { Student } from "../../models/schema";
 
 export const createParent = async (req: Request, res: Response) => {
-    const { name, email, phoneNumber, password, status } = req.body;
+    const { name, email, phoneNumber, password, status, studentIds } = req.body;
+
+    if(!name || !email || !phoneNumber || !password){
+        throw new BadRequest("Name, Email, Phone Number, Password are required");
+    }
 
     const existingParent = await db
         .select()
@@ -22,8 +27,22 @@ export const createParent = async (req: Request, res: Response) => {
         throw new BadRequest("email is already exists");
     }
 
+    // Validate students efficiently without loops if provided
+    let uniqueStudentIds: string[] = [];
+    if(studentIds && Array.isArray(studentIds) && studentIds.length > 0){
+        uniqueStudentIds = [...new Set(studentIds)] as string[];
+        const existingStudents = await db
+            .select({ id: Student.id })
+            .from(Student)
+            .where(inArray(Student.id, uniqueStudentIds));
+        
+        if(existingStudents.length !== uniqueStudentIds.length){
+            throw new BadRequest("One or more students not found");
+        }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
-    const id = uuidv4();
+    const id = randomUUID();
 
     await db.insert(parents).values({
         id,
@@ -33,6 +52,11 @@ export const createParent = async (req: Request, res: Response) => {
         password: hashedPassword,
         status: status || "active"
     });
+
+    // Update students in one single query
+    if(uniqueStudentIds.length > 0){
+        await db.update(Student).set({ parentphone: phoneNumber }).where(inArray(Student.id, uniqueStudentIds));
+    }
 
     return SuccessResponse(res,  {message:"create parent success", data: { id }});
 };

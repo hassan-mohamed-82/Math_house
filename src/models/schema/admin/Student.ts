@@ -6,7 +6,7 @@ export const Student = mysqlTable("student", {
     firstname:varchar("first_name", { length: 255 }).notNull(),
     lastname:varchar("last_name",{length:255}).notNull(),
     nickname:varchar("nickname",{length:255}).notNull(),
-    email:varchar("email",{length:255}).notNull(),
+    email:varchar("email",{length:255}).notNull().unique(),
     password:varchar("password",{length:255}).notNull(),
     phone:varchar("phone",{length:255}).notNull(),
     category:char("category",{length:36}).notNull().references(()=>category.id),

@@ -8,7 +8,7 @@ import { handleImageUpdate, validateAndSaveLogo, deleteImage } from "../../utils
 import { randomUUID } from "crypto";
 
 export const createTeacher = async (req: Request, res: Response) => {
-    const { name, email, phoneNumber, password, avatar, categoryId, courseId } = req.body;
+    const { name, email, phoneNumber, password, avatar, categoryId, courseIds } = req.body;
     if (!name || !email || !phoneNumber || !password) {
         throw new BadRequest("Name, Email, Phone Number, Password are required");
     }
@@ -27,11 +27,13 @@ export const createTeacher = async (req: Request, res: Response) => {
             throw new BadRequest("Category not found");
         }
     }
-    // Add Teacher to Course if courseId is provided
-    if (courseId) {
-        const existingCourse = await db.select().from(courses).where(eq(courses.id, courseId));
-        if (existingCourse.length === 0) {
-            throw new BadRequest("Course not found");
+    // Add Teacher to Courses if courseIds is provided
+    if (courseIds && Array.isArray(courseIds) && courseIds.length > 0) {
+        for (const cId of courseIds) {
+            const existingCourse = await db.select().from(courses).where(eq(courses.id, cId));
+            if (existingCourse.length === 0) {
+                throw new BadRequest(`Course not found for ID: ${cId}`);
+            }
         }
     }
     // ---------------------------------------------------
@@ -49,12 +51,13 @@ export const createTeacher = async (req: Request, res: Response) => {
         categoryId,
     });
 
-    // Add teacher to course via junction table if courseId provided
-    if (courseId) {
-        await db.insert(courseTeachers).values({
-            courseId,
+    // Add teacher to courses via junction table if courseIds provided
+    if (courseIds && Array.isArray(courseIds) && courseIds.length > 0) {
+        const courseTeacherValues = courseIds.map(cId => ({
+            courseId: cId,
             teacherId,
-        });
+        }));
+        await db.insert(courseTeachers).values(courseTeacherValues);
     }
 
     return SuccessResponse(res, { message: "Teacher created successfully" }, 200);
