@@ -362,21 +362,38 @@ export const getSessionById = async (req: Request, res: Response) => {
             id: teachers.id,
             name: teachers.name,
         },
-        lessons: {
-            id: lessons.id,
-            name: lessons.name,
-        },
-        students: {
-            id: Student.id,
-            name: sql`CONCAT(${Student.firstname}, ' ', ${Student.lastname})`.as("name"),
-        }
     }).from(sessions)
     .leftJoin(groups, eq(sessions.groupId, groups.id))
     .leftJoin(teachers, eq(sessions.teacherId, teachers.id))
-    .leftJoin(sessionLessons, eq(sessions.id, sessionLessons.sessionId))
     .where(eq(sessions.id, id)).limit(1);
 
-    return SuccessResponse(res, { session: session[0] }, 200);
+    if (!session[0]) {
+        throw new NotFound("Session not found");
+    }
+
+    const sessionLessonsData = await db.select({
+        id: lessons.id,
+        name: lessons.name,
+    })
+    .from(sessionLessons)
+    .innerJoin(lessons, eq(sessionLessons.lessonId, lessons.id))
+    .where(eq(sessionLessons.sessionId, id));
+
+    const sessionStudentsData = await db.select({
+        id: Student.id,
+        name: sql<string>`CONCAT(${Student.firstname}, ' ', ${Student.lastname})`.as("name"),
+    })
+    .from(sessionUsers)
+    .innerJoin(Student, eq(sessionUsers.studentId, Student.id))
+    .where(eq(sessionUsers.sessionId, id));
+
+    const responseData = {
+        ...session[0],
+        lessons: sessionLessonsData,
+        students: sessionStudentsData
+    };
+
+    return SuccessResponse(res, { session: responseData }, 200);
 };
 
 export const updateSession = async (req: Request, res: Response) => {
