@@ -293,20 +293,48 @@ const getSessionById = async (req, res) => {
             id: schema_1.teachers.id,
             name: schema_1.teachers.name,
         },
-        lessons: {
-            id: schema_1.lessons.id,
-            name: schema_1.lessons.name,
-        },
-        students: {
-            id: schema_1.Student.id,
-            name: (0, drizzle_orm_1.sql) `CONCAT(${schema_1.Student.firstname}, ' ', ${schema_1.Student.lastname})`.as("name"),
-        }
     }).from(Session_1.sessions)
         .leftJoin(Groups_1.groups, (0, drizzle_orm_1.eq)(Session_1.sessions.groupId, Groups_1.groups.id))
         .leftJoin(schema_1.teachers, (0, drizzle_orm_1.eq)(Session_1.sessions.teacherId, schema_1.teachers.id))
-        .leftJoin(schema_1.sessionLessons, (0, drizzle_orm_1.eq)(Session_1.sessions.id, schema_1.sessionLessons.sessionId))
         .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, id)).limit(1);
-    return (0, response_1.SuccessResponse)(res, { session: session[0] }, 200);
+    if (!session[0]) {
+        throw new Errors_1.NotFound("Session not found");
+    }
+    const sessionLessonsData = await connection_1.db.select({
+        id: schema_1.lessons.id,
+        name: schema_1.lessons.name,
+        chapter: {
+            id: schema_1.chapters.id,
+            name: schema_1.chapters.name,
+        },
+        course: {
+            id: schema_1.courses.id,
+            name: schema_1.courses.name,
+        },
+        category: {
+            id: schema_1.category.id,
+            name: schema_1.category.name,
+        }
+    })
+        .from(schema_1.sessionLessons)
+        .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.sessionLessons.lessonId, schema_1.lessons.id))
+        .innerJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
+        .innerJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, schema_1.courses.id))
+        .innerJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, schema_1.category.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.sessionLessons.sessionId, id));
+    const sessionStudentsData = await connection_1.db.select({
+        id: schema_1.Student.id,
+        name: (0, drizzle_orm_1.sql) `CONCAT(${schema_1.Student.firstname}, ' ', ${schema_1.Student.lastname})`.as("name"),
+    })
+        .from(Session_1.sessionUsers)
+        .innerJoin(schema_1.Student, (0, drizzle_orm_1.eq)(Session_1.sessionUsers.studentId, schema_1.Student.id))
+        .where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.sessionId, id));
+    const responseData = {
+        ...session[0],
+        lessons: sessionLessonsData,
+        students: sessionStudentsData
+    };
+    return (0, response_1.SuccessResponse)(res, { session: responseData }, 200);
 };
 exports.getSessionById = getSessionById;
 const updateSession = async (req, res) => {

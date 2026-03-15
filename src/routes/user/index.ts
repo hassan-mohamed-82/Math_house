@@ -8,6 +8,7 @@ import packagesRouter from "./packages";
 import examsRouter from "./exams";
 import dashboardRouter from "./dashboard";
 import diagnosticExamRouter from "./diagnosticExams";
+import quizzesRouters from "./Quizzes";
 import { authorizeRoles } from "../../middlewares/authorized";
 import { authenticated } from "../../middlewares/authenticated";
 const router = Router()
@@ -21,4 +22,5 @@ router.use("/sessions", attendsRouter)
 router.use("/packages", packagesRouter)
 router.use("/exams", examsRouter)
 router.use("/diagnostic-exams", diagnosticExamRouter)
+router.use("/quizzes", quizzesRouters)
 export default router
