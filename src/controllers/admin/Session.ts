@@ -374,9 +374,24 @@ export const getSessionById = async (req: Request, res: Response) => {
     const sessionLessonsData = await db.select({
         id: lessons.id,
         name: lessons.name,
+        chapter: {
+            id: chapters.id,
+            name: chapters.name,
+        },
+        course: {
+            id: courses.id,
+            name: courses.name,
+        },
+        category: {
+            id: category.id,
+            name: category.name,
+        }
     })
     .from(sessionLessons)
     .innerJoin(lessons, eq(sessionLessons.lessonId, lessons.id))
+    .innerJoin(chapters, eq(lessons.chapterId, chapters.id))
+    .innerJoin(courses, eq(chapters.courseId, courses.id))
+    .innerJoin(category, eq(courses.categoryId, category.id))
     .where(eq(sessionLessons.sessionId, id));
 
     const sessionStudentsData = await db.select({
