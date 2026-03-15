@@ -9,7 +9,7 @@ exports.Student = (0, mysql_core_1.mysqlTable)("student", {
     firstname: (0, mysql_core_1.varchar)("first_name", { length: 255 }).notNull(),
     lastname: (0, mysql_core_1.varchar)("last_name", { length: 255 }).notNull(),
     nickname: (0, mysql_core_1.varchar)("nickname", { length: 255 }).notNull(),
-    email: (0, mysql_core_1.varchar)("email", { length: 255 }).notNull(),
+    email: (0, mysql_core_1.varchar)("email", { length: 255 }).notNull().unique(),
     password: (0, mysql_core_1.varchar)("password", { length: 255 }).notNull(),
     phone: (0, mysql_core_1.varchar)("phone", { length: 255 }).notNull(),
     category: (0, mysql_core_1.char)("category", { length: 36 }).notNull().references(() => category_1.category.id),

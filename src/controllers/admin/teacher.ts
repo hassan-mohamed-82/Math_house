@@ -145,7 +145,7 @@ export const getAllTeachers = async (req: Request, res: Response) => {
 
 export const updateTeacher = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, email, phoneNumber, password, avatar, categoryId, courseId } = req.body;
+    const { name, email, phoneNumber, password, avatar, categoryId, courseIds } = req.body;
 
     // Check if teacher exists
     const existingTeacher = await db.select().from(teachers).where(eq(teachers.id, id));
@@ -173,27 +173,37 @@ export const updateTeacher = async (req: Request, res: Response) => {
     const avatarURL = await handleImageUpdate(req, existingTeacher[0].avatar, avatar, "teachers");
 
     // Update teacher record
-    await db.update(teachers).set({
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(phoneNumber && { phoneNumber }),
-        ...(password && { password }),
-        ...(avatarURL && { avatar: avatarURL }),
-        ...(categoryId !== undefined && { categoryId }),
-    }).where(eq(teachers.id, id));
+    const updateData: any = {};
+    if (name) updateData.name = name;
+    if (email) updateData.email = email;
+    if (phoneNumber) updateData.phoneNumber = phoneNumber;
+    if (password) updateData.password = password;
+    if (avatarURL) updateData.avatar = avatarURL;
+    if (categoryId !== undefined) updateData.categoryId = categoryId;
 
-    // Update course assignment if courseId is provided
-    if (courseId) {
-        const existingCourse = await db.select().from(courses).where(eq(courses.id, courseId));
-        if (existingCourse.length === 0) {
-            throw new BadRequest("Course not found");
+    if (Object.keys(updateData).length > 0) {
+        await db.update(teachers).set(updateData).where(eq(teachers.id, id));
+    }
+
+    // Update course assignment if courseIds is provided
+    if (courseIds && Array.isArray(courseIds)) {
+        if (courseIds.length > 0) {
+            for (const cId of courseIds) {
+                const existingCourse = await db.select().from(courses).where(eq(courses.id, cId));
+                if (existingCourse.length === 0) {
+                    throw new BadRequest(`Course not found for ID: ${cId}`);
+                }
+            }
         }
-        // Remove existing course assignments and add the new one
+        // Remove existing course assignments and add the new ones
         await db.delete(courseTeachers).where(eq(courseTeachers.teacherId, id));
-        await db.insert(courseTeachers).values({
-            courseId,
-            teacherId: id,
-        });
+        if (courseIds.length > 0) {
+            const courseTeacherValues = courseIds.map((cId: string) => ({
+                courseId: cId,
+                teacherId: id,
+            }));
+            await db.insert(courseTeachers).values(courseTeacherValues);
+        }
     }
 
     return SuccessResponse(res, { message: "Teacher updated successfully" }, 200);

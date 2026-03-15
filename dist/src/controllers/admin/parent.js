@@ -12,9 +12,13 @@ const response_1 = require("../../utils/response");
 const NotFound_1 = require("../../Errors/NotFound");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const bcrypt_1 = __importDefault(require("bcrypt"));
-const uuid_1 = require("uuid");
+const crypto_1 = require("crypto");
+const schema_2 = require("../../models/schema");
 const createParent = async (req, res) => {
-    const { name, email, phoneNumber, password, status } = req.body;
+    const { name, email, phoneNumber, password, status, studentIds } = req.body;
+    if (!name || !email || !phoneNumber || !password) {
+        throw new BadRequest_1.BadRequest("Name, Email, Phone Number, Password are required");
+    }
     const existingParent = await connection_1.db
         .select()
         .from(schema_1.parents)
@@ -22,8 +26,20 @@ const createParent = async (req, res) => {
     if (existingParent.length > 0) {
         throw new BadRequest_1.BadRequest("email is already exists");
     }
+    // Validate students efficiently without loops if provided
+    let uniqueStudentIds = [];
+    if (studentIds && Array.isArray(studentIds) && studentIds.length > 0) {
+        uniqueStudentIds = [...new Set(studentIds)];
+        const existingStudents = await connection_1.db
+            .select({ id: schema_2.Student.id })
+            .from(schema_2.Student)
+            .where((0, drizzle_orm_1.inArray)(schema_2.Student.id, uniqueStudentIds));
+        if (existingStudents.length !== uniqueStudentIds.length) {
+            throw new BadRequest_1.BadRequest("One or more students not found");
+        }
+    }
     const hashedPassword = await bcrypt_1.default.hash(password, 10);
-    const id = (0, uuid_1.v4)();
+    const id = (0, crypto_1.randomUUID)();
     await connection_1.db.insert(schema_1.parents).values({
         id,
         name,
@@ -32,6 +48,10 @@ const createParent = async (req, res) => {
         password: hashedPassword,
         status: status || "active"
     });
+    // Update students in one single query
+    if (uniqueStudentIds.length > 0) {
+        await connection_1.db.update(schema_2.Student).set({ parentphone: phoneNumber }).where((0, drizzle_orm_1.inArray)(schema_2.Student.id, uniqueStudentIds));
+    }
     return (0, response_1.SuccessResponse)(res, { message: "create parent success", data: { id } });
 };
 exports.createParent = createParent;

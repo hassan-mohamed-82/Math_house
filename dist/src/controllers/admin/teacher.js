@@ -9,7 +9,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const handleImages_1 = require("../../utils/handleImages");
 const crypto_1 = require("crypto");
 const createTeacher = async (req, res) => {
-    const { name, email, phoneNumber, password, avatar, categoryId, courseId } = req.body;
+    const { name, email, phoneNumber, password, avatar, categoryId, courseIds } = req.body;
     if (!name || !email || !phoneNumber || !password) {
         throw new BadRequest_1.BadRequest("Name, Email, Phone Number, Password are required");
     }
@@ -27,11 +27,13 @@ const createTeacher = async (req, res) => {
             throw new BadRequest_1.BadRequest("Category not found");
         }
     }
-    // Add Teacher to Course if courseId is provided
-    if (courseId) {
-        const existingCourse = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, courseId));
-        if (existingCourse.length === 0) {
-            throw new BadRequest_1.BadRequest("Course not found");
+    // Add Teacher to Courses if courseIds is provided
+    if (courseIds && Array.isArray(courseIds) && courseIds.length > 0) {
+        for (const cId of courseIds) {
+            const existingCourse = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, cId));
+            if (existingCourse.length === 0) {
+                throw new BadRequest_1.BadRequest(`Course not found for ID: ${cId}`);
+            }
         }
     }
     // ---------------------------------------------------
@@ -46,12 +48,13 @@ const createTeacher = async (req, res) => {
         avatar: avatarURL,
         categoryId,
     });
-    // Add teacher to course via junction table if courseId provided
-    if (courseId) {
-        await connection_1.db.insert(schema_1.courseTeachers).values({
-            courseId,
+    // Add teacher to courses via junction table if courseIds provided
+    if (courseIds && Array.isArray(courseIds) && courseIds.length > 0) {
+        const courseTeacherValues = courseIds.map(cId => ({
+            courseId: cId,
             teacherId,
-        });
+        }));
+        await connection_1.db.insert(schema_1.courseTeachers).values(courseTeacherValues);
     }
     return (0, response_1.SuccessResponse)(res, { message: "Teacher created successfully" }, 200);
 };
@@ -131,7 +134,7 @@ const getAllTeachers = async (req, res) => {
 exports.getAllTeachers = getAllTeachers;
 const updateTeacher = async (req, res) => {
     const { id } = req.params;
-    const { name, email, phoneNumber, password, avatar, categoryId, courseId } = req.body;
+    const { name, email, phoneNumber, password, avatar, categoryId, courseIds } = req.body;
     // Check if teacher exists
     const existingTeacher = await connection_1.db.select().from(schema_1.teachers).where((0, drizzle_orm_1.eq)(schema_1.teachers.id, id));
     if (existingTeacher.length === 0) {
@@ -154,26 +157,41 @@ const updateTeacher = async (req, res) => {
     // Handle avatar update (saves new, deletes old, or keeps existing)
     const avatarURL = await (0, handleImages_1.handleImageUpdate)(req, existingTeacher[0].avatar, avatar, "teachers");
     // Update teacher record
-    await connection_1.db.update(schema_1.teachers).set({
-        ...(name && { name }),
-        ...(email && { email }),
-        ...(phoneNumber && { phoneNumber }),
-        ...(password && { password }),
-        ...(avatarURL && { avatar: avatarURL }),
-        ...(categoryId !== undefined && { categoryId }),
-    }).where((0, drizzle_orm_1.eq)(schema_1.teachers.id, id));
-    // Update course assignment if courseId is provided
-    if (courseId) {
-        const existingCourse = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, courseId));
-        if (existingCourse.length === 0) {
-            throw new BadRequest_1.BadRequest("Course not found");
+    const updateData = {};
+    if (name)
+        updateData.name = name;
+    if (email)
+        updateData.email = email;
+    if (phoneNumber)
+        updateData.phoneNumber = phoneNumber;
+    if (password)
+        updateData.password = password;
+    if (avatarURL)
+        updateData.avatar = avatarURL;
+    if (categoryId !== undefined)
+        updateData.categoryId = categoryId;
+    if (Object.keys(updateData).length > 0) {
+        await connection_1.db.update(schema_1.teachers).set(updateData).where((0, drizzle_orm_1.eq)(schema_1.teachers.id, id));
+    }
+    // Update course assignment if courseIds is provided
+    if (courseIds && Array.isArray(courseIds)) {
+        if (courseIds.length > 0) {
+            for (const cId of courseIds) {
+                const existingCourse = await connection_1.db.select().from(schema_1.courses).where((0, drizzle_orm_1.eq)(schema_1.courses.id, cId));
+                if (existingCourse.length === 0) {
+                    throw new BadRequest_1.BadRequest(`Course not found for ID: ${cId}`);
+                }
+            }
         }
-        // Remove existing course assignments and add the new one
+        // Remove existing course assignments and add the new ones
         await connection_1.db.delete(schema_1.courseTeachers).where((0, drizzle_orm_1.eq)(schema_1.courseTeachers.teacherId, id));
-        await connection_1.db.insert(schema_1.courseTeachers).values({
-            courseId,
-            teacherId: id,
-        });
+        if (courseIds.length > 0) {
+            const courseTeacherValues = courseIds.map((cId) => ({
+                courseId: cId,
+                teacherId: id,
+            }));
+            await connection_1.db.insert(schema_1.courseTeachers).values(courseTeacherValues);
+        }
     }
     return (0, response_1.SuccessResponse)(res, { message: "Teacher updated successfully" }, 200);
 };
