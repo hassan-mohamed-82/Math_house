@@ -14,7 +14,6 @@ import {
     deleteSession,
 } from "../../controllers/admin/Session";
 import { catchAsync } from "../../utils/catchAsync";
-import { ro } from "@faker-js/faker/.";
 
 const router = Router();
 
@@ -27,8 +26,8 @@ router.get("/select/teachers", catchAsync(selectTeachers));
 router.get("/select/groups", catchAsync(selectGroups)); 
 
 router.get("/", catchAsync(getAllSessions));
-router.get("/:id", catchAsync(getSessionById));
 router.post("/", catchAsync(createSession));
+router.get("/:id", catchAsync(getSessionById));
 router.put("/:id", catchAsync(updateSession));
 router.delete("/:id", catchAsync(deleteSession));
 

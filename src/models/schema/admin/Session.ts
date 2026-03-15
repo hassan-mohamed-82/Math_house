@@ -23,7 +23,7 @@ export const sessions = mysqlTable("sessions", {
     material_link: varchar("material_link", { length: 500 }),
     teacher_material_link: varchar("teacher_material_link", { length: 500 }),
     
-    sessionRelationalType: mysqlEnum("session_relational_type", ["Explanation", "Re-Exeplanation", "Mistakes", "Exam"]).default("Explanation"),
+    sessionRelationalType: mysqlEnum("session_relational_type", ["Explanation", "Re-Explanation", "Mistakes", "Exam"]).default("Explanation"),
     
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

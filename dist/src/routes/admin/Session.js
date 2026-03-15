@@ -12,8 +12,8 @@ router.get("/select/students", (0, catchAsync_1.catchAsync)(Session_1.selectStud
 router.get("/select/teachers", (0, catchAsync_1.catchAsync)(Session_1.selectTeachers));
 router.get("/select/groups", (0, catchAsync_1.catchAsync)(Session_1.selectGroups));
 router.get("/", (0, catchAsync_1.catchAsync)(Session_1.getAllSessions));
-router.get("/:id", (0, catchAsync_1.catchAsync)(Session_1.getSessionById));
 router.post("/", (0, catchAsync_1.catchAsync)(Session_1.createSession));
+router.get("/:id", (0, catchAsync_1.catchAsync)(Session_1.getSessionById));
 router.put("/:id", (0, catchAsync_1.catchAsync)(Session_1.updateSession));
 router.delete("/:id", (0, catchAsync_1.catchAsync)(Session_1.deleteSession));
 exports.default = router;

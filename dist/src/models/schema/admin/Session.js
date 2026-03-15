@@ -20,7 +20,7 @@ exports.sessions = (0, mysql_core_1.mysqlTable)("sessions", {
     session_link: (0, mysql_core_1.varchar)("session_link", { length: 500 }).notNull(),
     material_link: (0, mysql_core_1.varchar)("material_link", { length: 500 }),
     teacher_material_link: (0, mysql_core_1.varchar)("teacher_material_link", { length: 500 }),
-    sessionRelationalType: (0, mysql_core_1.mysqlEnum)("session_relational_type", ["Explanation", "Re-Exeplanation", "Mistakes", "Exam"]).default("Explanation"),
+    sessionRelationalType: (0, mysql_core_1.mysqlEnum)("session_relational_type", ["Explanation", "Re-Explanation", "Mistakes", "Exam"]).default("Explanation"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });
