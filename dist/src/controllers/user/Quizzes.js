@@ -13,7 +13,7 @@ const getQuizQuestions = async (req, res) => {
         throw new Errors_1.NotFound("Quiz not found");
     }
     const AllQuizQuestions = await connection_1.db.select({
-        id: schema_1.quizzes.id,
+        id: schema_1.quizQuestions.quizId,
         question: {
             id: schema_1.questions.id,
             question: schema_1.questions.question,

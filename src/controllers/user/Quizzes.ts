@@ -14,7 +14,7 @@ export const getQuizQuestions = async (req: Request, res: Response) => {
     }
 
     const AllQuizQuestions = await db.select({
-        id: quizzes.id,
+        id: quizQuestions.quizId,
         question: {
             id: questions.id,
             question: questions.question,
