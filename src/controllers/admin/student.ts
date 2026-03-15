@@ -271,7 +271,6 @@ export const deleteStudent = async (req: Request, res: Response) => {
     if (!id) {
         throw new BadRequest("id is required");
     }
-
     const student = await db
         .select()
         .from(Student)
@@ -284,7 +283,7 @@ export const deleteStudent = async (req: Request, res: Response) => {
     if (student[0].avatar) {
         await deleteImage(student[0].avatar);
     }
-
+    await db.delete(wallet).where(eq(wallet.studentId, id));
     await db.delete(Student).where(eq(Student.id, id));
 
     SuccessResponse(res, { message: "delete student success" });

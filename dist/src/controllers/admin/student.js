@@ -227,6 +227,7 @@ const deleteStudent = async (req, res) => {
     if (student[0].avatar) {
         await (0, handleImages_1.deleteImage)(student[0].avatar);
     }
+    await connection_1.db.delete(schema_1.wallet).where((0, drizzle_orm_1.eq)(schema_1.wallet.studentId, id));
     await connection_1.db.delete(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, id));
     (0, response_1.SuccessResponse)(res, { message: "delete student success" });
 };
