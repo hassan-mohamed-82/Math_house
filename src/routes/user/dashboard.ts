@@ -5,6 +5,6 @@ import { getDashboardData } from "../../controllers/user/dashboard";
 const router = Router();
 
 router.use(authorizeRoles("student"));
-router.get("/dashboard", catchAsync(getDashboardData));
+router.get("/", catchAsync(getDashboardData));
 
 export default router;

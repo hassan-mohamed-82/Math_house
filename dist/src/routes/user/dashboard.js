@@ -6,5 +6,5 @@ const authorized_1 = require("../../middlewares/authorized");
 const dashboard_1 = require("../../controllers/user/dashboard");
 const router = (0, express_1.Router)();
 router.use((0, authorized_1.authorizeRoles)("student"));
-router.get("/dashboard", (0, catchAsync_1.catchAsync)(dashboard_1.getDashboardData));
+router.get("/", (0, catchAsync_1.catchAsync)(dashboard_1.getDashboardData));
 exports.default = router;
