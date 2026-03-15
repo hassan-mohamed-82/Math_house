@@ -13,7 +13,7 @@ export const studentSchema = z.object({
     grade: z.enum(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], {
         errorMap: () => ({ message: "grade is not valid" })
     }),
-    parentphone: z.string().regex(/^01[0125][0-9]{8}$/, "parent phone number is not valid")
+    parentphone: z.string().regex(/^01[0125][0-9]{8}$/, "parent phone number is not valid").optional()
 });
 
 export const updateStudentSchema = z.object({
