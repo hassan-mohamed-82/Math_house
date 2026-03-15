@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSession = exports.updateSession = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.selectStudents = exports.selectLesson = exports.selectChapter = exports.selectCourse = exports.selectCategory = void 0;
+exports.deleteSession = exports.updateSession = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.selectGroups = exports.selectTeachers = exports.selectStudents = exports.selectLesson = exports.selectChapter = exports.selectCourse = exports.selectCategory = void 0;
 const crypto_1 = require("crypto");
 const connection_1 = require("../../models/connection");
 const Session_1 = require("../../models/schema/admin/Session");
@@ -107,6 +107,22 @@ const selectStudents = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { students: studentsList });
 };
 exports.selectStudents = selectStudents;
+const selectTeachers = async (req, res) => {
+    const teachersList = await connection_1.db.select({
+        id: schema_1.teachers.id,
+        name: schema_1.teachers.name,
+    }).from(schema_1.teachers).orderBy((0, drizzle_orm_1.asc)(schema_1.teachers.name));
+    return (0, response_1.SuccessResponse)(res, { teachers: teachersList });
+};
+exports.selectTeachers = selectTeachers;
+const selectGroups = async (req, res) => {
+    const groupsList = await connection_1.db.select({
+        id: Groups_1.groups.id,
+        name: Groups_1.groups.name,
+    }).from(Groups_1.groups).orderBy((0, drizzle_orm_1.asc)(Groups_1.groups.name));
+    return (0, response_1.SuccessResponse)(res, { groups: groupsList });
+};
+exports.selectGroups = selectGroups;
 const createSession = async (req, res) => {
     const { name, sessionDate, timeFrom, timeTo, type, groupId, teacherId, session_link, material_link, teacher_material_link, sessionRelationalType, lessonIds, studentIds } = req.body;
     if (!name ||

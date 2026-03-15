@@ -13,7 +13,7 @@ import {
     sessionLessons,
     sessionAttendance
 } from "../../models/schema";
-import { eq, like, or, and, inArray, sql } from "drizzle-orm";
+import { eq, like, or, and, inArray, sql ,asc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
@@ -137,6 +137,21 @@ export const selectStudents = async (req: Request, res: Response) => {
     return SuccessResponse(res, { students: studentsList });
 };
 
+export const selectTeachers = async (req: Request, res: Response) => {
+    const teachersList = await db.select({
+        id: teachers.id,
+        name: teachers.name,
+    }).from(teachers).orderBy(asc(teachers.name));
+    return SuccessResponse(res, { teachers: teachersList });
+};
+
+export const selectGroups = async (req: Request, res: Response) => {
+    const groupsList = await db.select({
+        id: groups.id,
+        name: groups.name,
+    }).from(groups).orderBy(asc(groups.name));
+    return SuccessResponse(res, { groups: groupsList });
+};
 
 export const createSession = async (req: Request, res: Response) => {
     const {
