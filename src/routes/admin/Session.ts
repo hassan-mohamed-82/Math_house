@@ -5,6 +5,8 @@ import {
     selectChapter,
     selectLesson,
     selectStudents,
+    selectTeachers,
+    selectGroups,
     getAllSessions,
     getSessionById,
     createSession,
@@ -12,6 +14,7 @@ import {
     deleteSession,
 } from "../../controllers/admin/Session";
 import { catchAsync } from "../../utils/catchAsync";
+import { ro } from "@faker-js/faker/.";
 
 const router = Router();
 
@@ -20,6 +23,8 @@ router.get("/select/course/:categoryId", catchAsync(selectCourse));
 router.get("/select/chapter/:courseId", catchAsync(selectChapter));
 router.get("/select/lesson/:chapterId", catchAsync(selectLesson));
 router.get("/select/students", catchAsync(selectStudents));
+router.get("/select/teachers", catchAsync(selectTeachers));
+router.get("/select/groups", catchAsync(selectGroups)); 
 
 router.get("/", catchAsync(getAllSessions));
 router.get("/:id", catchAsync(getSessionById));
