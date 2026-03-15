@@ -3,7 +3,7 @@ import studentauthRoutr from "./studentauth";
 import profileRouter from "./profile";
 import walletRouter from "./wallet";
 import paymentRouter from "./payment";
-// import attendsRouter from "./Attends";
+import attendsRouter from "./Attends";
 import packagesRouter from "./packages";
 import examsRouter from "./exams";
 import diagnosticExamRouter from "./diagnosticExams";
@@ -15,7 +15,7 @@ router.use(authenticated, authorizeRoles("student"))
 router.use("/profile", profileRouter)
 router.use("/wallet", walletRouter)
 router.use("/payment", paymentRouter)
-// router.use("/sessions", attendsRouter)
+router.use("/sessions", attendsRouter)
 router.use("/packages", packagesRouter)
 router.use("/exams", examsRouter)
 router.use("/diagnostic-exams", diagnosticExamRouter)
