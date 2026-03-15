@@ -8,12 +8,14 @@ export const studentSchema = z.object({
     nickname: z.string().min(2, "nickname must be at least 2 characters").max(255),
     email: z.string().email("email is not valid"),
     password: z.string().min(8, "password must be at least 8 characters"),
-    phone: z.string().regex(/^01[0125][0-9]{8}$/, "phone number is not valid"),
+    //TODO: add validation for most countries numbers
+    phone: z.string(),
     category: z.string().uuid("category id is not valid"),
     grade: z.enum(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], {
         errorMap: () => ({ message: "grade is not valid" })
     }),
-    parentphone: z.string().regex(/^01[0125][0-9]{8}$/, "parent phone number is not valid").optional()
+    //TODO: add validation for most countries numbers
+    parentphone: z.string().optional()
 });
 
 export const updateStudentSchema = z.object({
@@ -21,12 +23,12 @@ export const updateStudentSchema = z.object({
     lastname: z.string().min(2, "lastname must be at least 2 characters").max(255).optional(),
     nickname: z.string().min(2, "nickname must be at least 2 characters").max(255).optional(),
     email: z.string().email("email is not valid").optional(),
-    phone: z.string().regex(/^01[0125][0-9]{8}$/, "phone number is not valid").optional(),
+    phone: z.string().optional(),
     category: z.string().uuid("category id is not valid").optional(),
     grade: z.enum(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], {
         errorMap: () => ({ message: "grade is not valid" })
     }).optional(),
-    parentphone: z.string().regex(/^01[0125][0-9]{8}$/, "parent phone number is not valid").optional(),
+    parentphone: z.string().optional(),
     oldPassword: z.string().optional(),
     newPassword: z.string().min(8, "password must be at least 8 characters").optional()
 }).refine((data) => {
