@@ -9,6 +9,8 @@ router.get("/select/course/:categoryId", (0, catchAsync_1.catchAsync)(Session_1.
 router.get("/select/chapter/:courseId", (0, catchAsync_1.catchAsync)(Session_1.selectChapter));
 router.get("/select/lesson/:chapterId", (0, catchAsync_1.catchAsync)(Session_1.selectLesson));
 router.get("/select/students", (0, catchAsync_1.catchAsync)(Session_1.selectStudents));
+router.get("/select/teachers", (0, catchAsync_1.catchAsync)(Session_1.selectTeachers));
+router.get("/select/groups", (0, catchAsync_1.catchAsync)(Session_1.selectGroups));
 router.get("/", (0, catchAsync_1.catchAsync)(Session_1.getAllSessions));
 router.get("/:id", (0, catchAsync_1.catchAsync)(Session_1.getSessionById));
 router.post("/", (0, catchAsync_1.catchAsync)(Session_1.createSession));
