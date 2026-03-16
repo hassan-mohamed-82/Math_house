@@ -422,6 +422,9 @@ export const updateSession = async (req: Request, res: Response) => {
         session_link,
         material_link,
         teacher_material_link,
+        sessionRelationalType,
+        type,
+        groupId,
         lessonIds,
         studentIds
     } = req.body;
@@ -474,6 +477,9 @@ export const updateSession = async (req: Request, res: Response) => {
                 ...(session_link && { session_link }),
                 ...(material_link && { material_link }),
                 ...(teacher_material_link && { teacher_material_link }),
+                ...(sessionRelationalType && { sessionRelationalType }),
+                ...(type && { type }),
+                ...(groupId && { groupId }),
             })
             .where(eq(sessions.id, id));
 
@@ -495,7 +501,10 @@ export const updateSession = async (req: Request, res: Response) => {
 
         // Update Students (Merging logic based on session type)
         if (studentIds && Array.isArray(studentIds)) {
-            if (currentSession.type === "private" && studentIds.length !== 1) {
+            const sessionType = type || currentSession.type;
+            const sessionGroupId = groupId || currentSession.groupId;
+
+            if (sessionType === "private" && studentIds.length !== 1) {
                 throw new BadRequest("Private sessions must have exactly one student");
             }
 
@@ -509,11 +518,11 @@ export const updateSession = async (req: Request, res: Response) => {
 
             let finalStudentIds = [...studentIds];
 
-            if (currentSession.type === "group" && currentSession.groupId) {
+            if (sessionType === "group" && sessionGroupId) {
                 // Ensure group students are always included and not accidentally removed
                 const groupStudentsList = await tx.select({ studentId: groupStudents.studentId })
                     .from(groupStudents)
-                    .where(eq(groupStudents.groupId, currentSession.groupId));
+                    .where(eq(groupStudents.groupId, sessionGroupId));
                     
                 const uniqueStudentIds = new Set(groupStudentsList.map(gs => gs.studentId));
                 studentIds.forEach(studentId => uniqueStudentIds.add(studentId));
