@@ -6,6 +6,7 @@ import { category } from "../../models/schema";
 import { courses } from "../../models/schema";
 import { chapters } from "../../models/schema";
 import { lessons } from "../../models/schema";
+import { semesters } from "../../models/schema";
 import { examCodes } from "../../models/schema";
 import { eq, desc, asc, and, isNull, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -169,12 +170,17 @@ export const getAllQuizzes = async (req: Request, res: Response) => {
                 id: lessons.id,
                 name: lessons.name,
             },
+            semester: {
+                id: semesters.id,
+                name: semesters.name,
+            }
         })
         .from(quizzes)
         .leftJoin(category, eq(quizzes.categoryId, category.id))
         .leftJoin(courses, eq(quizzes.courseId, courses.id))
         .leftJoin(chapters, eq(quizzes.chapterId, chapters.id))
         .leftJoin(lessons, eq(quizzes.lessonId, lessons.id))
+        .leftJoin(semesters, eq(courses.id, semesters.courseId))
         .orderBy(desc(quizzes.createdAt));
 
     const quizzesWithCount = await Promise.all(
@@ -233,12 +239,17 @@ export const getQuizById = async (req: Request, res: Response) => {
                 id: lessons.id,
                 name: lessons.name,
             },
+            semester: {
+                id: semesters.id,
+                name: semesters.name,
+            }
         })
         .from(quizzes)
         .leftJoin(category, eq(quizzes.categoryId, category.id))
         .leftJoin(courses, eq(quizzes.courseId, courses.id))
         .leftJoin(chapters, eq(quizzes.chapterId, chapters.id))
         .leftJoin(lessons, eq(quizzes.lessonId, lessons.id))
+        .leftJoin(semesters, eq(courses.id, semesters.courseId))
         .where(eq(quizzes.id, id))
         .limit(1);
 
@@ -474,7 +485,7 @@ export const toggleQuizActive = async (req: Request, res: Response) => {
 
 // Helper: Get lesson IDs based on selection
 const getLessonIds = async (
-   
+
     lessonId?: string
 ): Promise<string[]> => {
     if (lessonId) {
@@ -489,7 +500,7 @@ const getLessonIds = async (
 
 export const getQuestionsBank = async (req: Request, res: Response) => {
     const {
-        
+
         lessonId,
         type,
         year,
@@ -508,7 +519,7 @@ export const getQuestionsBank = async (req: Request, res: Response) => {
 
     // Get lesson IDs based on selection
     const lessonIds = await getLessonIds(
-     
+
         lessonId as string
     );
 
@@ -706,12 +717,17 @@ export const getQuizzesByLessonId = async (req: Request, res: Response) => {
                 id: lessons.id,
                 name: lessons.name,
             },
+            semester: {
+                id: semesters.id,
+                name: semesters.name,
+            }
         })
         .from(quizzes)
         .leftJoin(category, eq(quizzes.categoryId, category.id))
         .leftJoin(courses, eq(quizzes.courseId, courses.id))
         .leftJoin(chapters, eq(quizzes.chapterId, chapters.id))
         .leftJoin(lessons, eq(quizzes.lessonId, lessons.id))
+        .leftJoin(semesters, eq(courses.id, semesters.courseId))
         .where(eq(quizzes.lessonId, id))
         .orderBy(desc(quizzes.createdAt));
 
