@@ -12,7 +12,11 @@ import {
     examCodes,
     ParallelQuestion,
     ParallelQuestionOptions,
-    Sections
+    Sections,
+    chapters,
+    courses,
+    semesters,
+    category,
 } from "../../models/schema";
 import { eq, count, desc, like, or, SQL, and } from "drizzle-orm";
 import { NotFound } from "../../Errors";
@@ -119,6 +123,10 @@ export const getAllQuestions = async (req: Request, res: Response) => {
     const month = req.query.month as string | undefined;
     const sectionId = req.query.sectionId as string | undefined;
     const codeId = req.query.codeId as string | undefined;
+    const categoryId = req.query.categoryId as string | undefined;
+    const semesterId = req.query.semesterId as string | undefined;
+    const chapterId = req.query.chapterId as string | undefined;
+    const lessonId = req.query.lessonId as string | undefined;
 
     const searchCondition: SQL | undefined = search
         ? or(
@@ -138,6 +146,10 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         month ? eq(questions.month, month as any) : undefined,
         sectionId ? eq(questions.sectionId, sectionId) : undefined,
         codeId ? eq(questions.codeId, codeId) : undefined,
+        categoryId ? eq(lessons.categoryId, categoryId) : undefined,
+        semesterId ? eq(chapters.semesterId, semesterId) : undefined,
+        chapterId ? eq(lessons.chapterId, chapterId) : undefined,
+        lessonId ? eq(questions.lessonId, lessonId) : undefined,
     ].filter(Boolean) as SQL[];
 
     const finalCondition = conditions.length > 0 ? (conditions.length > 1 ? and(...conditions) : conditions[0]) : undefined;
@@ -147,6 +159,10 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
         .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
+        .leftJoin(courses, eq(chapters.courseId, courses.id))
+        .leftJoin(semesters, eq(chapters.semesterId, semesters.id))
+        .leftJoin(category, eq(chapters.categoryId, category.id))
         .where(finalCondition);
 
     const total = totalQueries.count;
@@ -181,6 +197,7 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
         .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
         .where(finalCondition)
         .limit(limit)
         .offset(offset)
