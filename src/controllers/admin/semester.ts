@@ -32,8 +32,10 @@ export const getSemesters = async (req: Request, res: Response) => {
         course: {
             id: courses.id,
             name: courses.name,
-            categoryId: courses.categoryId,
-            categoryName: category.name
+        },
+        category: {
+            id: category.id,
+            name: category.name
         }
     })
         .from(semesters)
