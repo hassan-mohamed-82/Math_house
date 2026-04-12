@@ -4,7 +4,7 @@ import { eq, max, asc, and, gt, sql, like, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
-import { chapters, lessons, lessonIdeas, category, courses, teachers } from "../../models/schema";
+import { chapters, lessons, lessonIdeas, category, courses, teachers, semesters } from "../../models/schema";
 import { handleImageUpdate, validateAndSaveLogo, deleteImage } from "../../utils/handleImages";
 
 
@@ -29,6 +29,7 @@ const lessonDetailedQuery = () =>
             name: chapters.name,
             description: chapters.description,
             image: chapters.image,
+
         },
         course: {
             id: courses.id,
@@ -48,12 +49,17 @@ const lessonDetailedQuery = () =>
             email: teachers.email,
             avatar: teachers.avatar,
         },
+        semester: {
+            id: semesters.id,
+            name: semesters.name,
+        }
     })
         .from(lessons)
         .leftJoin(chapters, eq(lessons.chapterId, chapters.id))
         .leftJoin(courses, eq(lessons.courseId, courses.id))
         .leftJoin(category, eq(lessons.categoryId, category.id))
-        .leftJoin(teachers, eq(lessons.teacherId, teachers.id));
+        .leftJoin(teachers, eq(lessons.teacherId, teachers.id))
+        .leftJoin(semesters, eq(chapters.semesterId, semesters.id));
 
 export const createLesson = async (req: Request, res: Response) => {
     const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, price, discount } = req.body;
@@ -148,6 +154,7 @@ export const getAllLessons = async (req: Request, res: Response) => {
             course: row.course,
             category: row.category,
             teacher: row.teacher,
+            semester: row.semester,
         });
     }
 
