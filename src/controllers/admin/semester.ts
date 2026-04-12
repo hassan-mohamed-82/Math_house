@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { semesters } from "../../models/schema/admin/semester";
 import { courses } from "../../models/schema/admin/courses";
+import { category } from "../../models/schema/admin/category";
 import { eq, sql, aliasedTable, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -23,8 +24,6 @@ export const createSemester = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Semester created successfully" }, 201);
 }
 
-// Removed getCategoriesSelection as it was redundant.
-
 export const getSemesters = async (req: Request, res: Response) => {
     const AllSemesters = await db.select({
         id: semesters.id,
@@ -32,9 +31,14 @@ export const getSemesters = async (req: Request, res: Response) => {
         courseId: semesters.courseId,
         course: {
             id: courses.id,
-            name: courses.name
+            name: courses.name,
+            categoryId: courses.categoryId,
+            categoryName: category.name
         }
-    }).from(semesters).innerJoin(courses, eq(courses.id, semesters.courseId));
+    })
+        .from(semesters)
+        .innerJoin(courses, eq(courses.id, semesters.courseId))
+        .innerJoin(category, eq(category.id, courses.categoryId));
     return SuccessResponse(res, { message: "Semesters fetched successfully", data: AllSemesters }, 200);
 }
 
@@ -49,9 +53,15 @@ export const getSemesterbyId = async (req: Request, res: Response) => {
         courseId: semesters.courseId,
         course: {
             id: courses.id,
-            name: courses.name
+            name: courses.name,
+            categoryId: courses.categoryId,
+            categoryName: category.name
         }
-    }).from(semesters).innerJoin(courses, eq(courses.id, semesters.courseId)).where(eq(semesters.id, id));
+    })
+        .from(semesters)
+        .innerJoin(courses, eq(courses.id, semesters.courseId))
+        .innerJoin(category, eq(category.id, courses.categoryId))
+        .where(eq(semesters.id, id));
     if (semester.length === 0) {
         throw new NotFound("Semester not found");
     }
@@ -75,9 +85,15 @@ export const getSemestersByCourseId = async (req: Request, res: Response) => {
         courseId: semesters.courseId,
         course: {
             id: courses.id,
-            name: courses.name
+            name: courses.name,
+            categoryId: courses.categoryId,
+            categoryName: category.name
         }
-    }).from(semesters).innerJoin(courses, eq(courses.id, semesters.courseId)).where(eq(semesters.courseId, courseId));
+    })
+        .from(semesters)
+        .innerJoin(courses, eq(courses.id, semesters.courseId))
+        .innerJoin(category, eq(category.id, courses.categoryId))
+        .where(eq(semesters.courseId, courseId));
 
     return SuccessResponse(res, { message: "Semesters fetched successfully", data: courseSemesters }, 200);
 }
