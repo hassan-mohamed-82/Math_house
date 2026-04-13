@@ -128,7 +128,7 @@ export const getAllQuestions = async (req: Request, res: Response) => {
     const chapterId = req.query.chapterId as string | undefined;
     const lessonId = req.query.lessonId as string | undefined;
 
-    const searchCondition: SQL | undefined = search
+    const searchCondition: SQL | undefined = (search && search.trim() !== "")
         ? or(
             like(questions.question, `%${search}%`),
             like(lessons.name, `%${search}%`),
@@ -139,24 +139,24 @@ export const getAllQuestions = async (req: Request, res: Response) => {
 
     const conditions = [
         searchCondition,
-        difficulty ? eq(questions.difficulty, difficulty as any) : undefined,
-        questionType ? eq(questions.questionType, questionType as any) : undefined,
-        answerType ? eq(questions.answerType, answerType as any) : undefined,
-        year ? eq(questions.year, parseInt(year)) : undefined,
-        month ? eq(questions.month, month as any) : undefined,
-        sectionId ? eq(questions.sectionId, sectionId) : undefined,
-        codeId ? eq(questions.codeId, codeId) : undefined,
-        lessonId ? eq(questions.lessonId, lessonId) : undefined,
-        chapterId ? eq(lessons.chapterId, chapterId) : undefined,
-        categoryId ? eq(lessons.categoryId, categoryId) : undefined,
-        semesterId ? eq(chapters.semesterId, semesterId) : undefined,
+        (difficulty && difficulty !== "") ? eq(questions.difficulty, difficulty as any) : undefined,
+        (questionType && questionType !== "") ? eq(questions.questionType, questionType as any) : undefined,
+        (answerType && answerType !== "") ? eq(questions.answerType, answerType as any) : undefined,
+        (year && year !== "") ? eq(questions.year, parseInt(year)) : undefined,
+        (month && month !== "") ? eq(questions.month, month as any) : undefined,
+        (sectionId && sectionId !== "") ? eq(questions.sectionId, sectionId) : undefined,
+        (codeId && codeId !== "") ? eq(questions.codeId, codeId) : undefined,
+        (lessonId && lessonId !== "") ? eq(questions.lessonId, lessonId) : undefined,
+        (chapterId && chapterId !== "") ? eq(lessons.chapterId, chapterId) : undefined,
+        (categoryId && categoryId !== "") ? eq(lessons.categoryId, categoryId) : undefined,
+        (semesterId && semesterId !== "") ? eq(chapters.semesterId, semesterId) : undefined,
     ].filter(Boolean) as SQL[];
 
     const finalCondition = conditions.length > 0 ? (conditions.length > 1 ? and(...conditions) : conditions[0]) : undefined;
 
     const [totalQueries] = await db.select({ count: count() })
         .from(questions)
-        .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+        .leftJoin(lessons, eq(lessons.id, questions.lessonId))
         .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
         .leftJoin(Sections, eq(Sections.id, questions.sectionId))
         .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
@@ -203,14 +203,12 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         }
     })
         .from(questions)
-        .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+        .leftJoin(lessons, eq(lessons.id, questions.lessonId)) // كانت innerJoin
         .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
         .leftJoin(Sections, eq(Sections.id, questions.sectionId))
-
         .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
         .leftJoin(semesters, eq(semesters.id, chapters.semesterId))
         .leftJoin(category, eq(category.id, lessons.categoryId))
-
         .where(finalCondition)
         .limit(limit)
         .offset(offset)
@@ -227,6 +225,124 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         }
     }, 200);
 };
+
+// export const getAllQuestions = async (req: Request, res: Response) => {
+//     const page = parseInt(req.query.page as string) || 1;
+//     const limit = parseInt(req.query.limit as string) || 10;
+//     const offset = (page - 1) * limit;
+
+//     const search = req.query.search as string | undefined;
+//     const difficulty = req.query.difficulty as string | undefined;
+//     const questionType = req.query.questionType as string | undefined;
+//     const answerType = req.query.answerType as string | undefined;
+//     const year = req.query.year as string | undefined;
+//     const month = req.query.month as string | undefined;
+//     const sectionId = req.query.sectionId as string | undefined;
+//     const codeId = req.query.codeId as string | undefined;
+//     const categoryId = req.query.categoryId as string | undefined;
+//     const semesterId = req.query.semesterId as string | undefined;
+//     const chapterId = req.query.chapterId as string | undefined;
+//     const lessonId = req.query.lessonId as string | undefined;
+
+//     const searchCondition: SQL | undefined = search
+//         ? or(
+//             like(questions.question, `%${search}%`),
+//             like(lessons.name, `%${search}%`),
+//             like(examCodes.code, `%${search}%`),
+//             like(Sections.sectionName, `%${search}%`)
+//         )
+//         : undefined;
+
+//     const conditions = [
+//         searchCondition,
+//         difficulty ? eq(questions.difficulty, difficulty as any) : undefined,
+//         questionType ? eq(questions.questionType, questionType as any) : undefined,
+//         answerType ? eq(questions.answerType, answerType as any) : undefined,
+//         year ? eq(questions.year, parseInt(year)) : undefined,
+//         month ? eq(questions.month, month as any) : undefined,
+//         sectionId ? eq(questions.sectionId, sectionId) : undefined,
+//         codeId ? eq(questions.codeId, codeId) : undefined,
+//         lessonId ? eq(questions.lessonId, lessonId) : undefined,
+//         chapterId ? eq(lessons.chapterId, chapterId) : undefined,
+//         categoryId ? eq(lessons.categoryId, categoryId) : undefined,
+//         semesterId ? eq(chapters.semesterId, semesterId) : undefined,
+//     ].filter(Boolean) as SQL[];
+
+//     const finalCondition = conditions.length > 0 ? (conditions.length > 1 ? and(...conditions) : conditions[0]) : undefined;
+
+//     const [totalQueries] = await db.select({ count: count() })
+//         .from(questions)
+//         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+//         .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+//         .leftJoin(Sections, eq(Sections.id, questions.sectionId))
+//         .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
+//         .leftJoin(semesters, eq(semesters.id, chapters.semesterId))
+//         .where(finalCondition);
+
+//     const total = totalQueries.count;
+//     const totalPages = Math.ceil(total / limit);
+
+//     const Allquestions = await db.select({
+//         id: questions.id,
+//         question: questions.question,
+//         answerType: questions.answerType,
+//         difficulty: questions.difficulty,
+//         questionType: questions.questionType,
+//         lessonId: questions.lessonId,
+//         year: questions.year,
+//         month: questions.month,
+//         sectionId: questions.sectionId,
+//         codeId: questions.codeId,
+//         lesson: {
+//             id: lessons.id,
+//             name: lessons.name,
+//         },
+//         examCode: {
+//             id: examCodes.id,
+//             code: examCodes.code,
+//         },
+//         section: {
+//             id: Sections.id,
+//             sectionName: Sections.sectionName,
+//         },
+//         chapter: {
+//             id: chapters.id,
+//             name: chapters.name
+//         },
+//         semester: {
+//             id: semesters.id,
+//             name: semesters.name
+//         },
+//         category: {
+//             id: category.id,
+//             name: category.name
+//         }
+//     })
+//         .from(questions)
+//         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
+//         .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+//         .leftJoin(Sections, eq(Sections.id, questions.sectionId))
+
+//         .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
+//         .leftJoin(semesters, eq(semesters.id, chapters.semesterId))
+//         .leftJoin(category, eq(category.id, lessons.categoryId))
+
+//         .where(finalCondition)
+//         .limit(limit)
+//         .offset(offset)
+//         .orderBy(desc(questions.createdAt));
+
+//     return SuccessResponse(res, {
+//         message: "Questions fetched successfully",
+//         data: Allquestions,
+//         pagination: {
+//             total,
+//             page,
+//             limit,
+//             totalPages
+//         }
+//     }, 200);
+// };
 
 export const getQuestionbyId = async (req: Request, res: Response) => {
     const { id } = req.params;
