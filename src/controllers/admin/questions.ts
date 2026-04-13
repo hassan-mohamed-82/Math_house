@@ -191,13 +191,30 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         section: {
             id: Sections.id,
             sectionName: Sections.sectionName,
+        },
+
+        chapter: {
+            id: chapters.id,
+            name: chapters.name
+        },
+        semester: {
+            id: semesters.id,
+            name: semesters.name
+        },
+        category: {
+            id: category.id,
+            name: category.name
         }
     })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
         .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+
         .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
+        .leftJoin(semesters, eq(chapters.semesterId, semesters.id))
+        .leftJoin(category, eq(chapters.categoryId, category.id))
+
         .where(finalCondition)
         .limit(limit)
         .offset(offset)
