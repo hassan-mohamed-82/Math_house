@@ -146,10 +146,10 @@ export const getAllQuestions = async (req: Request, res: Response) => {
         month ? eq(questions.month, month as any) : undefined,
         sectionId ? eq(questions.sectionId, sectionId) : undefined,
         codeId ? eq(questions.codeId, codeId) : undefined,
+        lessonId ? eq(questions.lessonId, lessonId) : undefined,
+        chapterId ? eq(lessons.chapterId, chapterId) : undefined,
         categoryId ? eq(lessons.categoryId, categoryId) : undefined,
         semesterId ? eq(chapters.semesterId, semesterId) : undefined,
-        chapterId ? eq(lessons.chapterId, chapterId) : undefined,
-        lessonId ? eq(questions.lessonId, lessonId) : undefined,
     ].filter(Boolean) as SQL[];
 
     const finalCondition = conditions.length > 0 ? (conditions.length > 1 ? and(...conditions) : conditions[0]) : undefined;
@@ -157,12 +157,10 @@ export const getAllQuestions = async (req: Request, res: Response) => {
     const [totalQueries] = await db.select({ count: count() })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
-        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
-        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .leftJoin(Sections, eq(Sections.id, questions.sectionId))
         .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
-        .leftJoin(courses, eq(chapters.courseId, courses.id))
-        .leftJoin(semesters, eq(chapters.semesterId, semesters.id))
-        .leftJoin(category, eq(chapters.categoryId, category.id))
+        .leftJoin(semesters, eq(semesters.id, chapters.semesterId))
         .where(finalCondition);
 
     const total = totalQueries.count;
@@ -187,12 +185,10 @@ export const getAllQuestions = async (req: Request, res: Response) => {
             id: examCodes.id,
             code: examCodes.code,
         },
-        type: questions.questionType,
         section: {
             id: Sections.id,
             sectionName: Sections.sectionName,
         },
-
         chapter: {
             id: chapters.id,
             name: chapters.name
@@ -208,12 +204,12 @@ export const getAllQuestions = async (req: Request, res: Response) => {
     })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
-        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
-        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .leftJoin(Sections, eq(Sections.id, questions.sectionId))
 
         .leftJoin(chapters, eq(chapters.id, lessons.chapterId))
-        .leftJoin(semesters, eq(chapters.semesterId, semesters.id))
-        .leftJoin(category, eq(chapters.categoryId, category.id))
+        .leftJoin(semesters, eq(semesters.id, chapters.semesterId))
+        .leftJoin(category, eq(category.id, lessons.categoryId))
 
         .where(finalCondition)
         .limit(limit)
@@ -230,7 +226,7 @@ export const getAllQuestions = async (req: Request, res: Response) => {
             totalPages
         }
     }, 200);
-}
+};
 
 export const getQuestionbyId = async (req: Request, res: Response) => {
     const { id } = req.params;
