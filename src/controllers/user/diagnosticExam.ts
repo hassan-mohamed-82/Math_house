@@ -330,12 +330,12 @@ export const getStudentAttempts = async (req: Request, res: Response) => {
 export const getDiagnosticAttemptReview = async (req: Request, res: Response) => {
     const { attemptId } = req.params;
 
-    // Fetch wrong answers for this attempt
-    const wrongAnswers = await db
+    const allAnswers = await db
         .select({
             questionId: studentDiagnosticAnswers.questionId,
             studentAnswerId: studentDiagnosticAnswers.studentAnswerId,
             studentGridInAnswer: studentDiagnosticAnswers.studentGridInAnswer,
+            isCorrect: studentDiagnosticAnswers.isCorrect, // ضفنا دي عشان نعرف السؤال صح ولا غلط
             questionText: questions.question,
             questionImage: questions.image,
             answerType: questions.answerType,
@@ -346,14 +346,10 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
         })
         .from(studentDiagnosticAnswers)
         .innerJoin(questions, eq(studentDiagnosticAnswers.questionId, questions.id))
-        // We only care about wrong answers
         .where(
-            and(
-                eq(studentDiagnosticAnswers.attemptId, attemptId),
-                eq(studentDiagnosticAnswers.isCorrect, false)
-            )
+            eq(studentDiagnosticAnswers.attemptId, attemptId)
+            // شيلنا شرط (isCorrect, false) عشان يجيب كله
         )
-        // Join with options to get the correct answer
         .leftJoin(
             questionOptions,
             and(
@@ -361,18 +357,17 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
                 eq(questionOptions.isCorrect, true)
             )
         )
-        // Join with answers to get explanations
         .leftJoin(questionAnswers, eq(questionAnswers.questionId, studentDiagnosticAnswers.questionId));
 
-    // De-duplicate if there are multiple correct options for Grid In
-    const uniqueWrongAnswersMap = new Map();
-    for (const ans of wrongAnswers) {
-        if (!uniqueWrongAnswersMap.has(ans.questionId)) {
-            uniqueWrongAnswersMap.set(ans.questionId, {
+    const uniqueAnswersMap = new Map();
+    for (const ans of allAnswers) {
+        if (!uniqueAnswersMap.has(ans.questionId)) {
+            uniqueAnswersMap.set(ans.questionId, {
                 questionId: ans.questionId,
                 questionText: ans.questionText,
                 questionImage: ans.questionImage,
                 answerType: ans.answerType,
+                isCorrect: ans.isCorrect, // بتظهر هنا في النتيجة النهائية
                 studentSubmittedMCQId: ans.studentAnswerId,
                 studentSubmittedGridInText: ans.studentGridInAnswer,
                 correctAnswers: [],
@@ -383,7 +378,7 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
             });
         }
         if (ans.correctOptionAnswer) {
-            uniqueWrongAnswersMap.get(ans.questionId).correctAnswers.push({
+            uniqueAnswersMap.get(ans.questionId).correctAnswers.push({
                 optionId: ans.correctOptionId,
                 answerText: ans.correctOptionAnswer
             });
@@ -392,7 +387,7 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
 
     return SuccessResponse(res, {
         message: "Diagnostic Exam Review retrieved successfully",
-        data: Array.from(uniqueWrongAnswersMap.values())
+        data: Array.from(uniqueAnswersMap.values())
     }, 200);
 };
 
