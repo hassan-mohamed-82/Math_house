@@ -14,7 +14,7 @@ export const wallet = mysqlTable("wallet", {
 export const walletTransaction = mysqlTable("walletTransaction", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     walletId: char("walletId", { length: 255 }).references(() => wallet.id).notNull(),
-    paymentId: char("paymentId", { length: 255 }).references(() => payment.id).notNull(),
+    paymentId: char("paymentId", { length: 255 }).references(() => payment.id),
     amount: int("amount").notNull(),
     type: mysqlEnum("type", ["deposit", "withdrawal"]).notNull(),
     source: mysqlEnum("source", ["Admin", "Voucher", "Student", "Parent"]).notNull(),

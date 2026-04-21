@@ -22,6 +22,13 @@
       "when": 1773497010446,
       "tag": "0002_magenta_rhino",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1776788809339,
+      "tag": "0003_slippery_spitfire",
+      "breakpoints": true
     }
   ]
 }
