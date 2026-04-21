@@ -1,0 +1,1 @@
+ALTER TABLE `enrolledItems` MODIFY COLUMN `id` char(255) NOT NULL;

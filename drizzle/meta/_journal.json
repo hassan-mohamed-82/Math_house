@@ -29,6 +29,13 @@
       "when": 1776788809339,
       "tag": "0003_slippery_spitfire",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1776803047410,
+      "tag": "0004_mighty_maverick",
+      "breakpoints": true
     }
   ]
 }
