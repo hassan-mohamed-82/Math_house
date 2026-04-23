@@ -12,6 +12,7 @@ import quizzesRouters from "./Quizzes";
 import coursesRouter from "./courses";
 import categoryRouter from "./category";
 import chaptersRouter from "./chapters";
+import enrollmentRouter from "./enrollmant";
 import { authorizeRoles } from "../../middlewares/authorized";
 import { authenticated } from "../../middlewares/authenticated";
 const router = Router()
@@ -28,5 +29,6 @@ router.use("/diagnostic-exams", diagnosticExamRouter)
 router.use("/quizzes", quizzesRouters)
 router.use("/category", categoryRouter)
 router.use("/courses", coursesRouter)
+router.use("/enrollment", enrollmentRouter)
 router.use("/chapters", chaptersRouter)
 export default router

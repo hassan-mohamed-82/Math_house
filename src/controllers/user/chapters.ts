@@ -64,7 +64,21 @@ export const getAllChapters = async (req: Request, res: Response) => {
     }, 200);
 }
 
-// 2. Get chapter by id with its lessons
+// 2. Get all chapters by course id
+export const getAllChaptersByCourseId = async (req: Request, res: Response) => {
+    const { courseId } = req.params;
+
+    const [course] = await db.select().from(courses).where(eq(courses.id, courseId));
+    if (!course) throw new BadRequest("Course not found");
+
+    const chaptersList = await chapterDetailedQuery()
+        .where(eq(chapters.courseId, courseId))
+        .orderBy(asc(chapters.order));
+
+    return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: chaptersList }, 200);
+}
+
+// 3. Get chapter by id with its lessons
 export const getChapterById = async (req: Request, res: Response) => {
     const { id } = req.params;
 
