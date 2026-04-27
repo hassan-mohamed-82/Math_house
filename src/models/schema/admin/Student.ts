@@ -2,8 +2,9 @@ import { mysqlTable, varchar, char, mysqlEnum, boolean, int } from "drizzle-orm/
 import { sql } from "drizzle-orm";
 import { category } from "./category";
 import { grade } from "./grade";
+import { v4 as uuidv4 } from "uuid";
 export const Student = mysqlTable("student", {
-    id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+    id: char("id", { length: 36 }).primaryKey().$defaultFn(() => uuidv4()),
     firstname:varchar("first_name", { length: 255 }).notNull(),
     lastname:varchar("last_name",{length:255}).notNull(),
     nickname:varchar("nickname",{length:255}).notNull(),
