@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import bcrypt from "bcrypt";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db } from "../../models/connection";
-import { category, Student, wallet } from "../../models/schema";
+import { category, Student, wallet, grade as gradeTable } from "../../models/schema";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 import { SuccessResponse } from "../../utils/response";
 import { handleImageUpdate } from "../../utils/handleImages";
@@ -43,7 +43,11 @@ const getStudentProfileData = async (studentId: string) => {
 			email: Student.email,
 			phone: Student.phone,
 			parentphone: Student.parentphone,
-			grade: Student.grade,
+			grade: {
+				id: gradeTable.id,
+				name: gradeTable.name,
+				nameAr: gradeTable.nameAr,
+			},
 			avatar: Student.avatar,
 			livebalance: Student.livebalance,
 			exambalance: Student.exambalance,
@@ -53,6 +57,7 @@ const getStudentProfileData = async (studentId: string) => {
 		})
 		.from(Student)
 		.leftJoin(category, eq(Student.category, category.id))
+		.leftJoin(gradeTable, eq(Student.grade, gradeTable.id))
 		.where(eq(Student.id, studentId));
 
 	if (!student) {
@@ -97,7 +102,7 @@ export const getMyProfile = async (req: Request, res: Response) => {
 
 export const updateMyProfile = async (req: Request, res: Response) => {
 	const studentId = getAuthenticatedStudentId(req);
-	const { firstname, lastname, nickname, email, phone, parentphone, avatar } = req.body;
+	const { firstname, lastname, nickname, email, phone, parentphone, avatar, grade } = req.body;
 
 	const [existingStudent] = await db
 		.select()
@@ -127,6 +132,17 @@ export const updateMyProfile = async (req: Request, res: Response) => {
 	if (email) updateData.email = email;
 	if (phone) updateData.phone = phone;
 	if (parentphone) updateData.parentphone = parentphone;
+	if (grade) {
+		const [existingGrade] = await db
+			.select()
+			.from(gradeTable)
+			.where(and(eq(gradeTable.id, grade), eq(gradeTable.categoryId, existingStudent.category)));
+
+		if (!existingGrade) {
+			throw new BadRequest("Grade not found or does not belong to your category");
+		}
+		updateData.grade = grade;
+	}
 
 	if (avatar !== undefined) {
 		const avatarUrl = await handleImageUpdate(req, existingStudent.avatar, avatar, "students");

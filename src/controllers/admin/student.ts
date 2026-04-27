@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { category, Student, wallet } from "../../models/schema";
-import { eq, or, like, isNull } from "drizzle-orm";
+import { category, Student, wallet, grade as gradeTable } from "../../models/schema";
+import { eq, or, like, isNull, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -52,6 +52,15 @@ export const createStudent = async (req: Request, res: Response) => {
         throw new BadRequest("student must be assigned to a main category only");
     }
 
+    const existingGrade = await db
+        .select()
+        .from(gradeTable)
+        .where(and(eq(gradeTable.id, grade), eq(gradeTable.categoryId, categoryId)));
+
+    if (existingGrade.length === 0) {
+        throw new BadRequest("grade not found or does not belong to the selected category");
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = uuidv4();
     const imgUrl = avatar ? await validateAndSaveLogo(req, avatar, "students") : null;
@@ -95,11 +104,16 @@ export const getAllStudents = async (req: Request, res: Response) => {
             phone: Student.phone,
             category: Student.category,
             categoryName: category.name,
-            grade: Student.grade,
+            grade: {
+                id: gradeTable.id,
+                name: gradeTable.name,
+                nameAr: gradeTable.nameAr,
+            },
             parentphone: Student.parentphone
         })
         .from(Student)
-        .leftJoin(category, eq(Student.category, category.id));
+        .leftJoin(category, eq(Student.category, category.id))
+        .leftJoin(gradeTable, eq(Student.grade, gradeTable.id));
 
     // Search
     if (search) {
@@ -155,11 +169,16 @@ export const getStudentById = async (req: Request, res: Response) => {
             phone: Student.phone,
             category: Student.category,
             categoryName: category.name,
-            grade: Student.grade,
+            grade: {
+                id: gradeTable.id,
+                name: gradeTable.name,
+                nameAr: gradeTable.nameAr,
+            },
             parentphone: Student.parentphone
         })
         .from(Student)
         .leftJoin(category, eq(Student.category, category.id))
+        .leftJoin(gradeTable, eq(Student.grade, gradeTable.id))
         .where(eq(Student.id, id));
 
     if (!student) {
@@ -221,6 +240,18 @@ export const updateStudent = async (req: Request, res: Response) => {
 
         if (existingCategory[0].parentCategoryId) {
             throw new BadRequest("student must be assigned to a main category only");
+        }
+    }
+
+    if (grade) {
+        const catId = categoryId || existingStudent[0].category;
+        const existingGrade = await db
+            .select()
+            .from(gradeTable)
+            .where(and(eq(gradeTable.id, grade), eq(gradeTable.categoryId, catId)));
+
+        if (existingGrade.length === 0) {
+            throw new BadRequest("grade not found or does not belong to the selected category");
         }
     }
     let ImgUrl;
@@ -306,10 +337,15 @@ export const getStudentsByCategory = async (req: Request, res: Response) => {
             email: Student.email,
             phone: Student.phone,
             category: Student.category,
-            grade: Student.grade,
+            grade: {
+                id: gradeTable.id,
+                name: gradeTable.name,
+                nameAr: gradeTable.nameAr,
+            },
             parentphone: Student.parentphone
         })
         .from(Student)
+        .leftJoin(gradeTable, eq(Student.grade, gradeTable.id))
         .where(eq(Student.category, categoryId));
 
     SuccessResponse(res, { message: "get students by category success", data: students });
@@ -332,16 +368,23 @@ export const getStudentsByGrade = async (req: Request, res: Response) => {
             email: Student.email,
             phone: Student.phone,
             category: Student.category,
-            grade: Student.grade,
+            grade: {
+                id: gradeTable.id,
+                name: gradeTable.name,
+                nameAr: gradeTable.nameAr,
+            },
             parentphone: Student.parentphone
         })
         .from(Student)
-        .where(eq(Student.grade, grade as any));
+        .leftJoin(gradeTable, eq(Student.grade, gradeTable.id))
+        .where(eq(Student.grade, grade));
 
     SuccessResponse(res, { message: "get students by grade success", data: students });
 };
 
 export const selection = async (req: Request, res: Response) => {
+    const { categoryId } = req.query;
+
     const categories = await db
         .select({
             id: category.id,
@@ -352,7 +395,18 @@ export const selection = async (req: Request, res: Response) => {
         .from(category)
         .where(isNull(category.parentCategoryId));
 
-    const grades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
+    let grades: any[] = [];
+    if (categoryId) {
+        grades = await db
+            .select({
+                id: gradeTable.id,
+                name: gradeTable.name,
+                nameAr: gradeTable.nameAr,
+            })
+            .from(gradeTable)
+            .where(eq(gradeTable.categoryId, String(categoryId)));
+    }
+
     SuccessResponse(res, { message: "get all categories and grades success", data: { categories, grades } });
 };
 

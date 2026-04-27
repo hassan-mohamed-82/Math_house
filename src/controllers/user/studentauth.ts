@@ -1,11 +1,11 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { Student, category, wallet } from "../../models/schema";
+import { Student, category, wallet, grade as gradeTable } from "../../models/schema";
 import { generateToken } from "../../utils/auth";
 import { compare, hash } from "bcrypt";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors";
-import { eq, isNull } from "drizzle-orm";
+import { eq, isNull, and } from "drizzle-orm";
 import { consumePasswordResetCode, sendPasswordResetEmail, sendStudentVerificationEmail, verifyEmailVerificationToken, verifyPasswordResetCode } from "../../utils/sendEmails";
 import { validateAndSaveLogo, deleteImage } from "../../utils/handleImages";
 
@@ -59,6 +59,15 @@ export const studentSignup = async (req: Request, res: Response) => {
         throw new BadRequest("Student must be assigned to a main category only");
     }
 
+    const existingGrade = await db
+        .select()
+        .from(gradeTable)
+        .where(and(eq(gradeTable.id, grade), eq(gradeTable.categoryId, categoryId)));
+
+    if (existingGrade.length === 0) {
+        throw new BadRequest("Grade not found or does not belong to the selected category");
+    }
+
     const hashedPassword = await hash(password, 10);
 
     const avatarUrl = avatar ? await validateAndSaveLogo(req, avatar, "students") : null;
@@ -109,7 +118,7 @@ export const studentSignup = async (req: Request, res: Response) => {
         });
 
         if (avatarUrl) {
-            await deleteImage(avatarUrl).catch(() => {});
+            await deleteImage(avatarUrl).catch(() => { });
         }
 
         throw error;
@@ -138,7 +147,11 @@ export const studentLogin = async (req: Request, res: Response) => {
             phone: Student.phone,
             category: Student.category,
             categoryName: category.name,
-            grade: Student.grade,
+            grade: {
+                id: gradeTable.id,
+                name: gradeTable.name,
+                nameAr: gradeTable.nameAr,
+            },
             avatar: Student.avatar,
             wallet: {
                 walletId: wallet.id,
@@ -147,6 +160,7 @@ export const studentLogin = async (req: Request, res: Response) => {
         })
         .from(Student)
         .leftJoin(category, eq(Student.category, category.id))
+        .leftJoin(gradeTable, eq(Student.grade, gradeTable.id))
         .leftJoin(wallet, eq(Student.id, wallet.studentId))
         .where(eq(Student.email, email));
 
@@ -197,6 +211,8 @@ export const studentLogin = async (req: Request, res: Response) => {
 
 
 export const selectcategoryandgrade = async (req: Request, res: Response) => {
+    const { categoryId } = req.query;
+
     const categories = await db
         .select({
             id: category.id,
@@ -207,11 +223,21 @@ export const selectcategoryandgrade = async (req: Request, res: Response) => {
         .from(category)
         .where(isNull(category.parentCategoryId));
 
-    const grades = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
+    let grades: any[] = [];
+    if (categoryId) {
+        grades = await db
+            .select({
+                id: gradeTable.id,
+                name: gradeTable.name,
+                nameAr: gradeTable.nameAr,
+            })
+            .from(gradeTable)
+            .where(eq(gradeTable.categoryId, String(categoryId)));
+    }
+
     return SuccessResponse(res, {
         message: "Categories and grades fetched successfully",
-        categories,
-        grades
+        ...(categoryId ? { grades } : { categories }),
     }, 200);
 };
 
@@ -237,7 +263,7 @@ export const forgetPassword = async (req: Request, res: Response) => {
         await sendPasswordResetEmail(student.email, `${student.firstname} ${student.lastname}`);
     }
 
-    return SuccessResponse(res, {message: "Password reset instructions sent to email"});
+    return SuccessResponse(res, { message: "Password reset instructions sent to email" });
 }
 
 export const validatePasswordResetCode = async (req: Request, res: Response) => {
@@ -253,7 +279,7 @@ export const validatePasswordResetCode = async (req: Request, res: Response) => 
         throw new BadRequest("Invalid or expired reset code");
     }
 
-    return SuccessResponse(res, {message: "Reset code is valid"});
+    return SuccessResponse(res, { message: "Reset code is valid" });
 }
 
 export const resetPassword = async (req: Request, res: Response) => {

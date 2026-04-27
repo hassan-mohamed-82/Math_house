@@ -9,9 +9,7 @@ export const studentSchema = z.object({
     //TODO: add validation for most countries numbers
     phone: z.string(),
     category: z.string().uuid("category id is not valid"),
-    grade: z.enum(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], {
-        errorMap: () => ({ message: "grade is not valid" })
-    }),
+    grade: z.string().uuid("grade id is not valid"),
     //TODO: add validation for most countries numbers
     parentphone: z.string().optional()
 });
@@ -23,9 +21,7 @@ export const updateStudentSchema = z.object({
     email: z.string().email("email is not valid").optional(),
     phone: z.string().optional(),
     category: z.string().uuid("category id is not valid").optional(),
-    grade: z.enum(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], {
-        errorMap: () => ({ message: "grade is not valid" })
-    }).optional(),
+    grade: z.string().uuid("grade id is not valid").optional(),
     parentphone: z.string().optional(),
     oldPassword: z.string().optional(),
     newPassword: z.string().min(8, "password must be at least 8 characters").optional()
@@ -45,8 +41,6 @@ export const idParamsSchema = z.object({
     id: z.string().uuid("معرف الطالب غير صالح"),
 });
 
-export const gradeSchema = z.enum(["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"], {
-    errorMap: () => ({ message: "الصف غير صالح" })
-});
+export const gradeSchema = z.string().uuid("grade id is not valid");
 
 export const categoryIdSchema = z.string().uuid("معرف الفئة غير صالح");
