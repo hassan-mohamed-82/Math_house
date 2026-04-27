@@ -43,6 +43,13 @@
       "when": 1777271582733,
       "tag": "0005_free_darkstar",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1777306160141,
+      "tag": "0006_giant_johnny_blaze",
+      "breakpoints": true
     }
   ]
 }
