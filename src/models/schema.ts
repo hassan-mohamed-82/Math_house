@@ -34,6 +34,7 @@ export * from "./schema/user/StudentDiagnosticExam";
 export * from "./schema/user/studentDiagnosticAnswers";
 
 export * from "./schema/user/enrolledItems";
+export * from "./schema/admin/grade";
 
 // Drive schema
 export * from "../drive/models/drive";

@@ -27,6 +27,7 @@ import currencyRouter from "./currency"
 import promoCodesRouter from "./promoCodes"
 import paymentMethodRouter from "./paymentMethod"
 import paymentRouter from "./payment"
+import gradeRouter from "./grade"
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import authRouter from "./auth"
@@ -36,6 +37,7 @@ const router = Router()
 router.use("/auth", authRouter)
 router.use(authenticated, authorizeRoles("admin", "teacher"))
 // router.use("/", adminRouter)
+router.use("/grade", gradeRouter)
 router.use("/category", categoryRouter)
 router.use("/roles", rolesRouter)
 router.use("/session", sessionRouter)
