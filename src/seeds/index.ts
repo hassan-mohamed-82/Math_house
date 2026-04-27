@@ -38,6 +38,11 @@ async function main() {
         console.log("\n📂 Seeding Categories...");
         const categoryMap = await seedCategories();
 
+        // 2.5 Grades (depends on categories)
+        console.log("\n📏 Seeding Grades...");
+        const { seedGrades } = await import("./grade");
+        const gradeMap = await seedGrades(categoryMap);
+
         // 3. Teachers (depends on categories)
         console.log("\n👨‍🏫 Seeding Teachers...");
         const teacherMap = await seedTeachers(categoryMap);
@@ -62,9 +67,9 @@ async function main() {
         console.log("\n📝 Seeding Lessons & Ideas...");
         await seedLessons(chapterMap, courseMap, categoryMap, teacherMap);
 
-        // 8. Students (depends on categories)
+        // 8. Students (depends on categories, grades)
         console.log("\n🎓 Seeding Students...");
-        await seedStudents(categoryMap);
+        await seedStudents(categoryMap, gradeMap);
 
         // 9. Parents
         console.log("\n👪 Seeding Parents...");
