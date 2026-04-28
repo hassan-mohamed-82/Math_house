@@ -25,7 +25,7 @@ export const getAllCourses = async (req: Request, res: Response) => {
     const childCategories = await db
         .select({ id: category.id })
         .from(category)
-        .where(eq(category.parentCategoryId, studentParentCategory));
+        .where(eq(category.id, studentParentCategory));
 
     if (childCategories.length === 0) {
         return SuccessResponse(res, { message: "All Courses Retrieved Successfully", courses: [] }, 200);
