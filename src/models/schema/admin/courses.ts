@@ -15,7 +15,7 @@ export const courses = mysqlTable("courses", {
     whatYouGain: varchar("what_you_gain", { length: 255 }),
 
     duration: varchar("duration", { length: 255 }),
-    price: double("price").notNull(),
+    price: double("price").default(0),
     discount: double("discount").default(0),
 
     totalPrice: double("total_amount").generatedAlwaysAs(sql`price - COALESCE(discount, 0)`),

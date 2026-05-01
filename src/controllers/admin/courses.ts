@@ -1,21 +1,31 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { courses, category, teachers, chapters, courseTeachers, semesters, lessons, lessonIdeas } from "../../models/schema";
+import { courses, category, teachers, chapters, courseTeachers, semesters, lessons, lessonIdeas, prices } from "../../models/schema";
 import { eq, count, inArray, and, aliasedTable, isNull, asc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { handleImageUpdate, validateAndSaveLogo, deleteImage } from "../../utils/handleImages";
 import { randomUUID } from "crypto";
 
+// --- 1. Create Course ---
 export const createCourse = async (req: Request, res: Response) => {
-    const { name, categoryId, isHaveSemester, semesters: courseSemesters, teacherIds, preRequisition, whatYouGain, duration, image, description, price, discount } = req.body;
+    const {
+        name, categoryId, isHaveSemester, semesters: courseSemesters,
+        teacherIds, preRequisition, whatYouGain, duration,
+        image, description, pricePlans
+    } = req.body;
 
-    if (!name || !categoryId || !duration || !price) {
-        throw new BadRequest("Name, Category, Duration, Price are required");
+    // validation of basic data
+    if (!name || !categoryId || !duration) {
+        throw new BadRequest("Name, Category, and Duration are required");
+    }
+    // validation of price plans
+    if (!pricePlans || pricePlans.length === 0) {
+        throw new BadRequest("Price Plans are required");
     }
 
-    const course = await db.select().from(courses).where(eq(courses.name, name));
-    if (course.length > 0) {
+    const courseExist = await db.select().from(courses).where(eq(courses.name, name));
+    if (courseExist.length > 0) {
         throw new BadRequest("Course already exists");
     }
 
@@ -24,12 +34,13 @@ export const createCourse = async (req: Request, res: Response) => {
         throw new BadRequest("Category not found");
     }
 
-    // Ensure the category is a leaf (has no children)
+    // validation of category
     const childCategories = await db.select({ id: category.id }).from(category).where(eq(category.parentCategoryId, categoryId));
     if (childCategories.length > 0) {
         throw new BadRequest("Cannot assign a course to a non-leaf category. Please select a category with no sub-categories.");
     }
-    // If the course explicitly creates semesters, validate the structure
+
+    // validation of semesters
     if (isHaveSemester && courseSemesters && courseSemesters.length > 0) {
         for (const sem of courseSemesters) {
             if (!sem.name) {
@@ -37,7 +48,8 @@ export const createCourse = async (req: Request, res: Response) => {
             }
         }
     }
-    // Validate teachers if provided
+
+    // validation of teachers
     if (teacherIds && teacherIds.length > 0) {
         const existingTeachers = await db.select().from(teachers).where(inArray(teachers.id, teacherIds));
         if (existingTeachers.length !== teacherIds.length) {
@@ -45,9 +57,15 @@ export const createCourse = async (req: Request, res: Response) => {
         }
     }
 
-    if (discount) {
-        if (discount > price) {
-            throw new BadRequest("Discount cannot be greater than price");
+    // validation of price plans
+    for (const plan of pricePlans) {
+        if (plan.hasDiscount) {
+            if (Number(plan.discountEgp) > Number(plan.priceEgp)) {
+                throw new BadRequest(`EGP Discount cannot be greater than price in plan: ${plan.label}`);
+            }
+            if (Number(plan.discountUsd) > Number(plan.priceUsd)) {
+                throw new BadRequest(`USD Discount cannot be greater than price in plan: ${plan.label}`);
+            }
         }
     }
 
@@ -56,46 +74,59 @@ export const createCourse = async (req: Request, res: Response) => {
         imageURL = await validateAndSaveLogo(req, image, "courses");
     }
 
-    // Generate course ID
     const courseId = randomUUID();
 
-    // Insert the course
-    await db.insert(courses).values({
-        id: courseId,
-        name,
-        categoryId,
-        isHaveSemester: isHaveSemester || false,
-        preRequisition,
-        whatYouGain,
-        duration,
-        image: imageURL,
-        description,
-        price,
-        discount,
-    });
+    // استخدام Transaction لضمان حفظ الكورس وأسعاره معاً
+    await db.transaction(async (tx) => {
+        await tx.insert(courses).values({
+            id: courseId,
+            name,
+            categoryId,
+            isHaveSemester: isHaveSemester || false,
+            preRequisition,
+            whatYouGain,
+            duration,
+            image: imageURL,
+            description,
+        });
 
-    // Add teachers to the course via junction table
-    if (teacherIds && teacherIds.length > 0) {
-        const courseTeacherValues = teacherIds.map((teacherId: string) => ({
-            courseId,
-            teacherId,
-        }));
-        await db.insert(courseTeachers).values(courseTeacherValues);
-    }
-
-    // Insert semesters if the switch is on and semesters are provided
-    if (isHaveSemester && courseSemesters && courseSemesters.length > 0) {
-        const semesterValues = courseSemesters.map((sem: any) => ({
+        const priceValues = pricePlans.map((plan: any, index: number) => ({
             id: randomUUID(),
-            name: sem.name,
-            courseId: courseId,
+            targetId: courseId,
+            targetType: "course" as const,
+            durationLabel: plan.label,
+            durationDays: plan.days,
+            priceEgp: plan.priceEgp,
+            priceUsd: plan.priceUsd,
+            discountEgp: plan.discountEgp || "0.00",
+            discountUsd: plan.discountUsd || "0.00",
+            hasDiscount: plan.hasDiscount || false,
+            isDefault: index === 0,
         }));
-        await db.insert(semesters).values(semesterValues);
-    }
+        await tx.insert(prices).values(priceValues);
+
+        if (teacherIds && teacherIds.length > 0) {
+            const courseTeacherValues = teacherIds.map((teacherId: string) => ({
+                courseId,
+                teacherId,
+            }));
+            await tx.insert(courseTeachers).values(courseTeacherValues);
+        }
+
+        if (isHaveSemester && courseSemesters && courseSemesters.length > 0) {
+            const semesterValues = courseSemesters.map((sem: any) => ({
+                id: randomUUID(),
+                name: sem.name,
+                courseId: courseId,
+            }));
+            await tx.insert(semesters).values(semesterValues);
+        }
+    });
 
     return SuccessResponse(res, { message: "Course created successfully", courseId }, 200);
 };
 
+// --- 2. Get Course By ID ---
 export const getCourseById = async (req: Request, res: Response) => {
     const { id } = req.params;
     const course = await db.select().from(courses).where(eq(courses.id, id));
@@ -103,7 +134,10 @@ export const getCourseById = async (req: Request, res: Response) => {
         throw new BadRequest("Course not found");
     }
 
-    // Get teachers for this course
+    const coursePrices = await db.select()
+        .from(prices)
+        .where(and(eq(prices.targetId, id), eq(prices.targetType, "course")));
+
     const courseTeachersList = await db.select({
         teacherId: courseTeachers.teacherId,
         teacherName: teachers.name,
@@ -113,7 +147,6 @@ export const getCourseById = async (req: Request, res: Response) => {
         .leftJoin(teachers, eq(courseTeachers.teacherId, teachers.id))
         .where(eq(courseTeachers.courseId, id));
 
-    // Get semesters for this course
     const courseSemestersList = await db.select({
         id: semesters.id,
         name: semesters.name,
@@ -121,9 +154,15 @@ export const getCourseById = async (req: Request, res: Response) => {
         .from(semesters)
         .where(eq(semesters.courseId, id));
 
-    return SuccessResponse(res, { ...course[0], teachers: courseTeachersList, semesters: courseSemestersList }, 200);
-}
+    return SuccessResponse(res, {
+        ...course[0],
+        prices: coursePrices,
+        teachers: courseTeachersList,
+        semesters: courseSemestersList
+    }, 200);
+};
 
+// --- 3. Get All Courses ---
 export const getAllCourses = async (req: Request, res: Response) => {
     const allCourses = await db.select({
         name: courses.name,
@@ -137,20 +176,30 @@ export const getAllCourses = async (req: Request, res: Response) => {
         .groupBy(courses.id, courses.name, category.name);
 
     return SuccessResponse(res, { message: "All Courses Retrieved Successfully", courses: allCourses }, 200);
-}
+};
 
+// --- 4. Update Course ---
 export const updateCourse = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, categoryId, isHaveSemester, semesters: courseSemesters, teacherIds, preRequisition, whatYouGain, duration, image, description, price, discount } = req.body;
+    const {
+        name, categoryId, isHaveSemester, semesters: courseSemesters,
+        teacherIds, preRequisition, whatYouGain, duration,
+        image, description, pricePlans
+    } = req.body;
 
     const course = await db.select().from(courses).where(eq(courses.id, id));
     if (course.length === 0) {
         throw new BadRequest("Course not found");
     }
 
-    if (discount) {
-        if (discount > price) {
-            throw new BadRequest("Discount cannot be greater than price");
+    // Validation for Price Plans
+    if (pricePlans && pricePlans.length > 0) {
+        for (const plan of pricePlans) {
+            if (plan.hasDiscount) {
+                if (Number(plan.discountEgp) > Number(plan.priceEgp)) {
+                    throw new BadRequest(`Discount EGP error in plan: ${plan.label}`);
+                }
+            }
         }
     }
 
@@ -158,83 +207,75 @@ export const updateCourse = async (req: Request, res: Response) => {
 
     if (categoryId) {
         const existingCategory = await db.select().from(category).where(eq(category.id, categoryId));
-        if (existingCategory.length === 0) {
-            throw new BadRequest("Category not found");
-        }
-
-        // Ensure the category is a leaf (has no children)
+        if (existingCategory.length === 0) throw new BadRequest("Category not found");
         const childCategories = await db.select({ id: category.id }).from(category).where(eq(category.parentCategoryId, categoryId));
-        if (childCategories.length > 0) {
-            throw new BadRequest("Cannot assign a course to a non-leaf category. Please select a category with no sub-categories.");
-        }
+        if (childCategories.length > 0) throw new BadRequest("Cannot assign to non-leaf category.");
     }
 
-    // Validate and update teachers if provided
-    if (teacherIds && teacherIds.length > 0) {
-        const existingTeachers = await db.select().from(teachers).where(inArray(teachers.id, teacherIds));
-        if (existingTeachers.length !== teacherIds.length) {
-            throw new BadRequest("One or more teachers not found");
+    await db.transaction(async (tx) => {
+        // Update basic info
+        await tx.update(courses).set({
+            name: name || course[0].name,
+            categoryId: categoryId || course[0].categoryId,
+            isHaveSemester: isHaveSemester !== undefined ? isHaveSemester : course[0].isHaveSemester,
+            preRequisition: preRequisition || course[0].preRequisition,
+            whatYouGain: whatYouGain || course[0].whatYouGain,
+            duration: duration || course[0].duration,
+            image: imageURL || course[0].image,
+            description: description || course[0].description,
+        }).where(eq(courses.id, id));
+
+        // Update Price Plans
+        if (pricePlans && pricePlans.length > 0) {
+            await tx.delete(prices).where(and(eq(prices.targetId, id), eq(prices.targetType, "course")));
+            const priceValues = pricePlans.map((plan: any, index: number) => ({
+                id: randomUUID(),
+                targetId: id,
+                targetType: "course" as const,
+                durationLabel: plan.label,
+                durationDays: plan.days,
+                priceEgp: plan.priceEgp,
+                priceUsd: plan.priceUsd,
+                discountEgp: plan.discountEgp || "0.00",
+                discountUsd: plan.discountUsd || "0.00",
+                hasDiscount: plan.hasDiscount || false,
+                isDefault: index === 0,
+            }));
+            await tx.insert(prices).values(priceValues);
         }
 
-        // Remove existing teachers and add new ones
-        await db.delete(courseTeachers).where(eq(courseTeachers.courseId, id));
-        const courseTeacherValues = teacherIds.map((teacherId: string) => ({
-            courseId: id,
-            teacherId,
-        }));
-        await db.insert(courseTeachers).values(courseTeacherValues);
-    }
+        // Update Teachers
+        if (teacherIds) {
+            const existingTeachers = await db.select().from(teachers).where(inArray(teachers.id, teacherIds));
+            if (existingTeachers.length !== teacherIds.length) {
+                throw new BadRequest("One or more teachers not found");
+            }
 
-    await db.update(courses).set({
-        name: name || course[0].name,
-        categoryId: categoryId || course[0].categoryId,
-        isHaveSemester: isHaveSemester !== undefined ? isHaveSemester : course[0].isHaveSemester,
-        preRequisition: preRequisition || course[0].preRequisition,
-        whatYouGain: whatYouGain || course[0].whatYouGain,
-        duration: duration || course[0].duration,
-        image: imageURL || course[0].image,
-        description: description || course[0].description,
-        price: price || course[0].price,
-        discount: discount || course[0].discount,
-    }).where(eq(courses.id, id));
+            await tx.delete(courseTeachers).where(eq(courseTeachers.courseId, id));
+            if (teacherIds.length > 0) {
+                const courseTeacherValues = teacherIds.map((tId: string) => ({ courseId: id, teacherId: tId }));
+                await tx.insert(courseTeachers).values(courseTeacherValues);
+            }
+        }
 
-    // Handle semesters array logic
-    if (isHaveSemester && courseSemesters) {
-        // Find existing semesters to coordinate updates / inserts
-        const existingSemesters = await db.select().from(semesters).where(eq(semesters.courseId, id));
-        const existingSemesterIds = existingSemesters.map(s => s.id);
-        const incomingSemesterIds = courseSemesters.map((s: any) => s.id).filter(Boolean);
-
-        // Insert new ones (those without ids)
-        const newSemesters = courseSemesters.filter((s: any) => !s.id);
-        if (newSemesters.length > 0) {
-            const semesterValues = newSemesters.map((sem: any) => ({
+        // Update Semesters
+        if (isHaveSemester === false) {
+            await tx.delete(semesters).where(eq(semesters.courseId, id));
+        } else if (isHaveSemester && courseSemesters) {
+            await tx.delete(semesters).where(eq(semesters.courseId, id));
+            const semesterValues = courseSemesters.map((sem: any) => ({
                 id: randomUUID(),
                 name: sem.name,
                 courseId: id,
             }));
-            await db.insert(semesters).values(semesterValues);
+            await tx.insert(semesters).values(semesterValues);
         }
-
-        // Update existing ones
-        const updatedSemesters = courseSemesters.filter((s: any) => s.id && existingSemesterIds.includes(s.id));
-        for (const sem of updatedSemesters) {
-            await db.update(semesters).set({ name: sem.name }).where(eq(semesters.id, sem.id));
-        }
-
-        // Optionally, if the feature implies total replacement, uncomment the below to delete old ones not in the incoming payload:
-        // const idsToRemove = existingSemesterIds.filter(id => !incomingSemesterIds.includes(id));
-        // if (idsToRemove.length > 0) {
-        //     await db.delete(semesters).where(inArray(semesters.id, idsToRemove));
-        // }
-    } else if (isHaveSemester === false) {
-        // If they turn off semesters for the course, delete the existing ones
-        await db.delete(semesters).where(eq(semesters.courseId, id));
-    }
+    });
 
     return SuccessResponse(res, { message: "Course updated successfully" }, 200);
-}
+};
 
+// --- 5. Delete Course ---
 export const deleteCourse = async (req: Request, res: Response) => {
     const { id } = req.params;
     const course = await db.select().from(courses).where(eq(courses.id, id));
@@ -242,15 +283,16 @@ export const deleteCourse = async (req: Request, res: Response) => {
         throw new BadRequest("Course not found");
     }
 
-    // Cascade: find all chapters under this course
+    // Manual Cascade Logic
     const courseChapters = await db.select().from(chapters).where(eq(chapters.courseId, id));
 
+    // Loop over each chapter in the course
     for (const chapter of courseChapters) {
-        // Find all lessons under this chapter
         const chapterLessons = await db.select().from(lessons).where(eq(lessons.chapterId, chapter.id));
 
+        // Loop over each lesson in the chapter
         for (const lesson of chapterLessons) {
-            // Delete all ideas under this lesson
+            // Delete all lesson ideas under this chapter
             await db.delete(lessonIdeas).where(eq(lessonIdeas.lessonId, lesson.id));
 
             // Delete lesson image if exists
@@ -263,23 +305,21 @@ export const deleteCourse = async (req: Request, res: Response) => {
         await db.delete(lessons).where(eq(lessons.chapterId, chapter.id));
     }
 
-    // Delete all chapters under this course
-    await db.delete(chapters).where(eq(chapters.courseId, id));
+    await db.transaction(async (tx) => {
+        await tx.delete(prices).where(and(eq(prices.targetId, id), eq(prices.targetType, "course")));
+        await tx.delete(chapters).where(eq(chapters.courseId, id));
+        await tx.delete(semesters).where(eq(semesters.courseId, id));
+        if (course[0].image) {
+            await deleteImage(course[0].image);
+        }
+        await tx.delete(courses).where(eq(courses.id, id));
+    });
 
-    // Delete all semesters under this course
-    await db.delete(semesters).where(eq(semesters.courseId, id));
 
-    // Delete course image
-    if (course[0].image) {
-        await deleteImage(course[0].image);
-    }
-
-    // Delete the course (junction table entries handled by ON DELETE CASCADE)
-    await db.delete(courses).where(eq(courses.id, id));
     return SuccessResponse(res, { message: "Course deleted successfully" }, 200);
-}
+};
 
-// New endpoint to add a teacher to an existing course
+// --- 6. Add Teacher To Course ---
 export const addTeacherToCourse = async (req: Request, res: Response) => {
     const { id } = req.params;
     const { teacherId, role } = req.body;
@@ -314,9 +354,8 @@ export const addTeacherToCourse = async (req: Request, res: Response) => {
     });
 
     return SuccessResponse(res, { message: "Teacher added to course successfully" }, 200);
-}
-
-// New endpoint to remove a teacher from a course
+};
+// --- 7. Remove Teacher From Course ---
 export const removeTeacherFromCourse = async (req: Request, res: Response) => {
     const { id, teacherId } = req.params;
 
@@ -332,9 +371,9 @@ export const removeTeacherFromCourse = async (req: Request, res: Response) => {
         .where(and(eq(courseTeachers.courseId, id), eq(courseTeachers.teacherId, teacherId)));
 
     return SuccessResponse(res, { message: "Teacher removed from course successfully" }, 200);
-}
+};
 
-// New endpoint to get all teachers for a course
+// --- 8. Get Course Teachers ---
 export const getCourseTeachers = async (req: Request, res: Response) => {
     const { id } = req.params;
 
@@ -355,8 +394,9 @@ export const getCourseTeachers = async (req: Request, res: Response) => {
         .where(eq(courseTeachers.courseId, id));
 
     return SuccessResponse(res, { teachers: courseTeachersList }, 200);
-}
+};
 
+// --- 9. Get Categories Selection ---
 export const getCategoriesSelection = async (req: Request, res: Response) => {
     const child = aliasedTable(category, "child");
 
@@ -369,8 +409,9 @@ export const getCategoriesSelection = async (req: Request, res: Response) => {
         .where(isNull(child.id));
 
     return SuccessResponse(res, { message: "Categories fetched successfully", data: categories }, 200);
-}
+};
 
+// --- 10. Get Courses By Category ID ---
 export const getCoursesbyCategoryId = async (req: Request, res: Response) => {
     const { categoryId } = req.params;
     if (!categoryId) {
@@ -404,7 +445,7 @@ export const getCoursesbyCategoryId = async (req: Request, res: Response) => {
     }
 
     const courseIds = coursesData.map(c => c.id);
-
+    const allPrices = await db.select().from(prices).where(and(inArray(prices.targetId, courseIds), eq(prices.targetType, "course")));
     const teachersData = await db.select({
         courseId: courseTeachers.courseId,
         teacherId: teachers.id,
@@ -423,26 +464,22 @@ export const getCoursesbyCategoryId = async (req: Request, res: Response) => {
         courseId: semesters.courseId,
     }).from(semesters).where(inArray(semesters.courseId, courseIds));
 
-    const coursesWithTeachers = coursesData.map(course => {
-        const courseTeachersList = teachersData
-            .filter(t => t.courseId === course.id)
-            .map(({ courseId, ...teacher }) => teacher);
+    const result = coursesData.map(course => ({
+        ...course,
+        prices: allPrices.filter(p => p.targetId === course.id),
+        teachers: teachersData.filter(t => t.courseId === course.id),
+        semesters: semestersData.filter(s => s.courseId === course.id)
+    }));
 
-        const courseSemestersList = semestersData
-            .filter(s => s.courseId === course.id)
-            .map(({ courseId, ...sem }) => sem);
+    return SuccessResponse(res, { message: "Courses fetched successfully", data: result }, 200);
+};
 
-        return { ...course, teachers: courseTeachersList, semesters: courseSemestersList };
-    });
-
-    return SuccessResponse(res, { message: "Courses fetched successfully", data: coursesWithTeachers }, 200);
-}
-
+// --- 11. Get Courses Selection ---
 export const selectionCourses = async (req: Request, res: Response) => {
     const coursesList = await db
         .select({
             id: courses.id,
-            name: courses.name,
+            name: courses.name
         })
         .from(courses)
         .orderBy(asc(courses.name));
