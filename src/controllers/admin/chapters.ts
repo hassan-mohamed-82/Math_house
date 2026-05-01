@@ -1,10 +1,11 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { chapters, courses, category, teachers, lessons, lessonIdeas, semesters } from "../../models/schema";
-import { eq, max, asc, and, gt, sql } from "drizzle-orm";
+import { chapters, courses, category, teachers, lessons, lessonIdeas, semesters, prices } from "../../models/schema";
+import { eq, max, asc, and, gt, sql, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { handleImageUpdate, validateAndSaveLogo, deleteImage } from "../../utils/handleImages";
+import { randomUUID } from "crypto";
 
 // Shared detailed select with joins for chapters
 const chapterDetailedQuery = () =>
@@ -16,10 +17,6 @@ const chapterDetailedQuery = () =>
             image: chapters.image,
             preRequisition: chapters.preRequisition,
             whatYouGain: chapters.whatYouGain,
-            duration: chapters.duration,
-            price: chapters.price,
-            discount: chapters.discount,
-            totalPrice: chapters.totalPrice,
             order: chapters.order,
             createdAt: chapters.createdAt,
             updatedAt: chapters.updatedAt,
@@ -54,9 +51,23 @@ const chapterDetailedQuery = () =>
         .leftJoin(semesters, eq(chapters.semesterId, semesters.id));
 
 export const createChapter = async (req: Request, res: Response) => {
-    const { name, courseId, semesterId, description, image, teacherId, preRequisition, whatYouGain, duration, price, discount } = req.body;
-    if (!name || !courseId || !teacherId || !duration || !price) {
-        throw new BadRequest("Name, Course ID, Teacher ID, Duration and Price are required");
+    const { name, courseId, semesterId, description, image, teacherId, preRequisition, whatYouGain, duration, pricePlans } = req.body;
+    if (!name || !courseId || !teacherId || !duration) {
+        throw new BadRequest("Name, Course ID, Teacher ID, and Duration are required");
+    }
+    // validation of price plans
+    if (!pricePlans || pricePlans.length === 0) {
+        throw new BadRequest("Price Plans are required");
+    }
+    for (const plan of pricePlans) {
+        if (plan.hasDiscount) {
+            if (Number(plan.discountEgp) > Number(plan.priceEgp)) {
+                throw new BadRequest(`EGP Discount cannot be greater than price in plan: ${plan.label}`);
+            }
+            if (Number(plan.discountUsd) > Number(plan.priceUsd)) {
+                throw new BadRequest(`USD Discount cannot be greater than price in plan: ${plan.label}`);
+            }
+        }
     }
     const existingChapter = await db.select().from(chapters).where(eq(chapters.name, name));
     if (existingChapter.length > 0) {
@@ -93,21 +104,39 @@ export const createChapter = async (req: Request, res: Response) => {
     if (image) {
         imageURL = await validateAndSaveLogo(req, image, "chapters");
     }
-    await db.insert(chapters).values({
-        name,
-        courseId,
-        semesterId,
-        categoryId,
-        teacherId,
-        preRequisition,
-        whatYouGain,
-        duration,
-        price,
-        discount,
-        description,
-        image: imageURL,
-        order: nextOrder,
+    const chapterId = randomUUID();
+
+    await db.transaction(async (tx) => {
+        await tx.insert(chapters).values({
+            id: chapterId,
+            name,
+            courseId,
+            semesterId,
+            categoryId,
+            teacherId,
+            preRequisition,
+            whatYouGain,
+            description,
+            image: imageURL,
+            order: nextOrder,
+        });
+
+        const priceValues = pricePlans.map((plan: any, index: number) => ({
+            id: randomUUID(),
+            targetId: chapterId,
+            targetType: "chapter" as const,
+            durationLabel: plan.label,
+            durationDays: plan.days,
+            priceEgp: plan.priceEgp,
+            priceUsd: plan.priceUsd,
+            discountEgp: plan.discountEgp || "0.00",
+            discountUsd: plan.discountUsd || "0.00",
+            hasDiscount: plan.hasDiscount || false,
+            isDefault: index === 0,
+        }));
+        await tx.insert(prices).values(priceValues);
     });
+
     return SuccessResponse(res, { message: "Chapter created successfully", order: nextOrder }, 200);
 }
 
@@ -117,12 +146,29 @@ export const getChapterById = async (req: Request, res: Response) => {
     if (result.length === 0) {
         throw new BadRequest("Chapter not found");
     }
-    return SuccessResponse(res, { message: "Chapter fetched successfully", ...result[0] }, 200);
+
+    const chapterPrices = await db.select()
+        .from(prices)
+        .where(and(eq(prices.targetId, id), eq(prices.targetType, "chapter")));
+
+    return SuccessResponse(res, { message: "Chapter fetched successfully", ...result[0], prices: chapterPrices }, 200);
 }
 
 export const getAllChapters = async (req: Request, res: Response) => {
     const allChapters = await chapterDetailedQuery().orderBy(asc(chapters.order));
-    return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: allChapters }, 200);
+
+    const chapterIds = allChapters.map(c => c.chapter.id);
+    let allPrices: any[] = [];
+    if (chapterIds.length > 0) {
+        allPrices = await db.select().from(prices).where(and(inArray(prices.targetId, chapterIds), eq(prices.targetType, "chapter")));
+    }
+
+    const result = allChapters.map(c => ({
+        ...c,
+        prices: allPrices.filter(p => p.targetId === c.chapter.id)
+    }));
+
+    return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: result }, 200);
 }
 
 export const getAllChaptersByCourseId = async (req: Request, res: Response) => {
@@ -130,7 +176,19 @@ export const getAllChaptersByCourseId = async (req: Request, res: Response) => {
     const allChapters = await chapterDetailedQuery()
         .where(eq(chapters.courseId, courseId))
         .orderBy(asc(chapters.order));
-    return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: allChapters }, 200);
+
+    const chapterIds = allChapters.map(c => c.chapter.id);
+    let allPrices: any[] = [];
+    if (chapterIds.length > 0) {
+        allPrices = await db.select().from(prices).where(and(inArray(prices.targetId, chapterIds), eq(prices.targetType, "chapter")));
+    }
+
+    const result = allChapters.map(c => ({
+        ...c,
+        prices: allPrices.filter(p => p.targetId === c.chapter.id)
+    }));
+
+    return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: result }, 200);
 }
 
 export const swapChapterOrder = async (req: Request, res: Response) => {
@@ -159,11 +217,25 @@ export const swapChapterOrder = async (req: Request, res: Response) => {
 
 export const updateChapter = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, courseId, semesterId, description, image, teacherId, preRequisition, whatYouGain, duration, price, discount } = req.body;
+    const { name, courseId, semesterId, description, image, teacherId, preRequisition, whatYouGain, duration, pricePlans } = req.body;
 
     const [existingChapter] = await db.select().from(chapters).where(eq(chapters.id, id));
     if (!existingChapter) {
         throw new BadRequest("Chapter not found");
+    }
+
+    // validation of price plans
+    if (pricePlans && pricePlans.length > 0) {
+        for (const plan of pricePlans) {
+            if (plan.hasDiscount) {
+                if (Number(plan.discountEgp) > Number(plan.priceEgp)) {
+                    throw new BadRequest(`EGP Discount cannot be greater than price in plan: ${plan.label}`);
+                }
+                if (Number(plan.discountUsd) > Number(plan.priceUsd)) {
+                    throw new BadRequest(`USD Discount cannot be greater than price in plan: ${plan.label}`);
+                }
+            }
+        }
     }
 
     // If name is being changed, check for duplicates
@@ -216,20 +288,38 @@ export const updateChapter = async (req: Request, res: Response) => {
     // Handle image update
     const updatedImage = await handleImageUpdate(req, existingChapter.image, image, "chapters");
 
-    await db.update(chapters).set({
-        name: name ?? existingChapter.name,
-        courseId: courseId ?? existingChapter.courseId,
-        semesterId: updatedSemesterId,
-        categoryId,
-        teacherId: teacherId ?? existingChapter.teacherId,
-        description: description !== undefined ? description : existingChapter.description,
-        image: updatedImage ?? existingChapter.image,
-        preRequisition: preRequisition !== undefined ? preRequisition : existingChapter.preRequisition,
-        whatYouGain: whatYouGain !== undefined ? whatYouGain : existingChapter.whatYouGain,
-        duration: duration ?? existingChapter.duration,
-        price: price ?? existingChapter.price,
-        discount: discount !== undefined ? discount : existingChapter.discount,
-    }).where(eq(chapters.id, id));
+    await db.transaction(async (tx) => {
+        await tx.update(chapters).set({
+            name: name ?? existingChapter.name,
+            courseId: courseId ?? existingChapter.courseId,
+            semesterId: updatedSemesterId,
+            categoryId,
+            teacherId: teacherId ?? existingChapter.teacherId,
+            description: description !== undefined ? description : existingChapter.description,
+            image: updatedImage ?? existingChapter.image,
+            preRequisition: preRequisition !== undefined ? preRequisition : existingChapter.preRequisition,
+            whatYouGain: whatYouGain !== undefined ? whatYouGain : existingChapter.whatYouGain,
+        }).where(eq(chapters.id, id));
+
+        // Update Price Plans
+        if (pricePlans && pricePlans.length > 0) {
+            await tx.delete(prices).where(and(eq(prices.targetId, id), eq(prices.targetType, "chapter")));
+            const priceValues = pricePlans.map((plan: any, index: number) => ({
+                id: randomUUID(),
+                targetId: id,
+                targetType: "chapter" as const,
+                durationLabel: plan.label,
+                durationDays: plan.days,
+                priceEgp: plan.priceEgp,
+                priceUsd: plan.priceUsd,
+                discountEgp: plan.discountEgp || "0.00",
+                discountUsd: plan.discountUsd || "0.00",
+                hasDiscount: plan.hasDiscount || false,
+                isDefault: index === 0,
+            }));
+            await tx.insert(prices).values(priceValues);
+        }
+    });
 
     return SuccessResponse(res, { message: "Chapter updated successfully" }, 200);
 }
@@ -258,6 +348,9 @@ export const deleteChapter = async (req: Request, res: Response) => {
 
     // Delete all lessons under this chapter
     await db.delete(lessons).where(eq(lessons.chapterId, id));
+
+    // Delete chapter pricing
+    await db.delete(prices).where(and(eq(prices.targetId, id), eq(prices.targetType, "chapter")));
 
     // Delete the chapter
     await db.delete(chapters).where(eq(chapters.id, id));

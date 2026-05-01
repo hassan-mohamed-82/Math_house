@@ -19,10 +19,6 @@ export const lessons = mysqlTable("lessons", {
     preRequisition: varchar("pre_requisition", { length: 255 }),
     whatYouGain: varchar("what_you_gain", { length: 255 }),
 
-    // Pricing
-    price: double("price").notNull(),
-    discount: double("discount").default(0),
-    totalPrice: double("total_amount").generatedAlwaysAs(sql`price - COALESCE(discount, 0)`),
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

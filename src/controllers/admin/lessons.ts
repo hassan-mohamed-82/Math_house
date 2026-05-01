@@ -1,11 +1,12 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { eq, max, asc, and, gt, sql, like, or } from "drizzle-orm";
+import { eq, max, asc, and, gt, sql, like, or, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
-import { chapters, lessons, lessonIdeas, category, courses, teachers, semesters } from "../../models/schema";
+import { chapters, lessons, lessonIdeas, category, courses, teachers, semesters, prices } from "../../models/schema";
 import { handleImageUpdate, validateAndSaveLogo, deleteImage } from "../../utils/handleImages";
+import { randomUUID } from "crypto";
 
 
 const lessonDetailedQuery = () =>
@@ -17,9 +18,6 @@ const lessonDetailedQuery = () =>
             image: lessons.image,
             preRequisition: lessons.preRequisition,
             whatYouGain: lessons.whatYouGain,
-            price: lessons.price,
-            discount: lessons.discount,
-            totalPrice: lessons.totalPrice,
             order: lessons.order,
             createdAt: lessons.createdAt,
             updatedAt: lessons.updatedAt,
@@ -62,10 +60,25 @@ const lessonDetailedQuery = () =>
         .leftJoin(semesters, eq(chapters.semesterId, semesters.id));
 
 export const createLesson = async (req: Request, res: Response) => {
-    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, price, discount } = req.body;
+    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans } = req.body;
 
-    if (!name || !chapterId || !teacherId || !price) {
-        throw new BadRequest("Name, Chapter ID, Teacher ID and Price are required");
+    if (!name || !chapterId || !teacherId) {
+        throw new BadRequest("Name, Chapter ID, and Teacher ID are required");
+    }
+
+    // validation of price plans
+    if (!pricePlans || pricePlans.length === 0) {
+        throw new BadRequest("Price Plans are required");
+    }
+    for (const plan of pricePlans) {
+        if (plan.hasDiscount) {
+            if (Number(plan.discountEgp) > Number(plan.priceEgp)) {
+                throw new BadRequest(`EGP Discount cannot be greater than price in plan: ${plan.label}`);
+            }
+            if (Number(plan.discountUsd) > Number(plan.priceUsd)) {
+                throw new BadRequest(`USD Discount cannot be greater than price in plan: ${plan.label}`);
+            }
+        }
     }
 
     // Validate chapter and derive courseId & categoryId
@@ -98,19 +111,37 @@ export const createLesson = async (req: Request, res: Response) => {
         imageURL = await validateAndSaveLogo(req, image, "lessons");
     }
 
-    await db.insert(lessons).values({
-        name,
-        chapterId,
-        courseId,
-        categoryId,
-        teacherId,
-        description,
-        image: imageURL,
-        preRequisition,
-        whatYouGain,
-        price,
-        discount,
-        order: nextOrder,
+    const lessonId = randomUUID();
+
+    await db.transaction(async (tx) => {
+        await tx.insert(lessons).values({
+            id: lessonId,
+            name,
+            chapterId,
+            courseId,
+            categoryId,
+            teacherId,
+            description,
+            image: imageURL,
+            preRequisition,
+            whatYouGain,
+            order: nextOrder,
+        });
+
+        const priceValues = pricePlans.map((plan: any, index: number) => ({
+            id: randomUUID(),
+            targetId: lessonId,
+            targetType: "lesson" as const,
+            durationLabel: plan.label,
+            durationDays: plan.days,
+            priceEgp: plan.priceEgp,
+            priceUsd: plan.priceUsd,
+            discountEgp: plan.discountEgp || "0.00",
+            discountUsd: plan.discountUsd || "0.00",
+            hasDiscount: plan.hasDiscount || false,
+            isDefault: index === 0,
+        }));
+        await tx.insert(prices).values(priceValues);
     });
 
     return SuccessResponse(res, { message: "Lesson created successfully", order: nextOrder }, 200);
@@ -128,7 +159,11 @@ export const getLessonById = async (req: Request, res: Response) => {
         .where(eq(lessonIdeas.lessonId, id))
         .orderBy(asc(lessonIdeas.ideaOrder));
 
-    return SuccessResponse(res, { message: "Lesson fetched successfully", ...result[0], ideas }, 200);
+    const lessonPrices = await db.select()
+        .from(prices)
+        .where(and(eq(prices.targetId, id), eq(prices.targetType, "lesson")));
+
+    return SuccessResponse(res, { message: "Lesson fetched successfully", ...result[0], ideas, prices: lessonPrices }, 200);
 };
 
 export const getAllLessons = async (req: Request, res: Response) => {
@@ -158,6 +193,13 @@ export const getAllLessons = async (req: Request, res: Response) => {
         });
     }
 
+    // Fetch all related prices for these lessons
+    const lessonIds = allLessons.map(l => l.lesson.id);
+    let allPrices: any[] = [];
+    if (lessonIds.length > 0) {
+        allPrices = await db.select().from(prices).where(and(inArray(prices.targetId, lessonIds), eq(prices.targetType, "lesson")));
+    }
+
     // Fetch ideas for each lesson and nest them
     const result = await Promise.all(
         Array.from(chapterMap.values()).map(async (group) => {
@@ -166,7 +208,8 @@ export const getAllLessons = async (req: Request, res: Response) => {
                     const ideas = await db.select().from(lessonIdeas)
                         .where(eq(lessonIdeas.lessonId, lesson.id))
                         .orderBy(asc(lessonIdeas.ideaOrder));
-                    return { ...lesson, ideas };
+                    const lessonPrices = allPrices.filter(p => p.targetId === lesson.id);
+                    return { ...lesson, ideas, prices: lessonPrices };
                 })
             );
             return { chapter: group.chapter, lessons: lessonsWithIdeas };
@@ -182,12 +225,19 @@ export const getLessonsByChapterId = async (req: Request, res: Response) => {
         .where(eq(lessons.chapterId, chapterId))
         .orderBy(asc(lessons.order));
 
+    const lessonIds = allLessons.map(l => l.lesson.id);
+    let allPrices: any[] = [];
+    if (lessonIds.length > 0) {
+        allPrices = await db.select().from(prices).where(and(inArray(prices.targetId, lessonIds), eq(prices.targetType, "lesson")));
+    }
+
     const lessonsWithIdeas = await Promise.all(
         allLessons.map(async (lessonRow) => {
             const ideas = await db.select().from(lessonIdeas)
                 .where(eq(lessonIdeas.lessonId, lessonRow.lesson.id))
                 .orderBy(asc(lessonIdeas.ideaOrder));
-            return { ...lessonRow, ideas };
+            const lessonPrices = allPrices.filter(p => p.targetId === lessonRow.lesson.id);
+            return { ...lessonRow, ideas, prices: lessonPrices };
         })
     );
 
@@ -220,11 +270,25 @@ export const swapLessonOrder = async (req: Request, res: Response) => {
 
 export const updateLesson = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, price, discount } = req.body;
+    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans } = req.body;
 
     const [existingLesson] = await db.select().from(lessons).where(eq(lessons.id, id));
     if (!existingLesson) {
         throw new NotFound("Lesson not found");
+    }
+
+    // validation of price plans
+    if (pricePlans && pricePlans.length > 0) {
+        for (const plan of pricePlans) {
+            if (plan.hasDiscount) {
+                if (Number(plan.discountEgp) > Number(plan.priceEgp)) {
+                    throw new BadRequest(`EGP Discount cannot be greater than price in plan: ${plan.label}`);
+                }
+                if (Number(plan.discountUsd) > Number(plan.priceUsd)) {
+                    throw new BadRequest(`USD Discount cannot be greater than price in plan: ${plan.label}`);
+                }
+            }
+        }
     }
 
     // If name is being changed within the same chapter, check for duplicates
@@ -259,19 +323,38 @@ export const updateLesson = async (req: Request, res: Response) => {
     // Handle image update
     const updatedImage = await handleImageUpdate(req, existingLesson.image, image, "lessons");
 
-    await db.update(lessons).set({
-        name: name ?? existingLesson.name,
-        chapterId: chapterId ?? existingLesson.chapterId,
-        courseId,
-        categoryId,
-        teacherId: teacherId ?? existingLesson.teacherId,
-        description: description !== undefined ? description : existingLesson.description,
-        image: updatedImage ?? existingLesson.image,
-        preRequisition: preRequisition !== undefined ? preRequisition : existingLesson.preRequisition,
-        whatYouGain: whatYouGain !== undefined ? whatYouGain : existingLesson.whatYouGain,
-        price: price ?? existingLesson.price,
-        discount: discount !== undefined ? discount : existingLesson.discount,
-    }).where(eq(lessons.id, id));
+    await db.transaction(async (tx) => {
+        await tx.update(lessons).set({
+            name: name ?? existingLesson.name,
+            chapterId: chapterId ?? existingLesson.chapterId,
+            courseId,
+            categoryId,
+            teacherId: teacherId ?? existingLesson.teacherId,
+            description: description !== undefined ? description : existingLesson.description,
+            image: updatedImage ?? existingLesson.image,
+            preRequisition: preRequisition !== undefined ? preRequisition : existingLesson.preRequisition,
+            whatYouGain: whatYouGain !== undefined ? whatYouGain : existingLesson.whatYouGain,
+        }).where(eq(lessons.id, id));
+
+        // Update Price Plans
+        if (pricePlans && pricePlans.length > 0) {
+            await tx.delete(prices).where(and(eq(prices.targetId, id), eq(prices.targetType, "lesson")));
+            const priceValues = pricePlans.map((plan: any, index: number) => ({
+                id: randomUUID(),
+                targetId: id,
+                targetType: "lesson" as const,
+                durationLabel: plan.label,
+                durationDays: plan.days,
+                priceEgp: plan.priceEgp,
+                priceUsd: plan.priceUsd,
+                discountEgp: plan.discountEgp || "0.00",
+                discountUsd: plan.discountUsd || "0.00",
+                hasDiscount: plan.hasDiscount || false,
+                isDefault: index === 0,
+            }));
+            await tx.insert(prices).values(priceValues);
+        }
+    });
 
     return SuccessResponse(res, { message: "Lesson updated successfully" }, 200);
 };
@@ -294,6 +377,7 @@ export const deleteLesson = async (req: Request, res: Response) => {
         await deleteImage(existingLesson.image);
     }
 
+    await db.delete(prices).where(and(eq(prices.targetId, id), eq(prices.targetType, "lesson")));
     await db.delete(lessons).where(eq(lessons.id, id));
 
     // Re-sequence: decrement order for all lessons after the deleted one in the same chapter
@@ -339,9 +423,20 @@ export const getLessonsbyCourseId = async (req: Request, res: Response) => {
 
     const total = Number(totalResult?.count || 0);
 
+    const lessonIds = allLessons.map(l => l.lesson.id);
+    let allPrices: any[] = [];
+    if (lessonIds.length > 0) {
+        allPrices = await db.select().from(prices).where(and(inArray(prices.targetId, lessonIds), eq(prices.targetType, "lesson")));
+    }
+
+    const lessonsWithPrices = allLessons.map(lessonRow => {
+        const lessonPrices = allPrices.filter(p => p.targetId === lessonRow.lesson.id);
+        return { ...lessonRow, prices: lessonPrices };
+    });
+
     return SuccessResponse(res, {
         message: "Lessons fetched successfully",
-        lessons: allLessons,
+        lessons: lessonsWithPrices,
         pagination: {
             total,
             page: pageNum,

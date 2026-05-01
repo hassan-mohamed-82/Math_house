@@ -14,11 +14,6 @@ export const courses = mysqlTable("courses", {
     preRequisition: varchar("pre_requisition", { length: 255 }),
     whatYouGain: varchar("what_you_gain", { length: 255 }),
 
-    duration: varchar("duration", { length: 255 }),
-    price: double("price").default(0),
-    discount: double("discount").default(0),
-
-    totalPrice: double("total_amount").generatedAlwaysAs(sql`price - COALESCE(discount, 0)`),
     isHaveSemester: boolean("is_have_semester").default(false),
 
     createdAt: timestamp("created_at").defaultNow(),

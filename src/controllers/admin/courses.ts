@@ -85,7 +85,6 @@ export const createCourse = async (req: Request, res: Response) => {
             isHaveSemester: isHaveSemester || false,
             preRequisition,
             whatYouGain,
-            duration,
             image: imageURL,
             description,
         });
@@ -123,7 +122,7 @@ export const createCourse = async (req: Request, res: Response) => {
         }
     });
 
-    return SuccessResponse(res, { message: "Course created successfully", courseId }, 200);
+    return SuccessResponse(res, { message: "Course created successfully" }, 200);
 };
 
 // --- 2. Get Course By ID ---
@@ -220,7 +219,6 @@ export const updateCourse = async (req: Request, res: Response) => {
             isHaveSemester: isHaveSemester !== undefined ? isHaveSemester : course[0].isHaveSemester,
             preRequisition: preRequisition || course[0].preRequisition,
             whatYouGain: whatYouGain || course[0].whatYouGain,
-            duration: duration || course[0].duration,
             image: imageURL || course[0].image,
             description: description || course[0].description,
         }).where(eq(courses.id, id));
@@ -426,16 +424,12 @@ export const getCoursesbyCategoryId = async (req: Request, res: Response) => {
         id: courses.id,
         name: courses.name,
         description: courses.description,
-        price: courses.price,
-        discount: courses.discount,
-        duration: courses.duration,
         image: courses.image,
         preRequisition: courses.preRequisition,
         whatYouGain: courses.whatYouGain,
         createdAt: courses.createdAt,
         updatedAt: courses.updatedAt,
         isHaveSemester: courses.isHaveSemester,
-        totalPrice: courses.totalPrice,
     })
         .from(courses)
         .where(eq(courses.categoryId, categoryId));
