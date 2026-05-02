@@ -3,14 +3,25 @@ import { eq, and, inArray } from "drizzle-orm";
 import { db } from "../../models/connection";
 import { quizzes, questions, quizQuestions, questionOptions } from "../../models/schema";
 import { SuccessResponse } from "../../utils/response";
-import { NotFound, UnauthorizedError } from "../../Errors";
+import { NotFound, UnauthorizedError, BadRequest } from "../../Errors";
+import { checkAccess } from "../../utils/accessControl";
 
 export const getQuizQuestions = async (req: Request, res: Response) => {
     const { quizId } = req.params;
 
-    const existingQuiz = await db.select({ id: quizzes.id }).from(quizzes).where(eq(quizzes.id, quizId));
-    if (existingQuiz.length === 0) {
+    const [existingQuiz] = await db.select().from(quizzes).where(eq(quizzes.id, quizId));
+    if (!existingQuiz) {
         throw new NotFound("Quiz not found");
+    }
+
+    const hasAccess = await checkAccess(req.user.id, {
+        courseId: existingQuiz.courseId || undefined,
+        chapterId: existingQuiz.chapterId || undefined,
+        lessonId: existingQuiz.lessonId || undefined
+    });
+
+    if (!hasAccess) {
+        throw new BadRequest("You do not have access to this quiz. Please purchase the corresponding course, chapter, or lesson.");
     }
 
     const AllQuizQuestions = await db.select({

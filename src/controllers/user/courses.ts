@@ -1,11 +1,12 @@
 import { Request, Response } from "express";
 import { courses } from "../../models/schema/admin/courses";
 import { db } from "../../models/connection";
-import { category, teachers, chapters, courseTeachers, semesters, Student, grade } from "../../models/schema";
+import { category, teachers, chapters, courseTeachers, semesters, Student, grade, enrolledItems } from "../../models/schema";
 import { prices } from "../../models/schema/admin/prices";
 import { eq, count, inArray, and, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
+import { checkAccess } from "../../utils/accessControl";
 
 // 1. Get all courses 
 export const getAllCourses = async (req: Request, res: Response) => {
@@ -76,10 +77,18 @@ export const getAllCourses = async (req: Request, res: Response) => {
             )
         );
 
+    const studentEnrollments = await db
+        .select({ courseId: enrolledItems.courseId })
+        .from(enrolledItems)
+        .where(and(eq(enrolledItems.studentId, studentId), eq(enrolledItems.status, "active")));
+
+    const enrolledCourseIds = new Set(studentEnrollments.map(e => e.courseId));
+
     const coursesWithPrices = allCourses.map(course => {
         return {
             ...course,
-            pricePlans: coursePrices.filter(p => p.targetId === course.id)
+            pricePlans: coursePrices.filter(p => p.targetId === course.id),
+            isPurchased: enrolledCourseIds.has(course.id)
         };
     });
 
@@ -103,10 +112,13 @@ export const getCourseById = async (req: Request, res: Response) => {
     const courseSemestersList = await db.select({
         id: semesters.id,
         name: semesters.name,
-        // price: semesters.price
     })
         .from(semesters)
         .where(eq(semesters.courseId, id));
+
+    const hasAccess = await checkAccess(req.user.id, {
+        courseId: id
+    });
 
     const coursePricePlans = await db
         .select()
@@ -122,6 +134,7 @@ export const getCourseById = async (req: Request, res: Response) => {
         ...course, 
         teachers: teachersList, 
         semesters: courseSemestersList,
-        pricePlans: coursePricePlans
+        pricePlans: coursePricePlans,
+        isLocked: !hasAccess
     }, 200);
 }

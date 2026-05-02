@@ -12,6 +12,8 @@ import quizzesRouters from "./Quizzes";
 import coursesRouter from "./courses";
 import categoryRouter from "./category";
 import chaptersRouter from "./chapters";
+import lessonsRouter from "./lessons";
+import ideasRouter from "./ideas";
 import enrollmentRouter from "./enrollmant";
 import { authorizeRoles } from "../../middlewares/authorized";
 import { authenticated } from "../../middlewares/authenticated";
@@ -31,4 +33,6 @@ router.use("/category", categoryRouter)
 router.use("/courses", coursesRouter)
 router.use("/enrollment", enrollmentRouter)
 router.use("/chapters", chaptersRouter)
+router.use("/lessons", lessonsRouter)
+router.use("/ideas", ideasRouter)
 export default router

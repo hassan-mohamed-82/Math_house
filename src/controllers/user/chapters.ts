@@ -1,10 +1,11 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { chapters, courses, category, teachers, lessons, semesters } from "../../models/schema";
+import { chapters, courses, category, teachers, lessons, semesters, enrolledItems } from "../../models/schema";
 import { prices } from "../../models/schema/admin/prices";
-import { eq, asc, and, sql, inArray } from "drizzle-orm";
+import { eq, asc, and, sql, inArray, isNotNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
+import { checkAccess } from "../../utils/accessControl";
 
 // Query for fetching chapters with their course, semester, and teacher details
 const chapterDetailedQuery = () =>
@@ -148,15 +149,42 @@ export const getChapterById = async (req: Request, res: Response) => {
             )
         );
 
+    const hasAccess = await checkAccess(req.user.id, {
+        chapterId: id,
+        courseId: chapterData.course?.id
+    });
+
+    // Check individual lesson enrollments (in case they bought a lesson but not the chapter)
+    let enrolledLessonIds = new Set<string>();
+    if (chapterLessons.length > 0) {
+        const lessonEnrollments = await db
+            .select({ lessonId: enrolledItems.lessonId })
+            .from(enrolledItems)
+            .where(
+                and(
+                    eq(enrolledItems.studentId, req.user.id),
+                    eq(enrolledItems.status, "active"),
+                    inArray(enrolledItems.lessonId, chapterLessons.map(l => l.id))
+                )
+            );
+        enrolledLessonIds = new Set(lessonEnrollments.map(e => e.lessonId).filter((id): id is string => !!id));
+    }
+
+    const lessonsWithLockStatus = chapterLessons.map(lesson => ({
+        ...lesson,
+        isLocked: !hasAccess && !enrolledLessonIds.has(lesson.id)
+    }));
+
     return SuccessResponse(res, {
         message: "Chapter details fetched",
         chapter: { 
             ...chapterData.chapter, 
-            pricePlans: chapterPricePlans 
+            pricePlans: chapterPricePlans,
+            isLocked: !hasAccess
         },
         course: chapterData.course,
         semester: chapterData.semester,
         teacher: chapterData.teacher,
-        lessons: chapterLessons
+        lessons: lessonsWithLockStatus
     }, 200);
 }
