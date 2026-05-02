@@ -7,6 +7,7 @@ export const grade = mysqlTable("grade", {
     name: varchar("name", { length: 255 }).notNull(),
     nameAr: varchar("name_ar", { length: 255 }).notNull(),
     categoryId: char("category_id", { length: 36 }).notNull().references(() => category.id),
+    parentCategoryId: char("parent_category_id", { length: 36 }).references(() => category.id),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 }, (table) => ({

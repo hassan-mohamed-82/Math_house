@@ -2,20 +2,33 @@ import { Request, Response } from "express";
 import { BadRequest } from "../../Errors/BadRequest";
 import { SuccessResponse } from "../../utils/response";
 import { db } from "../../models/connection";
-import { eq, and, or, inArray, sql, ne } from "drizzle-orm";
+import { eq, and, or, inArray, sql, ne, aliasedTable } from "drizzle-orm";
 import { grade, category } from "../../models/schema";
 import { v4 as uuidv4 } from "uuid";
 
 // 1. Create Grades (Bulk Insert)
 export const createGrade = async (req: Request, res: Response) => {
-    const { categoryId, gradesList } = req.body;
+    const { parentCategoryId, categoryId, gradesList } = req.body;
 
+    if (!parentCategoryId) throw new BadRequest("Parent Category ID is required");
     if (!categoryId) throw new BadRequest("Category ID is required");
     if (!gradesList || !Array.isArray(gradesList) || gradesList.length === 0) {
         throw new BadRequest("Grades list must be a non-empty array");
     }
+
+    // 1. Validate parent category is top-level
+    const [parentCategory] = await db.select().from(category).where(eq(category.id, parentCategoryId));
+    if (!parentCategory) throw new BadRequest("Parent category not found");
+    if (parentCategory.parentCategoryId !== null) {
+        throw new BadRequest("The selected parent category must be a top-level category (no parent)");
+    }
+
+    // 2. Validate sub-category belongs to the parent category
     const [existingCategory] = await db.select().from(category).where(eq(category.id, categoryId));
-    if (!existingCategory) throw new BadRequest("The provided Category ID does not exist");
+    if (!existingCategory) throw new BadRequest("Category not found");
+    if (existingCategory.parentCategoryId !== parentCategoryId) {
+        throw new BadRequest("The selected category must be a child of the selected parent category");
+    }
 
     const names = new Set<string>();
     const namesAr = new Set<string>();
@@ -55,7 +68,8 @@ export const createGrade = async (req: Request, res: Response) => {
         id: uuidv4(),
         name: item.name.trim(),
         nameAr: item.nameAr.trim(),
-        categoryId
+        categoryId,
+        parentCategoryId
     }));
 
     await db.insert(grade).values(dataToInsert);
@@ -67,16 +81,20 @@ export const createGrade = async (req: Request, res: Response) => {
 
 // 2. Get All Grades (With Category Info)
 export const getAllGrades = async (req: Request, res: Response) => {
+    const parentCategory = aliasedTable(category, "parentCategory");
     const grades = await db.select({
         id: grade.id,
         name: grade.name,
         nameAr: grade.nameAr,
         categoryId: grade.categoryId,
         categoryName: category.name,
+        parentCategoryId: grade.parentCategoryId,
+        parentCategoryName: parentCategory.name,
         createdAt: grade.createdAt
     })
         .from(grade)
-        .leftJoin(category, eq(grade.categoryId, category.id));
+        .leftJoin(category, eq(grade.categoryId, category.id))
+        .leftJoin(parentCategory, eq(grade.parentCategoryId, parentCategory.id));
 
     return SuccessResponse(res, { message: "Grades Fetched Successfully", grades }, 200);
 };
@@ -113,7 +131,7 @@ export const getGradesByCategoryId = async (req: Request, res: Response) => {
 // 5. Update Grade
 export const updateGrade = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, nameAr, categoryId } = req.body;
+    const { name, nameAr, parentCategoryId, categoryId } = req.body;
 
     const [currentGrade] = await db.select().from(grade).where(eq(grade.id, id));
     if (!currentGrade) throw new BadRequest("Grade not found");
@@ -125,10 +143,24 @@ export const updateGrade = async (req: Request, res: Response) => {
     if (name !== undefined && targetName === "") throw new BadRequest("Name cannot be empty");
     if (nameAr !== undefined && targetNameAr === "") throw new BadRequest("Arabic name cannot be empty");
 
-    if (name || nameAr || categoryId) {
-        if (categoryId && categoryId !== currentGrade.categoryId) {
-            const [existingCategory] = await db.select().from(category).where(eq(category.id, categoryId));
-            if (!existingCategory) throw new BadRequest("The provided Category ID does not exist");
+    if (name || nameAr || categoryId || parentCategoryId) {
+        if (categoryId || parentCategoryId) {
+            const finalCategoryId = categoryId || currentGrade.categoryId;
+            const [checkCat] = await db.select().from(category).where(eq(category.id, finalCategoryId));
+            if (!checkCat) throw new BadRequest("Category not found");
+
+            const finalParentId = parentCategoryId || checkCat.parentCategoryId;
+            if (!finalParentId) throw new BadRequest("Parent Category ID is required for validation");
+
+            const [checkParent] = await db.select().from(category).where(eq(category.id, finalParentId));
+            if (!checkParent) throw new BadRequest("Parent category not found");
+            if (checkParent.parentCategoryId !== null) {
+                throw new BadRequest("The parent category must be a top-level category");
+            }
+
+            if (checkCat.parentCategoryId !== finalParentId) {
+                throw new BadRequest("The category must be a child of the selected parent category");
+            }
         }
         const [conflict] = await db.select()
             .from(grade)
@@ -148,11 +180,18 @@ export const updateGrade = async (req: Request, res: Response) => {
             throw new BadRequest(`Conflict: This ${field} already exists in the selected category`);
         }
     }
+    const finalParentId = (categoryId || parentCategoryId) ? (async () => {
+        const finalCatId = categoryId || currentGrade.categoryId;
+        const [catData] = await db.select({ parentId: category.parentCategoryId }).from(category).where(eq(category.id, finalCatId));
+        return parentCategoryId || catData?.parentId;
+    })() : Promise.resolve(currentGrade.parentCategoryId);
+
     await db.update(grade)
         .set({
             name: targetName,
             nameAr: targetNameAr,
             categoryId: targetCategoryId,
+            parentCategoryId: await finalParentId,
             updatedAt: new Date()
         })
         .where(eq(grade.id, id));
