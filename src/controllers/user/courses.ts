@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { courses } from "../../models/schema/admin/courses";
 import { db } from "../../models/connection";
 import { category, teachers, chapters, courseTeachers, semesters, Student, grade } from "../../models/schema";
+import { prices } from "../../models/schema/admin/prices";
 import { eq, count, inArray, and } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -38,7 +39,6 @@ export const getAllCourses = async (req: Request, res: Response) => {
         .select({
             id: courses.id,
             name: courses.name,
-            price: courses.totalPrice,
             category: category.name,
             numberOfChapters: count(chapters.id),
         })
@@ -54,7 +54,31 @@ export const getAllCourses = async (req: Request, res: Response) => {
         )
         .groupBy(courses.id, courses.name, category.name);
 
-    return SuccessResponse(res, { message: "All Courses Retrieved Successfully", courses: allCourses }, 200);
+    if (allCourses.length === 0) {
+        return SuccessResponse(res, { message: "All Courses Retrieved Successfully", courses: [] }, 200);
+    }
+
+    const courseIds = allCourses.map(c => c.id);
+
+    // Fetch prices for the courses
+    const coursePrices = await db
+        .select()
+        .from(prices)
+        .where(
+            and(
+                eq(prices.targetType, "course"),
+                inArray(prices.targetId, courseIds)
+            )
+        );
+
+    const coursesWithPrices = allCourses.map(course => {
+        return {
+            ...course,
+            pricePlans: coursePrices.filter(p => p.targetId === course.id)
+        };
+    });
+
+    return SuccessResponse(res, { message: "All Courses Retrieved Successfully", courses: coursesWithPrices }, 200);
 }
 
 // 2. Get course by id 
@@ -79,5 +103,20 @@ export const getCourseById = async (req: Request, res: Response) => {
         .from(semesters)
         .where(eq(semesters.courseId, id));
 
-    return SuccessResponse(res, { ...course, teachers: teachersList, semesters: courseSemestersList }, 200);
+    const coursePricePlans = await db
+        .select()
+        .from(prices)
+        .where(
+            and(
+                eq(prices.targetType, "course"),
+                eq(prices.targetId, id)
+            )
+        );
+
+    return SuccessResponse(res, { 
+        ...course, 
+        teachers: teachersList, 
+        semesters: courseSemestersList,
+        pricePlans: coursePricePlans
+    }, 200);
 }

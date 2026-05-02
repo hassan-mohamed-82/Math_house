@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { chapters, courses, category, teachers, lessons, semesters } from "../../models/schema";
-import { eq, asc, and, sql } from "drizzle-orm";
+import { prices } from "../../models/schema/admin/prices";
+import { eq, asc, and, sql, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 
@@ -13,8 +14,6 @@ const chapterDetailedQuery = () =>
             name: chapters.name,
             description: chapters.description,
             image: chapters.image,
-            price: chapters.price,
-            totalPrice: chapters.totalPrice,
             order: chapters.order,
         },
         course: {
@@ -58,9 +57,32 @@ export const getAllChapters = async (req: Request, res: Response) => {
 
     const results = await query.orderBy(asc(chapters.order));
 
+    if (results.length === 0) {
+        return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: [] }, 200);
+    }
+
+    const chapterIds = results.map(r => r.chapter.id);
+    const chapterPrices = await db
+        .select()
+        .from(prices)
+        .where(
+            and(
+                eq(prices.targetType, "chapter"),
+                inArray(prices.targetId, chapterIds)
+            )
+        );
+
+    const chaptersWithPrices = results.map(r => ({
+        ...r,
+        chapter: {
+            ...r.chapter,
+            pricePlans: chapterPrices.filter(p => p.targetId === r.chapter.id)
+        }
+    }));
+
     return SuccessResponse(res, {
         message: "Chapters fetched successfully",
-        chapters: results
+        chapters: chaptersWithPrices
     }, 200);
 }
 
@@ -75,7 +97,30 @@ export const getAllChaptersByCourseId = async (req: Request, res: Response) => {
         .where(eq(chapters.courseId, courseId))
         .orderBy(asc(chapters.order));
 
-    return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: chaptersList }, 200);
+    if (chaptersList.length === 0) {
+        return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: [] }, 200);
+    }
+
+    const chapterIds = chaptersList.map(r => r.chapter.id);
+    const chapterPrices = await db
+        .select()
+        .from(prices)
+        .where(
+            and(
+                eq(prices.targetType, "chapter"),
+                inArray(prices.targetId, chapterIds)
+            )
+        );
+
+    const chaptersWithPrices = chaptersList.map(r => ({
+        ...r,
+        chapter: {
+            ...r.chapter,
+            pricePlans: chapterPrices.filter(p => p.targetId === r.chapter.id)
+        }
+    }));
+
+    return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: chaptersWithPrices }, 200);
 }
 
 // 3. Get chapter by id with its lessons
@@ -93,8 +138,25 @@ export const getChapterById = async (req: Request, res: Response) => {
         .where(eq(lessons.chapterId, id))
         .orderBy(asc(lessons.id));
 
+    const chapterPricePlans = await db
+        .select()
+        .from(prices)
+        .where(
+            and(
+                eq(prices.targetType, "chapter"),
+                eq(prices.targetId, id)
+            )
+        );
+
     return SuccessResponse(res, {
         message: "Chapter details fetched",
-        chapter: { ...chapterData, lessons: chapterLessons }
+        chapter: { 
+            ...chapterData.chapter, 
+            pricePlans: chapterPricePlans 
+        },
+        course: chapterData.course,
+        semester: chapterData.semester,
+        teacher: chapterData.teacher,
+        lessons: chapterLessons
     }, 200);
 }

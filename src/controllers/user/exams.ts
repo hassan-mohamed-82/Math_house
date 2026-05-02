@@ -339,6 +339,11 @@ export const startExam = async (req: Request, res: Response) => {
         ));
 
     if (existingAttempt) {
+        // Deduct balance even if resuming
+        // await db.update(Student)
+        //     .set({ exambalance: sql`${Student.exambalance} - 1` })
+        //     .where(eq(Student.id, studentId));
+
         // Return the existing attempt instead of creating a new one
         return SuccessResponse(res, {
             message: "Exam already in progress",
@@ -523,6 +528,41 @@ export const submitExam = async (req: Request, res: Response) => {
             .where(eq(examAttempts.id, attempt.id));
     });
 
+    const wrongQuestionIds = answersToInsert.filter(a => !a.isCorrect).map(a => a.questionId);
+
+    let mistakes: any[] = [];
+    if (wrongQuestionIds.length > 0) {
+        const wrongQuestionsInfo = await db
+            .select({
+                id: questions.id,
+                question: questions.question,
+                image: questions.image,
+                answerType: questions.answerType,
+            })
+            .from(questions)
+            .where(inArray(questions.id, wrongQuestionIds));
+
+        const wrongOptions = await db
+            .select({
+                id: questionOptions.id,
+                questionId: questionOptions.questionId,
+                answer: questionOptions.answer,
+                order: questionOptions.order,
+            })
+            .from(questionOptions)
+            .where(inArray(questionOptions.questionId, wrongQuestionIds));
+
+        mistakes = wrongQuestionsInfo.map(q => {
+            const studentAnswerInfo = answersToInsert.find(a => a.questionId === q.id);
+            return {
+                ...q,
+                studentSelectedOptionId: studentAnswerInfo?.selectedOptionId,
+                studentGridInAnswer: studentAnswerInfo?.gridInAnswer,
+                options: wrongOptions.filter(o => o.questionId === q.id)
+            };
+        });
+    }
+
     SuccessResponse(res, {
         message: isTimedOut ? "Exam submitted (time exceeded)" : "Exam submitted successfully",
         result: {
@@ -532,6 +572,45 @@ export const submitExam = async (req: Request, res: Response) => {
             passScore: exam.passScore,
             isPassed,
             status: finalStatus,
+            mistakes,
         },
+    });
+};
+
+// ===================== SHOW QUESTION ANSWER =====================
+export const showQuestionAnswer = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { questionId } = req.params;
+
+    // Check and deduct question balance
+    await db.transaction(async (tx) => {
+        const [student] = await tx
+            .select({ questionBalance: Student.questionbalance })
+            .from(Student)
+            .where(eq(Student.id, studentId));
+
+        if (!student || student.questionBalance <= 0) {
+            throw new BadRequest("Insufficient question balance");
+        }
+
+        await tx.update(Student)
+            .set({ questionbalance: sql`${Student.questionbalance} - 1` })
+            .where(eq(Student.id, studentId));
+    });
+
+    const correctOptions = await db
+        .select({
+            id: questionOptions.id,
+            answer: questionOptions.answer,
+        })
+        .from(questionOptions)
+        .where(and(
+            eq(questionOptions.questionId, questionId),
+            eq(questionOptions.isCorrect, true)
+        ));
+
+    SuccessResponse(res, {
+        message: "Answer revealed",
+        correctOptions,
     });
 };

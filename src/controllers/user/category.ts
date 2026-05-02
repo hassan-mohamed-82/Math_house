@@ -4,8 +4,16 @@ import { category } from "../../models/schema";
 import { eq, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
+import { UnauthorizedError } from "../../Errors";
+import { Student } from "../../models/schema/admin/Student";
 
 export const getAllCategory = async (req: Request, res: Response) => {
+    const studentId = req.user?.id;
+    if (!studentId) throw new UnauthorizedError("Not authenticated");
+
+    const [student] = await db.select({ categoryId: Student.category }).from(Student).where(eq(Student.id, studentId));
+    if (!student) throw new BadRequest("Student not found");
+
     const categories = await db.select().from(category);
 
     const categoryMap = new Map<string, typeof categories[0]>();
@@ -18,7 +26,18 @@ export const getAllCategory = async (req: Request, res: Response) => {
         }
     });
 
-    const data = categories.map(cat => {
+    const isDescendant = (catId: string, targetAncestorId: string): boolean => {
+        let current = categoryMap.get(catId);
+        while (current?.parentCategoryId) {
+            if (current.parentCategoryId === targetAncestorId) return true;
+            current = categoryMap.get(current.parentCategoryId);
+        }
+        return false;
+    };
+
+    const filteredCategories = categories.filter(cat => isDescendant(cat.id, student.categoryId));
+
+    const data = filteredCategories.map(cat => {
         const ancestors: { id: string, name: string, level: number }[] = [];
         let current = cat;
         let level = 1;
