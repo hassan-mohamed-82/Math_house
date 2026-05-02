@@ -62,9 +62,6 @@ export async function seedChapters(
             semesterId,
             categoryId,
             teacherId,
-            duration: ch.duration,
-            price: ch.price,
-            discount: ch.discount,
             order: ch.order,
         });
 

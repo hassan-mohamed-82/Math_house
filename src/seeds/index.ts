@@ -67,6 +67,11 @@ async function main() {
         console.log("\n📝 Seeding Lessons & Ideas...");
         await seedLessons(chapterMap, courseMap, categoryMap, teacherMap);
 
+        // 7.5 Prices (depends on courses, chapters, lessons)
+        console.log("\n💰 Seeding Prices...");
+        const { seedPrices } = await import("./prices");
+        await seedPrices();
+
         // 8. Students (depends on categories, grades)
         console.log("\n🎓 Seeding Students...");
         await seedStudents(categoryMap, gradeMap);

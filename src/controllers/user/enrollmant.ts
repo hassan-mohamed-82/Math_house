@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import { db } from "../../models/connection";
 import { enrolledItems, courses, chapters, lessons, semesters, wallet, walletTransaction, paymentMethod, payment, teachers } from "../../models/schema";
+import { prices } from "../../models/schema/admin/prices";
 import { eq, and, or, inArray, aliasedTable, sql, count } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -57,7 +58,10 @@ export const enrollInCourse = async (req: Request, res: Response) => {
         if (courseId) {
             const [item] = await tx.select().from(courses).where(eq(courses.id, courseId));
             if (!item) throw new BadRequest("Course not found");
-            totalPrice += item.totalPrice || 0;
+
+            const [pricePlan] = await tx.select().from(prices).where(and(eq(prices.targetType, "course"), eq(prices.targetId, courseId)));
+            totalPrice += pricePlan ? Number(pricePlan.totalPriceEgp || 0) : 0;
+
             itemsToEnroll.push({ courseId });
         }
 
@@ -74,7 +78,10 @@ export const enrollInCourse = async (req: Request, res: Response) => {
             for (const id of chapterIds) {
                 const [item] = await tx.select().from(chapters).where(eq(chapters.id, id));
                 if (!item) throw new BadRequest(`Chapter ${id} not found`);
-                totalPrice += item.price || 0;
+
+                const [pricePlan] = await tx.select().from(prices).where(and(eq(prices.targetType, "chapter"), eq(prices.targetId, id)));
+                totalPrice += pricePlan ? Number(pricePlan.totalPriceEgp || 0) : 0;
+
                 itemsToEnroll.push({ chapterId: id });
             }
         }
@@ -84,7 +91,10 @@ export const enrollInCourse = async (req: Request, res: Response) => {
             for (const id of lessonIds) {
                 const [item] = await tx.select().from(lessons).where(eq(lessons.id, id));
                 if (!item) throw new BadRequest(`Lesson ${id} not found`);
-                totalPrice += item.price || 0;
+
+                const [pricePlan] = await tx.select().from(prices).where(and(eq(prices.targetType, "lesson"), eq(prices.targetId, id)));
+                totalPrice += pricePlan ? Number(pricePlan.totalPriceEgp || 0) : 0;
+
                 itemsToEnroll.push({ lessonId: id });
             }
         }

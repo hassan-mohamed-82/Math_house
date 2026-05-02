@@ -145,8 +145,6 @@ export async function seedLessons(
             courseId,
             categoryId,
             teacherId,
-            price: lesson.price,
-            discount: lesson.discount,
             order: lesson.order,
         });
 
