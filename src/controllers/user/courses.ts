@@ -3,7 +3,7 @@ import { courses } from "../../models/schema/admin/courses";
 import { db } from "../../models/connection";
 import { category, teachers, chapters, courseTeachers, semesters, Student, grade } from "../../models/schema";
 import { prices } from "../../models/schema/admin/prices";
-import { eq, count, inArray, and } from "drizzle-orm";
+import { eq, count, inArray, and, or } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 
@@ -26,7 +26,12 @@ export const getAllCourses = async (req: Request, res: Response) => {
     const childCategories = await db
         .select({ id: category.id })
         .from(category)
-        .where(eq(category.id, studentParentCategory));
+        .where(
+            or(
+                eq(category.id, studentParentCategory),
+                eq(category.parentCategoryId, studentParentCategory)
+            )
+        );
 
     if (childCategories.length === 0) {
         return SuccessResponse(res, { message: "All Courses Retrieved Successfully", courses: [] }, 200);

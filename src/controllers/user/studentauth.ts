@@ -59,12 +59,12 @@ export const studentSignup = async (req: Request, res: Response) => {
         throw new BadRequest("Student must be assigned to a main category only");
     }
 
-    const existingGrade = await db
+    const [existingGrade] = await db
         .select()
         .from(gradeTable)
-        .where(and(eq(gradeTable.id, grade), eq(gradeTable.categoryId, categoryId)));
+        .where(and(eq(gradeTable.id, grade), eq(gradeTable.parentCategoryId, categoryId)));
 
-    if (existingGrade.length === 0) {
+    if (!existingGrade) {
         throw new BadRequest("Grade not found or does not belong to the selected category");
     }
 
@@ -232,7 +232,7 @@ export const selectcategoryandgrade = async (req: Request, res: Response) => {
                 nameAr: gradeTable.nameAr,
             })
             .from(gradeTable)
-            .where(eq(gradeTable.categoryId, String(categoryId)));
+            .where(eq(gradeTable.parentCategoryId, String(categoryId)));
     }
 
     return SuccessResponse(res, {

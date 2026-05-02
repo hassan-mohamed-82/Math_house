@@ -7,17 +7,19 @@ export async function seedGrades(categoryMap: Record<string, string>) {
     const gradeMap: Record<string, string> = {};
 
     const gradesData = [
-        { name: "1", nameAr: "الصف الأول", categoryName: "National Learning" },
-        { name: "2", nameAr: "الصف الثاني", categoryName: "National Learning" },
-        { name: "7", nameAr: "الصف السابع", categoryName: "National Learning" },
-        { name: "10", nameAr: "الصف العاشر", categoryName: "National Learning" },
-        { name: "10", nameAr: "Grade 10", categoryName: "International Learning" },
+        { name: "1", nameAr: "الصف الأول", categoryName: "Primary", parentCategoryName: "National Learning" },
+        { name: "2", nameAr: "الصف الثاني", categoryName: "Primary", parentCategoryName: "National Learning" },
+        { name: "7", nameAr: "الصف السابع", categoryName: "Middle", parentCategoryName: "National Learning" },
+        { name: "10", nameAr: "الصف العاشر", categoryName: "Secondary", parentCategoryName: "National Learning" },
+        { name: "10", nameAr: "Grade 10", categoryName: "IGCSE", parentCategoryName: "International Learning" },
     ];
 
     for (const g of gradesData) {
         const categoryId = categoryMap[g.categoryName];
-        if (!categoryId) {
-            console.warn(`  ⚠️ Category "${g.categoryName}" not found for grade "${g.name}"`);
+        const parentCategoryId = categoryMap[g.parentCategoryName];
+
+        if (!categoryId || !parentCategoryId) {
+            console.warn(`  ⚠️ Category "${g.categoryName}" or Parent "${g.parentCategoryName}" not found for grade "${g.name}"`);
             continue;
         }
 
@@ -41,6 +43,7 @@ export async function seedGrades(categoryMap: Record<string, string>) {
             name: g.name,
             nameAr: g.nameAr,
             categoryId,
+            parentCategoryId,
         });
 
         gradeMap[`${g.categoryName}-${g.name}`] = id;

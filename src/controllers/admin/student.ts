@@ -52,12 +52,12 @@ export const createStudent = async (req: Request, res: Response) => {
         throw new BadRequest("student must be assigned to a main category only");
     }
 
-    const existingGrade = await db
+    const [existingGrade] = await db
         .select()
         .from(gradeTable)
-        .where(and(eq(gradeTable.id, grade), eq(gradeTable.categoryId, categoryId)));
+        .where(and(eq(gradeTable.id, grade), eq(gradeTable.parentCategoryId, categoryId)));
 
-    if (existingGrade.length === 0) {
+    if (!existingGrade) {
         throw new BadRequest("grade not found or does not belong to the selected category");
     }
 
@@ -245,12 +245,12 @@ export const updateStudent = async (req: Request, res: Response) => {
 
     if (grade) {
         const catId = categoryId || existingStudent[0].category;
-        const existingGrade = await db
+        const [existingGrade] = await db
             .select()
             .from(gradeTable)
-            .where(and(eq(gradeTable.id, grade), eq(gradeTable.categoryId, catId)));
+            .where(and(eq(gradeTable.id, grade), eq(gradeTable.parentCategoryId, catId)));
 
-        if (existingGrade.length === 0) {
+        if (!existingGrade) {
             throw new BadRequest("grade not found or does not belong to the selected category");
         }
     }
@@ -404,7 +404,7 @@ export const selection = async (req: Request, res: Response) => {
                 nameAr: gradeTable.nameAr,
             })
             .from(gradeTable)
-            .where(eq(gradeTable.categoryId, String(categoryId)));
+            .where(eq(gradeTable.parentCategoryId, String(categoryId)));
     }
 
     SuccessResponse(res, { message: "get all categories and grades success", data: { categories, grades } });

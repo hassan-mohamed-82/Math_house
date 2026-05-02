@@ -85,6 +85,13 @@
       "when": 1777695105129,
       "tag": "0011_gifted_thunderbolt_ross",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1777698352438,
+      "tag": "0012_slimy_kingpin",
+      "breakpoints": true
     }
   ]
 }

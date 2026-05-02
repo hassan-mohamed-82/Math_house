@@ -1,0 +1,2 @@
+ALTER TABLE `grade` ADD `parent_category_id` char(36);--> statement-breakpoint
+ALTER TABLE `grade` ADD CONSTRAINT `grade_parent_category_id_category_id_fk` FOREIGN KEY (`parent_category_id`) REFERENCES `category`(`id`) ON DELETE no action ON UPDATE no action;
