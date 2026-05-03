@@ -51,9 +51,9 @@ const chapterDetailedQuery = () =>
         .leftJoin(semesters, eq(chapters.semesterId, semesters.id));
 
 export const createChapter = async (req: Request, res: Response) => {
-    const { name, courseId, semesterId, description, image, teacherId, preRequisition, whatYouGain, duration, pricePlans } = req.body;
-    if (!name || !courseId || !teacherId || !duration) {
-        throw new BadRequest("Name, Course ID, Teacher ID, and Duration are required");
+    const { name, courseId, semesterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans } = req.body;
+    if (!name || !courseId || !teacherId) {
+        throw new BadRequest("Name, Course ID, Teacher ID are required");
     }
     // validation of price plans
     if (!pricePlans || pricePlans.length === 0) {
@@ -217,7 +217,7 @@ export const swapChapterOrder = async (req: Request, res: Response) => {
 
 export const updateChapter = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, courseId, semesterId, description, image, teacherId, preRequisition, whatYouGain, duration, pricePlans } = req.body;
+    const { name, courseId, semesterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans } = req.body;
 
     const [existingChapter] = await db.select().from(chapters).where(eq(chapters.id, id));
     if (!existingChapter) {

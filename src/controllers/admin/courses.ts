@@ -11,13 +11,13 @@ import { randomUUID } from "crypto";
 export const createCourse = async (req: Request, res: Response) => {
     const {
         name, categoryId, isHaveSemester, semesters: courseSemesters,
-        teacherIds, preRequisition, whatYouGain, duration,
+        teacherIds, preRequisition, whatYouGain,
         image, description, pricePlans
     } = req.body;
 
     // validation of basic data
-    if (!name || !categoryId || !duration) {
-        throw new BadRequest("Name, Category, and Duration are required");
+    if (!name || !categoryId ) {
+        throw new BadRequest("Name, Category, are required");
     }
     // validation of price plans
     if (!pricePlans || pricePlans.length === 0) {
@@ -182,7 +182,7 @@ export const updateCourse = async (req: Request, res: Response) => {
     const { id } = req.params;
     const {
         name, categoryId, isHaveSemester, semesters: courseSemesters,
-        teacherIds, preRequisition, whatYouGain, duration,
+        teacherIds, preRequisition, whatYouGain,
         image, description, pricePlans
     } = req.body;
 
