@@ -92,6 +92,13 @@
       "when": 1777698352438,
       "tag": "0012_slimy_kingpin",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1777970266508,
+      "tag": "0013_curly_quentin_quire",
+      "breakpoints": true
     }
   ]
 }
