@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
     selectCategory,
+    selectSubCategory,
     selectCourse,
     selectChapter,
     selectLesson,
@@ -18,6 +19,7 @@ import { catchAsync } from "../../utils/catchAsync";
 const router = Router();
 
 router.get("/select/category", catchAsync(selectCategory));
+router.get("/select/sub-category/:categoryId", catchAsync(selectSubCategory));
 router.get("/select/course/:categoryId", catchAsync(selectCourse));
 router.get("/select/chapter/:courseId", catchAsync(selectChapter));
 router.get("/select/lesson/:chapterId", catchAsync(selectLesson));

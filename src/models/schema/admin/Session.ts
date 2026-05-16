@@ -1,5 +1,5 @@
 // schema/sessions.ts
-import { mysqlTable, varchar, char, timestamp, mysqlEnum, date, time, int, text ,uniqueIndex } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, mysqlEnum, date, time, int, text, uniqueIndex } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { teachers } from "./teacher";
 import { Student } from "./Student";
@@ -9,24 +9,33 @@ import { lessons } from "./lessons";
 export const sessions = mysqlTable("sessions", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     name: varchar("name", { length: 255 }).notNull(),
-    sessionDate: date("session_date").notNull(),
+
+    // Schedule type: "once" → single sessionDate, "repeat" → startDate + endDate range
+    scheduleType: mysqlEnum("schedule_type", ["once", "repeat"]).notNull().default("once"),
+    sessionDate: date("session_date"),            // used when scheduleType = "once"
+    startDate:   date("start_date"),             // used when scheduleType = "repeat"
+    endDate:     date("end_date"),               // used when scheduleType = "repeat"
+
     timeFrom: time("time_from").notNull(),
-    timeTo: time("time_to").notNull(),
-
-    type: mysqlEnum("type", ["private", "group"]).notNull(),
-
-    groupId: char("group_id", { length: 36 }).references(() => groups.id),
+    timeTo:   time("time_to").notNull(),
 
     teacherId: char("teacher_id", { length: 255 }).notNull().references(() => teachers.id),
 
-    session_link: varchar("session_link", { length: 500 }).notNull(),
-    material_link: varchar("material_link", { length: 500 }),
+    session_link:          varchar("session_link",          { length: 500 }),
+    material_link:         varchar("material_link",         { length: 500 }),
     teacher_material_link: varchar("teacher_material_link", { length: 500 }),
-    
+
     sessionRelationalType: mysqlEnum("session_relational_type", ["Explanation", "Re-Explanation", "Mistakes", "Exam"]).default("Explanation"),
-    
+
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
+});
+
+/** Junction table – one session can be linked to multiple groups */
+export const sessionGroups = mysqlTable("session_groups", {
+    id:        char("id",         { length: 36 }).primaryKey().default(sql`(UUID())`),
+    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id),
+    groupId:   char("group_id",   { length: 36 }).notNull().references(() => groups.id),
 });
 
 export const sessionUsers = mysqlTable("session_users", {
