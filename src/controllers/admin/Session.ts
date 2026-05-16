@@ -172,35 +172,60 @@ export const selectGroups = async (req: Request, res: Response) => {
     return SuccessResponse(res, { groups: groupsList });
 };
 
+// كائن تحويل الأسماء النصية للأيام إلى الأرقام المقابلة لها في JavaScript
+const daysMap: Record<string, number> = {
+    sunday: 0,
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6
+};
+
+// دالة مساعدة لتوليد التواريخ الموافقة للأيام المطلوبة في حالة التكرار
+function getRecurringDates(startDate: string, endDate: string, allowedDays: number[]): string[] {
+    const dates: string[] = [];
+    let current = new Date(startDate);
+    const end = new Date(endDate);
+
+    while (current <= end) {
+        if (allowedDays.includes(current.getDay())) {
+            dates.push(current.toISOString().split("T")[0]);
+        }
+        current.setDate(current.getDate() + 1);
+    }
+    return dates;
+}
+
 export const createSession = async (req: Request, res: Response) => {
     const {
         name,
         scheduleType,           // "once" | "repeat"
         sessionDate,            // required when scheduleType === "once"
+        timeFrom,               // required when scheduleType === "once"
+        timeTo,                 // required when scheduleType === "once"
         startDate,              // required when scheduleType === "repeat"
         endDate,                // required when scheduleType === "repeat"
-        timeFrom,
-        timeTo,
-        groupIds,               // string[] – optional, at least one of groupIds/studentIds required
-        studentIds,             // string[] – optional, at least one of groupIds/studentIds required
+        recurringDays,          // required when scheduleType === "repeat" -> Array of { dayOfWeek: string, timeFrom: string, timeTo: string }
+        groupIds,               // string[] – optional
+        studentIds,             // string[] – optional
         sessionRelationalType,
         categoryId,             // parent category ID
         subCategoryId,          // sub-category ID (must be child of categoryId)
         courseId,               // course ID (must belong to subCategoryId)
-        chapterIds,             // string[] – chapters (must belong to courseId + subCategoryId)
-        lessonIds,              // string[] – lessons (must belong to courseId + chapterIds + subCategoryId)
+        chapterIds,             // string[] – chapters
+        lessonIds,              // string[] – lessons
         teacherId,
         session_link,
         material_link,
         teacher_material_link,
     } = req.body;
 
-    // ── 1. Required field presence ────────────────────────────────────────
+    // ── 1. Required field presence (General fields) ────────────────────────
     if (
         !name ||
         !scheduleType ||
-        !timeFrom ||
-        !timeTo ||
         !teacherId ||
         !sessionRelationalType ||
         !categoryId ||
@@ -210,7 +235,7 @@ export const createSession = async (req: Request, res: Response) => {
         !Array.isArray(lessonIds) || lessonIds.length === 0
     ) {
         throw new BadRequest(
-            "Missing or invalid required fields: name, scheduleType, timeFrom, timeTo, teacherId, sessionRelationalType, categoryId, subCategoryId, courseId, chapterIds[], lessonIds[]"
+            "Missing or invalid required fields: name, scheduleType, teacherId, sessionRelationalType, categoryId, subCategoryId, courseId, chapterIds[], lessonIds[]"
         );
     }
 
@@ -222,13 +247,22 @@ export const createSession = async (req: Request, res: Response) => {
         throw new BadRequest("You must provide at least one group (groupIds[]) or one student (studentIds[])");
     }
 
-    // ── 3. Schedule type validation ───────────────────────────────────────
+    // ── 3. Schedule type and Time validation ───────────────────────────────────────
     if (!["once", "repeat"].includes(scheduleType)) {
         throw new BadRequest("scheduleType must be 'once' or 'repeat'");
     }
 
+    // إنشاء مصفوفة لتجهيز التواريخ والأوقات الجاهزة للإنشاء الحقيقي
+    let targetSchedules: { date: string; from: string; to: string }[] = [];
+
     if (scheduleType === "once") {
-        if (!sessionDate) throw new BadRequest("sessionDate is required for one-time sessions");
+        if (!sessionDate || !timeFrom || !timeTo) {
+            throw new BadRequest("sessionDate, timeFrom, and timeTo are required for one-time sessions");
+        }
+        if (new Date(`${sessionDate}T${timeFrom}`) >= new Date(`${sessionDate}T${timeTo}`)) {
+            throw new BadRequest("timeFrom must be before timeTo");
+        }
+        targetSchedules.push({ date: sessionDate, from: timeFrom, to: timeTo });
     } else {
         if (!startDate || !endDate) {
             throw new BadRequest("startDate and endDate are required for recurring sessions");
@@ -236,19 +270,45 @@ export const createSession = async (req: Request, res: Response) => {
         if (new Date(startDate) >= new Date(endDate)) {
             throw new BadRequest("startDate must be before endDate");
         }
+        if (!Array.isArray(recurringDays) || recurringDays.length === 0) {
+            throw new BadRequest("recurringDays array is required and cannot be empty for recurring sessions");
+        }
+
+        // تحويل أسماء الأيام النصية القادمة من الـ Front-end إلى أرقام المقابلة لها
+        const allowedDays = recurringDays.map((d: any) => {
+            if (!d.dayOfWeek || typeof d.dayOfWeek !== "string") {
+                throw new BadRequest("dayOfWeek must be a valid string name (e.g., 'Monday')");
+            }
+            const dayNum = daysMap[d.dayOfWeek.toLowerCase()];
+            if (dayNum === undefined) {
+                throw new BadRequest(`Invalid day name provided: ${d.dayOfWeek}`);
+            }
+            return dayNum;
+        });
+
+        const generatedDates = getRecurringDates(startDate, endDate, allowedDays);
+
+        // ربط كل تاريخ ناتج بالوقت الخاص باليوم بتاعه المبعوث في الـ body
+        generatedDates.forEach((dateStr) => {
+            const currentDayNum = new Date(dateStr).getDay();
+            const config = recurringDays.find(
+                (d: any) => daysMap[d.dayOfWeek.toLowerCase()] === currentDayNum
+            );
+            if (config) {
+                targetSchedules.push({ date: dateStr, from: config.timeFrom, to: config.timeTo });
+            }
+        });
+
+        if (targetSchedules.length === 0) {
+            throw new BadRequest("No valid session dates could be generated with the provided range and days");
+        }
     }
 
-    // ── 4. Time validation ────────────────────────────────────────────────
-    const refDate = scheduleType === "once" ? sessionDate : startDate;
-    if (new Date(`${refDate}T${timeFrom}`) >= new Date(`${refDate}T${timeTo}`)) {
-        throw new BadRequest("timeFrom must be before timeTo");
-    }
-
-    // ── 5. Teacher validation ─────────────────────────────────────────────
+    // ── 4. Teacher validation ─────────────────────────────────────────────
     const teacher = await db.select().from(teachers).where(eq(teachers.id, teacherId)).limit(1);
     if (teacher.length === 0) throw new BadRequest("Teacher not found");
 
-    // ── 6. Category hierarchy validation ─────────────────────────────────
+    // ── 5. Category hierarchy validation ─────────────────────────────────
     const parentCat = await db.select().from(category).where(eq(category.id, categoryId)).limit(1);
     if (parentCat.length === 0) throw new BadRequest("Category not found");
 
@@ -258,7 +318,7 @@ export const createSession = async (req: Request, res: Response) => {
         throw new BadRequest("Sub-category does not belong to the selected category");
     }
 
-    // ── 7. Course validation (must belong to subCategoryId) ──────────────
+    // ── 6. Course validation (must belong to subCategoryId) ──────────────
     const course = await db
         .select()
         .from(courses)
@@ -268,7 +328,7 @@ export const createSession = async (req: Request, res: Response) => {
         throw new BadRequest("Course does not belong to the selected sub-category");
     }
 
-    // ── 8. Chapters validation ────────────────────────────────────────────
+    // ── 7. Chapters validation ────────────────────────────────────────────
     const chaptersList = await db.select().from(chapters).where(inArray(chapters.id, chapterIds));
     if (chaptersList.length !== chapterIds.length) {
         throw new BadRequest("One or more chapters not found");
@@ -283,7 +343,7 @@ export const createSession = async (req: Request, res: Response) => {
         );
     }
 
-    // ── 9. Lessons validation ─────────────────────────────────────────────
+    // ── 8. Lessons validation ─────────────────────────────────────────────
     const lessonsList = await db.select().from(lessons).where(inArray(lessons.id, lessonIds));
     if (lessonsList.length !== lessonIds.length) {
         throw new BadRequest("One or more lessons not found");
@@ -299,7 +359,7 @@ export const createSession = async (req: Request, res: Response) => {
         );
     }
 
-    // ── 10. Groups validation ─────────────────────────────────────────────
+    // ── 9. Groups validation ─────────────────────────────────────────────
     if (hasGroups) {
         const groupList = await db.select().from(groups).where(inArray(groups.id, groupIds));
         if (groupList.length !== groupIds.length) {
@@ -307,7 +367,7 @@ export const createSession = async (req: Request, res: Response) => {
         }
     }
 
-    // ── 11. Students validation ───────────────────────────────────────────
+    // ── 10. Students validation ───────────────────────────────────────────
     if (hasStudents) {
         const studentList = await db.select().from(Student).where(inArray(Student.id, studentIds));
         if (studentList.length !== studentIds.length) {
@@ -315,32 +375,7 @@ export const createSession = async (req: Request, res: Response) => {
         }
     }
 
-    // ── 12. Build session data ────────────────────────────────────────────
-    const sessionId = randomUUID();
-
-    const sessionData = {
-        id: sessionId,
-        name,
-        scheduleType: scheduleType as "once" | "repeat",
-        sessionDate: scheduleType === "once" ? sessionDate : null,
-        startDate: scheduleType === "repeat" ? startDate : null,
-        endDate: scheduleType === "repeat" ? endDate : null,
-        timeFrom,
-        timeTo,
-        teacherId,
-        session_link: session_link ?? null,
-        material_link: material_link ?? null,
-        teacher_material_link: teacher_material_link ?? null,
-        sessionRelationalType: sessionRelationalType as "Explanation" | "Re-Explanation" | "Mistakes" | "Exam",
-    };
-
-    const lessonInserts = lessonIds.map((lessonId: string) => ({
-        id: randomUUID(),
-        sessionId,
-        lessonId,
-    }));
-
-    // ── 13. Resolve all student IDs (group students + direct students) ────
+    // ── 11. Resolve all student IDs (group students + direct students) ────
     const uniqueStudentIds = new Set<string>(hasStudents ? studentIds : []);
 
     if (hasGroups) {
@@ -351,19 +386,64 @@ export const createSession = async (req: Request, res: Response) => {
         groupStudentsList.forEach(gs => uniqueStudentIds.add(gs.studentId));
     }
 
-    const sessionUsersInserts = Array.from(uniqueStudentIds).map(studentId => ({
-        id: randomUUID(),
-        sessionId,
-        studentId,
-    }));
+    // ── 12. Build arrays for Bulk Insertion ───────────────────────────────────
+    const sessionsToInsert: any[] = [];
+    const lessonInserts: any[] = [];
+    const sessionUsersInserts: any[] = [];
+    const sessionGroupsInserts: any[] = [];
 
-    const sessionGroupsInserts = hasGroups
-        ? groupIds.map((gId: string) => ({ id: randomUUID(), sessionId, groupId: gId }))
-        : [];
+    for (const schedule of targetSchedules) {
+        const sessionId = randomUUID();
 
-    // ── 14. Persist everything in one transaction ─────────────────────────
+        sessionsToInsert.push({
+            id: sessionId,
+            name: scheduleType === "repeat" ? `${name} (${schedule.date})` : name,
+            scheduleType,
+            sessionDate: schedule.date,
+            startDate: scheduleType === "repeat" ? startDate : null,
+            endDate: scheduleType === "repeat" ? endDate : null,
+            timeFrom: schedule.from,
+            timeTo: schedule.to,
+            teacherId,
+            session_link: session_link ?? null,
+            material_link: material_link ?? null,
+            teacher_material_link: teacher_material_link ?? null,
+            sessionRelationalType,
+        });
+
+        // ربط الدروس بالحصة الحالية
+        lessonIds.forEach((lessonId: string) => {
+            lessonInserts.push({
+                id: randomUUID(),
+                sessionId,
+                lessonId,
+            });
+        });
+
+        // ربط الطلاب المستهدفين بالحصة الحالية
+        Array.from(uniqueStudentIds).forEach((studentId) => {
+            sessionUsersInserts.push({
+                id: randomUUID(),
+                sessionId,
+                studentId,
+            });
+        });
+
+        // ربط المجموعات المستهدفة بالحصة الحالية
+        if (hasGroups) {
+            groupIds.forEach((gId: string) => {
+                sessionGroupsInserts.push({
+                    id: randomUUID(),
+                    sessionId,
+                    groupId: gId,
+                });
+            });
+        }
+    }
+
+    // ── 13. Persist everything in one clean transaction ─────────────────────────
     await db.transaction(async (tx) => {
-        await tx.insert(sessions).values(sessionData);
+        await tx.insert(sessions).values(sessionsToInsert);
 
         if (sessionGroupsInserts.length > 0) {
             await tx.insert(sessionGroups).values(sessionGroupsInserts);
@@ -376,10 +456,11 @@ export const createSession = async (req: Request, res: Response) => {
         await tx.insert(sessionLessons).values(lessonInserts);
     });
 
-    return SuccessResponse(res, { message: "Session created successfully" }, 201);
+    return SuccessResponse(res, { message: `${sessionsToInsert.length} session(s) created successfully` }, 201);
 };
 
 export const getAllSessions = async (req: Request, res: Response) => {
+    // Fetch base session list with teacher info
     const sessionsList = await db.select({
         id: sessions.id,
         name: sessions.name,
@@ -389,23 +470,69 @@ export const getAllSessions = async (req: Request, res: Response) => {
         endDate: sessions.endDate,
         timeFrom: sessions.timeFrom,
         timeTo: sessions.timeTo,
-        teacherId: sessions.teacherId,
+        sessionRelationalType: sessions.sessionRelationalType,
         session_link: sessions.session_link,
         material_link: sessions.material_link,
         teacher_material_link: sessions.teacher_material_link,
-        sessionRelationalType: sessions.sessionRelationalType,
         createdAt: sessions.createdAt,
         updatedAt: sessions.updatedAt,
         teacher: {
             id: teachers.id,
             name: teachers.name,
-        }
+        },
     })
         .from(sessions)
-        .leftJoin(teachers, eq(sessions.teacherId, teachers.id));
+        .leftJoin(teachers, eq(sessions.teacherId, teachers.id))
+        .orderBy(sessions.createdAt);
 
-    return SuccessResponse(res, { sessions: sessionsList }, 200);
-}
+    // For each session, attach a lightweight groups + students summary
+    const sessionIds = sessionsList.map(s => s.id);
+
+    const groupsSummary = sessionIds.length > 0
+        ? await db.select({
+            sessionId: sessionGroups.sessionId,
+            groupId:   groups.id,
+            groupName: groups.name,
+        })
+            .from(sessionGroups)
+            .innerJoin(groups, eq(sessionGroups.groupId, groups.id))
+            .where(inArray(sessionGroups.sessionId, sessionIds))
+        : [];
+
+    const studentsSummary = sessionIds.length > 0
+        ? await db.select({
+            sessionId: sessionUsers.sessionId,
+            studentId: Student.id,
+            studentName: sql<string>`CONCAT(${Student.firstname}, ' ', ${Student.lastname})`.as("studentName"),
+        })
+            .from(sessionUsers)
+            .innerJoin(Student, eq(sessionUsers.studentId, Student.id))
+            .where(inArray(sessionUsers.sessionId, sessionIds))
+        : [];
+
+    // Map summaries by sessionId
+    const groupsBySession = new Map<string, { id: string; name: string }[]>();
+    groupsSummary.forEach(g => {
+        if (!groupsBySession.has(g.sessionId)) groupsBySession.set(g.sessionId, []);
+        groupsBySession.get(g.sessionId)!.push({ id: g.groupId, name: g.groupName });
+    });
+
+    const studentsBySession = new Map<string, { id: string; name: string }[]>();
+    studentsSummary.forEach(s => {
+        if (!studentsBySession.has(s.sessionId)) studentsBySession.set(s.sessionId, []);
+        studentsBySession.get(s.sessionId)!.push({ id: s.studentId, name: s.studentName });
+    });
+
+    const result = sessionsList.map(session => ({
+        ...session,
+        groups:        groupsBySession.get(session.id)   ?? [],
+        groupCount:    groupsBySession.get(session.id)?.length  ?? 0,
+        students:      studentsBySession.get(session.id) ?? [],
+        studentCount:  studentsBySession.get(session.id)?.length ?? 0,
+    }));
+
+    return SuccessResponse(res, { sessions: result }, 200);
+};
 
 export const getSessionById = async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -482,9 +609,51 @@ export const getSessionById = async (req: Request, res: Response) => {
         .innerJoin(Student, eq(sessionUsers.studentId, Student.id))
         .where(eq(sessionUsers.sessionId, id));
 
+    // If it's a repeated session, we should try to fetch the other sessions in the same batch
+    // to reconstruct the recurringDays array for the frontend.
+    let recurringDays: any[] = [];
+    if (session[0].scheduleType === "repeat" && session[0].startDate && session[0].endDate) {
+        // Find all sessions with the same name, start/end dates, and teacher
+        const relatedSessions = await db.select({
+            sessionDate: sessions.sessionDate,
+            timeFrom: sessions.timeFrom,
+            timeTo: sessions.timeTo,
+        })
+        .from(sessions)
+        .where(and(
+            eq(sessions.scheduleType, "repeat"),
+            eq(sessions.startDate, session[0].startDate),
+            eq(sessions.endDate, session[0].endDate),
+            eq(sessions.teacherId, session[0].teacherId)
+        ));
+
+        // Group by day of week
+        const daysMapReverse: Record<number, string> = {
+            0: "Sunday", 1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday", 6: "Saturday"
+        };
+        
+        const uniqueDays = new Map<number, any>();
+        
+        relatedSessions.forEach(rs => {
+            if (rs.sessionDate) {
+                const dayNum = new Date(rs.sessionDate).getDay();
+                if (!uniqueDays.has(dayNum)) {
+                    uniqueDays.set(dayNum, {
+                        dayOfWeek: daysMapReverse[dayNum],
+                        timeFrom: rs.timeFrom,
+                        timeTo: rs.timeTo
+                    });
+                }
+            }
+        });
+
+        recurringDays = Array.from(uniqueDays.values());
+    }
+
     return SuccessResponse(res, {
         session: {
             ...session[0],
+            recurringDays: recurringDays.length > 0 ? recurringDays : undefined,
             groups: sessionGroupsData,
             lessons: sessionLessonsData,
             students: sessionStudentsData,
@@ -497,144 +666,257 @@ export const updateSession = async (req: Request, res: Response) => {
 
     const {
         name,
-        scheduleType,
-        sessionDate,
-        startDate,
-        endDate,
-        timeFrom,
-        timeTo,
+        scheduleType,           // "once" | "repeat"
+        sessionDate,            // required when scheduleType === "once"
+        timeFrom,               // required when scheduleType === "once"
+        timeTo,                 // required when scheduleType === "once"
+        startDate,              // required when scheduleType === "repeat"
+        endDate,                // required when scheduleType === "repeat"
+        recurringDays,          // required when scheduleType === "repeat" → [{ dayOfWeek, timeFrom, timeTo }]
+        groupIds,               // string[] – full replace of linked groups
+        studentIds,             // string[] – full replace of direct students
+        sessionRelationalType,
+        categoryId,
+        subCategoryId,
+        courseId,
+        chapterIds,             // string[] – full replace of linked chapters
+        lessonIds,              // string[] – full replace of linked lessons
         teacherId,
         session_link,
         material_link,
         teacher_material_link,
-        sessionRelationalType,
-        groupIds,       // string[] – full replace of linked groups
-        lessonIds,      // string[] – full replace of linked lessons
-        studentIds      // string[] – full replace of direct students
     } = req.body;
 
-    if (!id) {
-        throw new BadRequest("Session ID is required");
-    }
+    // ── 1. Session must exist ─────────────────────────────────────────────
+    if (!id) throw new BadRequest("Session ID is required");
 
     const sessionExists = await db.select().from(sessions).where(eq(sessions.id, id)).limit(1);
-    if (sessionExists.length === 0) {
-        throw new NotFound("Session not found");
-    }
+    if (sessionExists.length === 0) throw new NotFound("Session not found");
 
     const currentSession = sessionExists[0];
 
-    // Validate scheduleType transition
-    const newScheduleType = scheduleType || currentSession.scheduleType;
-    if (scheduleType && !(["once", "repeat"].includes(scheduleType))) {
-        throw new BadRequest("scheduleType must be 'once' or 'repeat'");
-    }
-    if (newScheduleType === "once" && scheduleType && !sessionDate && !currentSession.sessionDate) {
-        throw new BadRequest("sessionDate is required for one-time sessions");
-    }
-    if (newScheduleType === "repeat" && scheduleType) {
-        const sd = startDate || currentSession.startDate;
-        const ed = endDate || currentSession.endDate;
-        if (!sd || !ed) throw new BadRequest("startDate and endDate are required for recurring sessions");
-        if (new Date(sd) >= new Date(ed)) throw new BadRequest("startDate must be before endDate");
+    // ── 2. Required fields (only validate what is being changed) ─────────
+    // Core identity fields: if any academic field is provided, all must be present
+    const isChangingAcademics = categoryId || subCategoryId || courseId || chapterIds || lessonIds;
+    if (isChangingAcademics) {
+        if (
+            !categoryId ||
+            !subCategoryId ||
+            !courseId ||
+            !Array.isArray(chapterIds) || chapterIds.length === 0 ||
+            !Array.isArray(lessonIds)  || lessonIds.length === 0
+        ) {
+            throw new BadRequest(
+                "When updating academic content, all of categoryId, subCategoryId, courseId, chapterIds[], lessonIds[] must be provided together"
+            );
+        }
     }
 
-    // Validate Teacher
+    // ── 3. At least one audience if being changed ─────────────────────────
+    const isChangingAudience = groupIds !== undefined || studentIds !== undefined;
+    if (isChangingAudience) {
+        const hasGroups   = Array.isArray(groupIds)   && groupIds.length   > 0;
+        const hasStudents = Array.isArray(studentIds)  && studentIds.length > 0;
+        if (!hasGroups && !hasStudents) {
+            throw new BadRequest("You must provide at least one group (groupIds[]) or one student (studentIds[])");
+        }
+    }
+
+    // ── 4. Schedule type and time validation ─────────────────────────────
+    // Determine the effective schedule type (new or existing)
+    const effectiveScheduleType = scheduleType ?? currentSession.scheduleType;
+
+    let targetSchedules: { date: string; from: string; to: string }[] = [];
+    const isChangingSchedule = !!(scheduleType || sessionDate || timeFrom || timeTo || startDate || endDate || recurringDays);
+
+    if (isChangingSchedule) {
+        if (!["once", "repeat"].includes(effectiveScheduleType)) {
+            throw new BadRequest("scheduleType must be 'once' or 'repeat'");
+        }
+
+        if (effectiveScheduleType === "once") {
+            const date = sessionDate ?? currentSession.sessionDate;
+            const from = timeFrom    ?? currentSession.timeFrom;
+            const to   = timeTo      ?? currentSession.timeTo;
+
+            if (!date || !from || !to) {
+                throw new BadRequest("sessionDate, timeFrom, and timeTo are required for one-time sessions");
+            }
+            if (new Date(`${date}T${from}`) >= new Date(`${date}T${to}`)) {
+                throw new BadRequest("timeFrom must be before timeTo");
+            }
+            targetSchedules.push({ date, from, to });
+        } else {
+            // repeat
+            const sd = startDate ?? currentSession.startDate;
+            const ed = endDate   ?? currentSession.endDate;
+
+            if (!sd || !ed) throw new BadRequest("startDate and endDate are required for recurring sessions");
+            if (new Date(sd) >= new Date(ed)) throw new BadRequest("startDate must be before endDate");
+
+            if (!Array.isArray(recurringDays) || recurringDays.length === 0) {
+                throw new BadRequest("recurringDays array is required and cannot be empty for recurring sessions");
+            }
+
+            const allowedDays = recurringDays.map((d: any) => {
+                if (!d.dayOfWeek || typeof d.dayOfWeek !== "string") {
+                    throw new BadRequest("dayOfWeek must be a valid string name (e.g., 'Monday')");
+                }
+                const dayNum = daysMap[d.dayOfWeek.toLowerCase()];
+                if (dayNum === undefined) throw new BadRequest(`Invalid day name provided: ${d.dayOfWeek}`);
+                return dayNum;
+            });
+
+            const generatedDates = getRecurringDates(sd, ed, allowedDays);
+
+            generatedDates.forEach((dateStr) => {
+                const currentDayNum = new Date(dateStr).getDay();
+                const config = recurringDays.find(
+                    (d: any) => daysMap[d.dayOfWeek.toLowerCase()] === currentDayNum
+                );
+                if (config) {
+                    targetSchedules.push({ date: dateStr, from: config.timeFrom, to: config.timeTo });
+                }
+            });
+
+            if (targetSchedules.length === 0) {
+                throw new BadRequest("No valid session dates could be generated with the provided range and days");
+            }
+        }
+    }
+
+    // ── 5. Teacher validation ─────────────────────────────────────────────
     if (teacherId) {
         const teacher = await db.select().from(teachers).where(eq(teachers.id, teacherId)).limit(1);
         if (teacher.length === 0) throw new BadRequest("Teacher not found");
     }
 
-    // Validate Lessons
-    if (lessonIds && Array.isArray(lessonIds) && lessonIds.length > 0) {
+    // ── 6. Category hierarchy validation ─────────────────────────────────
+    if (isChangingAcademics) {
+        const parentCat = await db.select().from(category).where(eq(category.id, categoryId)).limit(1);
+        if (parentCat.length === 0) throw new BadRequest("Category not found");
+
+        const subCat = await db.select().from(category).where(eq(category.id, subCategoryId)).limit(1);
+        if (subCat.length === 0) throw new BadRequest("Sub-category not found");
+        if (subCat[0].parentCategoryId !== categoryId) {
+            throw new BadRequest("Sub-category does not belong to the selected category");
+        }
+
+        // ── 7. Course validation ──────────────────────────────────────────
+        const course = await db
+            .select()
+            .from(courses)
+            .where(and(eq(courses.id, courseId), eq(courses.categoryId, subCategoryId)))
+            .limit(1);
+        if (course.length === 0) throw new BadRequest("Course does not belong to the selected sub-category");
+
+        // ── 8. Chapters validation ────────────────────────────────────────
+        const chaptersList = await db.select().from(chapters).where(inArray(chapters.id, chapterIds));
+        if (chaptersList.length !== chapterIds.length) throw new BadRequest("One or more chapters not found");
+
+        const invalidChapters = chaptersList.filter(
+            ch => ch.courseId !== courseId || ch.categoryId !== subCategoryId
+        );
+        if (invalidChapters.length > 0) {
+            throw new BadRequest(
+                `Chapters [${invalidChapters.map(c => c.id).join(", ")}] do not belong to the selected course / sub-category`
+            );
+        }
+
+        // ── 9. Lessons validation ─────────────────────────────────────────
         const lessonsList = await db.select().from(lessons).where(inArray(lessons.id, lessonIds));
-        if (lessonsList.length !== lessonIds.length) {
-            throw new BadRequest("One or more lessons not found");
+        if (lessonsList.length !== lessonIds.length) throw new BadRequest("One or more lessons not found");
+
+        const chapterIdSet = new Set<string>(chapterIds);
+        const invalidLessons = lessonsList.filter(
+            l => l.courseId !== courseId || l.categoryId !== subCategoryId || !chapterIdSet.has(l.chapterId)
+        );
+        if (invalidLessons.length > 0) {
+            throw new BadRequest(
+                `Lessons [${invalidLessons.map(l => l.id).join(", ")}] do not belong to the selected course / chapters / sub-category`
+            );
         }
     }
 
-    // Validate Time
-    const newSessionDate = sessionDate || currentSession.sessionDate || startDate || currentSession.startDate;
-    const newTimeFrom = timeFrom || currentSession.timeFrom;
-    const newTimeTo = timeTo || currentSession.timeTo;
+    // ── 10. Groups validation ─────────────────────────────────────────────
+    const hasGroups   = Array.isArray(groupIds)   && groupIds.length   > 0;
+    const hasStudents = Array.isArray(studentIds)  && studentIds.length > 0;
 
-    if (new Date(`${newSessionDate}T${newTimeFrom}`) >= new Date(`${newSessionDate}T${newTimeTo}`)) {
-        throw new BadRequest("timeFrom must be before timeTo");
+    if (hasGroups) {
+        const groupList = await db.select().from(groups).where(inArray(groups.id, groupIds));
+        if (groupList.length !== groupIds.length) throw new BadRequest("One or more groups not found");
     }
 
+    // ── 11. Students validation ───────────────────────────────────────────
+    if (hasStudents) {
+        const studentList = await db.select().from(Student).where(inArray(Student.id, studentIds));
+        if (studentList.length !== studentIds.length) throw new BadRequest("One or more students not found");
+    }
+
+    // ── 12. Resolve merged student set ────────────────────────────────────
+    // Only compute when audience is being changed
+    let uniqueStudentIds: Set<string> | null = null;
+
+    if (isChangingAudience) {
+        uniqueStudentIds = new Set<string>(hasStudents ? studentIds : []);
+
+        if (hasGroups) {
+            const groupStudentsList = await db
+                .select({ studentId: groupStudents.studentId })
+                .from(groupStudents)
+                .where(inArray(groupStudents.groupId, groupIds));
+            groupStudentsList.forEach(gs => uniqueStudentIds!.add(gs.studentId));
+        }
+    }
+
+    // ── 13. Persist in one transaction ───────────────────────────────────
     await db.transaction(async (tx) => {
-        // Update basic session fields
+        // 13a. Update core session fields
+        const scheduleFields = isChangingSchedule && targetSchedules.length === 1
+            ? {
+                scheduleType: effectiveScheduleType as "once" | "repeat",
+                sessionDate: targetSchedules[0].date,
+                startDate: effectiveScheduleType === "repeat" ? (startDate ?? currentSession.startDate) : null,
+                endDate:   effectiveScheduleType === "repeat" ? (endDate   ?? currentSession.endDate)   : null,
+                timeFrom: targetSchedules[0].from,
+                timeTo:   targetSchedules[0].to,
+            }
+            : {};  // for repeat with many dates we only update metadata, not date/time (multiple rows)
+
         await tx.update(sessions)
             .set({
-                ...(name && { name }),
-                ...(scheduleType && { scheduleType }),
-                ...(sessionDate && { sessionDate }),
-                ...(startDate && { startDate }),
-                ...(endDate && { endDate }),
-                ...(timeFrom && { timeFrom }),
-                ...(timeTo && { timeTo }),
-                ...(teacherId && { teacherId }),
-                ...(session_link && { session_link }),
-                ...(material_link && { material_link }),
+                ...(name                  && { name }),
+                ...(scheduleType          && { scheduleType }),
+                ...(session_link          && { session_link }),
+                ...(material_link         && { material_link }),
                 ...(teacher_material_link && { teacher_material_link }),
                 ...(sessionRelationalType && { sessionRelationalType }),
+                ...(teacherId             && { teacherId }),
+                ...scheduleFields,
             })
             .where(eq(sessions.id, id));
 
-        // Update Groups (full replace)
-        if (groupIds && Array.isArray(groupIds)) {
-            if (groupIds.length > 0) {
-                const groupList = await db.select().from(groups).where(inArray(groups.id, groupIds));
-                if (groupList.length !== groupIds.length) {
-                    throw new BadRequest("One or more groups not found");
-                }
-            }
+        // 13b. Full replace of lessons
+        if (isChangingAcademics) {
+            await tx.delete(sessionLessons).where(eq(sessionLessons.sessionId, id));
+            await tx.insert(sessionLessons).values(
+                lessonIds.map((lessonId: string) => ({ id: randomUUID(), sessionId: id, lessonId }))
+            );
+        }
+
+        // 13c. Full replace of groups
+        if (groupIds !== undefined && Array.isArray(groupIds)) {
             await tx.delete(sessionGroups).where(eq(sessionGroups.sessionId, id));
-            if (groupIds.length > 0) {
+            if (hasGroups) {
                 await tx.insert(sessionGroups).values(
                     groupIds.map((gId: string) => ({ id: randomUUID(), sessionId: id, groupId: gId }))
                 );
             }
         }
 
-        // Update Lessons (full replace)
-        if (lessonIds && Array.isArray(lessonIds)) {
-            await tx.delete(sessionLessons).where(eq(sessionLessons.sessionId, id));
-            if (lessonIds.length > 0) {
-                await tx.insert(sessionLessons).values(
-                    lessonIds.map((lessonId: string) => ({ id: randomUUID(), sessionId: id, lessonId }))
-                );
-            }
-        }
-
-        // Update Students – merge direct studentIds with students from ALL linked groups
-        if (studentIds && Array.isArray(studentIds)) {
-            if (studentIds.length > 0) {
-                const studentsList = await db.select().from(Student).where(inArray(Student.id, studentIds));
-                if (studentsList.length !== studentIds.length) {
-                    throw new BadRequest("One or more students not found");
-                }
-            }
-
-            // Build merged set: direct students + students from all currently linked groups
-            const uniqueStudentIds = new Set<string>(studentIds);
-
-            const linkedGroups = await tx
-                .select({ groupId: sessionGroups.groupId })
-                .from(sessionGroups)
-                .where(eq(sessionGroups.sessionId, id));
-
-            if (linkedGroups.length > 0) {
-                const linkedGroupIds = linkedGroups.map(g => g.groupId);
-                const groupStudentsList = await tx
-                    .select({ studentId: groupStudents.studentId })
-                    .from(groupStudents)
-                    .where(inArray(groupStudents.groupId, linkedGroupIds));
-                groupStudentsList.forEach(gs => uniqueStudentIds.add(gs.studentId));
-            }
-
+        // 13d. Full replace of students (direct + from groups)
+        if (isChangingAudience && uniqueStudentIds) {
             await tx.delete(sessionUsers).where(eq(sessionUsers.sessionId, id));
-
             if (uniqueStudentIds.size > 0) {
                 await tx.insert(sessionUsers).values(
                     Array.from(uniqueStudentIds).map(studentId => ({ id: randomUUID(), sessionId: id, studentId }))
@@ -645,6 +927,7 @@ export const updateSession = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Session updated successfully" }, 200);
 };
+
 
 export const deleteSession = async (req: Request, res: Response) => {
     const { id } = req.params;
@@ -658,16 +941,33 @@ export const deleteSession = async (req: Request, res: Response) => {
         throw new NotFound("Session not found");
     }
 
+    const targetSession = sessionExists[0];
+    let sessionIdsToDelete = [id];
+
+    // If it's a repeated session, find all related sessions in the same series
+    if (targetSession.scheduleType === "repeat" && targetSession.startDate && targetSession.endDate) {
+        const relatedSessions = await db.select({ id: sessions.id })
+            .from(sessions)
+            .where(and(
+                eq(sessions.scheduleType, "repeat"),
+                eq(sessions.startDate, targetSession.startDate),
+                eq(sessions.endDate, targetSession.endDate),
+                eq(sessions.teacherId, targetSession.teacherId)
+            ));
+        
+        sessionIdsToDelete = relatedSessions.map(s => s.id);
+    }
+
     await db.transaction(async (tx) => {
-        // Delete related entities first due to foreign key constraints
-        await tx.delete(sessionUsers).where(eq(sessionUsers.sessionId, id));
-        await tx.delete(sessionGroups).where(eq(sessionGroups.sessionId, id));
-        await tx.delete(sessionLessons).where(eq(sessionLessons.sessionId, id));
-        await tx.delete(sessionRatings).where(eq(sessionRatings.sessionId, id));
-        await tx.delete(sessionAttendance).where(eq(sessionAttendance.sessionId, id));
-        // Final delete of the target session
-        await tx.delete(sessions).where(eq(sessions.id, id));
+        // Delete related entities for all targeted sessions first due to foreign key constraints
+        await tx.delete(sessionUsers).where(inArray(sessionUsers.sessionId, sessionIdsToDelete));
+        await tx.delete(sessionGroups).where(inArray(sessionGroups.sessionId, sessionIdsToDelete));
+        await tx.delete(sessionLessons).where(inArray(sessionLessons.sessionId, sessionIdsToDelete));
+        await tx.delete(sessionRatings).where(inArray(sessionRatings.sessionId, sessionIdsToDelete));
+        await tx.delete(sessionAttendance).where(inArray(sessionAttendance.sessionId, sessionIdsToDelete));
+        // Final delete of the target sessions
+        await tx.delete(sessions).where(inArray(sessions.id, sessionIdsToDelete));
     });
 
-    return SuccessResponse(res, { message: "Session deleted successfully" }, 200);
+    return SuccessResponse(res, { message: `Successfully deleted ${sessionIdsToDelete.length} session(s)` }, 200);
 };
