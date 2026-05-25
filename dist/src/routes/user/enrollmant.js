@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const catchAsync_1 = require("../../utils/catchAsync");
+const enrollmant_1 = require("../../controllers/user/enrollmant");
+const router = (0, express_1.Router)();
+router.post("/enroll", (0, catchAsync_1.catchAsync)(enrollmant_1.enrollInCourse));
+router.get("/my-purchases", (0, catchAsync_1.catchAsync)(enrollmant_1.getMyPurchases));
+router.get("/:id", (0, catchAsync_1.catchAsync)(enrollmant_1.getEnrolledCourseById));
+exports.default = router;

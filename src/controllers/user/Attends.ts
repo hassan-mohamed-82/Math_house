@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { db } from "../../models/connection";
-import { sessionLessons, sessions, sessionUsers } from "../../models/schema/admin/Session";
+import { sessionLessons, sessions, sessionUsers, sessionGroups } from "../../models/schema/admin/Session";
 import { lessons, sessionAttendance, chapters } from "../../models/schema";
 import { groups, groupStudents } from "../../models/schema/admin/Groups";
 import { teachers } from "../../models/schema/admin/teacher";
@@ -56,7 +56,7 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
             gte(sessions.sessionDate, new Date(today)),
             or(
                 inArray(sessions.id, db.select({ sessionId: sessionUsers.sessionId }).from(sessionUsers).where(eq(sessionUsers.studentId, studentId))),
-                inArray(sessions.groupId, db.select({ groupId: groupStudents.groupId }).from(groupStudents).where(eq(groupStudents.studentId, studentId)))
+                inArray(sessions.id, db.select({ sessionId: sessionGroups.sessionId }).from(sessionGroups).where(inArray(sessionGroups.groupId, db.select({ groupId: groupStudents.groupId }).from(groupStudents).where(eq(groupStudents.studentId, studentId)))))
             )
         ))
         .orderBy(sql`${sessions.sessionDate} ASC`);
@@ -134,7 +134,7 @@ export const getSessionHistory = async (req: Request, res: Response) => {
             lt(sessions.sessionDate, new Date(today)),
             or(
                 inArray(sessions.id, db.select({ sessionId: sessionUsers.sessionId }).from(sessionUsers).where(eq(sessionUsers.studentId, studentId))),
-                inArray(sessions.groupId, db.select({ groupId: groupStudents.groupId }).from(groupStudents).where(eq(groupStudents.studentId, studentId)))
+                inArray(sessions.id, db.select({ sessionId: sessionGroups.sessionId }).from(sessionGroups).where(inArray(sessionGroups.groupId, db.select({ groupId: groupStudents.groupId }).from(groupStudents).where(eq(groupStudents.studentId, studentId)))))
             )
         ))
         .orderBy(sql`${sessions.sessionDate} DESC`);
@@ -176,7 +176,6 @@ export const joinSession = async (req: Request, res: Response) => {
         .select({
             id: sessions.id,
             sessionLink: sessions.session_link,
-            groupId: sessions.groupId,
         })
         .from(sessions)
         .where(eq(sessions.id, sessionId));
@@ -193,12 +192,13 @@ export const joinSession = async (req: Request, res: Response) => {
 
     let hasAccess = !!directMembership;
 
-    if (!hasAccess && session.groupId) {
+    if (!hasAccess) {
         const [groupMembership] = await db
-            .select({ id: groupStudents.id })
-            .from(groupStudents)
+            .select({ id: sessionGroups.id })
+            .from(sessionGroups)
+            .innerJoin(groupStudents, eq(sessionGroups.groupId, groupStudents.groupId))
             .where(and(
-                eq(groupStudents.groupId, session.groupId),
+                eq(sessionGroups.sessionId, sessionId),
                 eq(groupStudents.studentId, studentId),
             ));
         hasAccess = !!groupMembership;

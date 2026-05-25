@@ -1,0 +1,13 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const catchAsync_1 = require("../../utils/catchAsync");
+const grade_1 = require("../../controllers/admin/grade");
+const router = (0, express_1.Router)();
+router.post("/", (0, catchAsync_1.catchAsync)(grade_1.createGrade));
+router.get("/", (0, catchAsync_1.catchAsync)(grade_1.getAllGrades));
+router.get("/category/:categoryId", (0, catchAsync_1.catchAsync)(grade_1.getGradesByCategoryId));
+router.get("/:id", (0, catchAsync_1.catchAsync)(grade_1.getGradeById));
+router.put("/:id", (0, catchAsync_1.catchAsync)(grade_1.updateGrade));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(grade_1.deleteGrade));
+exports.default = router;

@@ -1,0 +1,14 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const Groups_1 = require("../../controllers/admin/Groups");
+const catchAsync_1 = require("../../utils/catchAsync");
+const router = (0, express_1.Router)();
+router.get("/select", (0, catchAsync_1.catchAsync)(Groups_1.selectOptions));
+router.get("/search-students", (0, catchAsync_1.catchAsync)(Groups_1.searchStudents));
+router.get("/", (0, catchAsync_1.catchAsync)(Groups_1.getAllGroups));
+router.get("/:id", (0, catchAsync_1.catchAsync)(Groups_1.getGroupById));
+router.post("/", (0, catchAsync_1.catchAsync)(Groups_1.createGroup));
+router.put("/:id", (0, catchAsync_1.catchAsync)(Groups_1.updateGroup));
+router.delete("/:id", (0, catchAsync_1.catchAsync)(Groups_1.deleteGroup));
+exports.default = router;
