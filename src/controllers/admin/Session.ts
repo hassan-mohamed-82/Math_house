@@ -20,75 +20,35 @@ import { NotFound } from "../../Errors";
 
 // Selections
 export const selectCategory = async (req: Request, res: Response) => {
-    const allCategories = await db.select({
-        id: category.id,
-        name: category.name,
-        parentCategoryId: category.parentCategoryId,
-    }).from(category);
+    const parentCategories = await db
+        .select({ id: category.id, name: category.name })
+        .from(category)
+        .where(sql`${category.parentCategoryId} IS NULL`);
 
-    const categoryMap = new Map<string, typeof allCategories[0]>();
-    const parentIds = new Set<string>();
-
-    allCategories.forEach(cat => {
-        categoryMap.set(cat.id, cat);
-        if (cat.parentCategoryId) {
-            parentIds.add(cat.parentCategoryId);
-        }
-    });
-
-    const leafCategories = allCategories.filter(cat => !parentIds.has(cat.id));
-
-    const formattedCategories = leafCategories.map(leaf => {
-        let current = leaf;
-        const ancestors: string[] = [];
-
-        while (current) {
-            ancestors.unshift(current.name);
-            if (current.parentCategoryId && categoryMap.has(current.parentCategoryId)) {
-                current = categoryMap.get(current.parentCategoryId)!;
-            } else {
-                break;
-            }
-        }
-        return {
-            id: leaf.id,
-            name: ancestors.join(" > "),
-            root: ancestors[0] || leaf.name
-        };
-    });
-
-    const groupedCategories = formattedCategories.reduce((acc: any, curr) => {
-        const { root, ...rest } = curr;
-        if (!acc[root]) {
-            acc[root] = [];
-        }
-        acc[root].push(rest);
-        return acc;
-    }, {});
-
-    const result = Object.keys(groupedCategories).map(key => ({
-        root: key,
-        children: groupedCategories[key]
-    }));
-
-    return SuccessResponse(res, { categories: result });
+    return SuccessResponse(res, { categories: parentCategories });
 };
 
 export const selectSubCategory = async (req: Request, res: Response) => {
-    const { categoryId } = req.params;
+    const { categoryId } = req.query;
 
-    const parentCat = await db
-        .select({ id: category.id })
-        .from(category)
-        .where(eq(category.id, categoryId))
-        .limit(1);
+    if (categoryId) {
+        const parentCat = await db
+            .select({ id: category.id })
+            .from(category)
+            .where(eq(category.id, categoryId as string))
+            .limit(1);
 
-    if (parentCat.length === 0) throw new BadRequest("Category not found");
+        if (parentCat.length === 0) throw new BadRequest("Category not found");
+    }
 
     const subCategories = await db
         .select({ id: category.id, name: category.name })
         .from(category)
-        .where(eq(category.parentCategoryId, categoryId));
+        .where(
+            categoryId
+                ? eq(category.parentCategoryId, categoryId as string)
+                : sql`${category.parentCategoryId} IS NOT NULL`
+        );
 
     return SuccessResponse(res, { subCategories });
 };
