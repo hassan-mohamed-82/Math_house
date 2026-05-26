@@ -41,9 +41,25 @@ export const selectSubCategory = async (req: Request, res: Response) => {
         if (parentCat.length === 0) throw new BadRequest("Category not found");
     }
 
+    const parentCategory = category.$inferSelect;
+    const parentAlias = db.$with("parent").as(
+        db.select({ id: category.id, name: category.name }).from(category)
+    );
+
     const subCategories = await db
-        .select({ id: category.id, name: category.name })
+        .select({
+            id: category.id,
+            name: category.name,
+            parentCategory: {
+                id: sql<string>`parent.id`.as("parentId"),
+                name: sql<string>`parent.name`.as("parentName"),
+            },
+        })
         .from(category)
+        .leftJoin(
+            sql`${category} as parent`,
+            sql`${category.parentCategoryId} = parent.id`
+        )
         .where(
             categoryId
                 ? eq(category.parentCategoryId, categoryId as string)
