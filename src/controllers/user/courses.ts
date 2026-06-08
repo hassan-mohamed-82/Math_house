@@ -3,7 +3,7 @@ import { courses } from "../../models/schema/admin/courses";
 import { db } from "../../models/connection";
 import { category, teachers, chapters, courseTeachers, semesters, Student, grade, enrolledItems } from "../../models/schema";
 import { prices } from "../../models/schema/admin/prices";
-import { eq, count, inArray, and, or } from "drizzle-orm";
+import { eq, count, inArray, and, or, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { checkAccess } from "../../utils/accessControl";
@@ -136,5 +136,39 @@ export const getCourseById = async (req: Request, res: Response) => {
         semesters: courseSemestersList,
         pricePlans: coursePricePlans,
         isLocked: !hasAccess
+    }, 200);
+}
+
+// 3. Get purchased courses
+export const getPurchasedCourses = async (req: Request, res: Response) => {
+    const studentId = req.user.id;
+
+    const purchasedCourses = await db
+        .select({
+            course: courses,
+            enrollmentId: enrolledItems.id,
+            expiresAt: enrolledItems.expiresAt,
+            status: enrolledItems.status,
+            createdAt: enrolledItems.createdAt,
+        })
+        .from(enrolledItems)
+        .innerJoin(courses, eq(enrolledItems.courseId, courses.id))
+        .where(
+            eq(enrolledItems.studentId, studentId)
+        )
+        .orderBy(desc(enrolledItems.createdAt));
+
+    return SuccessResponse(res, { 
+        message: "Purchased courses retrieved successfully", 
+        courses: purchasedCourses.map(p => {
+            const isExpired = p.expiresAt && p.expiresAt < new Date();
+            return {
+                ...p.course,
+                enrollmentId: p.enrollmentId,
+                expiresAt: p.expiresAt,
+                status: isExpired ? "this is expired" : p.status,
+                purchasedAt: p.createdAt
+            };
+        })
     }, 200);
 }

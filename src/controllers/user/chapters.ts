@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { chapters, courses, category, teachers, lessons, semesters, enrolledItems } from "../../models/schema";
 import { prices } from "../../models/schema/admin/prices";
-import { eq, asc, and, sql, inArray, isNotNull } from "drizzle-orm";
+import { eq, asc, and, sql, inArray, isNotNull, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { checkAccess } from "../../utils/accessControl";
@@ -198,5 +198,42 @@ export const getChapterById = async (req: Request, res: Response) => {
         semester: chapterData.semester,
         teacher: chapterData.teacher,
         lessons: lessonsWithLockStatus
+    }, 200);
+}
+
+// 4. Get purchased chapters
+export const getPurchasedChapters = async (req: Request, res: Response) => {
+    const studentId = req.user.id;
+
+    const purchasedChapters = await db
+        .select({
+            chapter: chapters,
+            course: courses,
+            enrollmentId: enrolledItems.id,
+            expiresAt: enrolledItems.expiresAt,
+            status: enrolledItems.status,
+            createdAt: enrolledItems.createdAt,
+        })
+        .from(enrolledItems)
+        .innerJoin(chapters, eq(enrolledItems.chapterId, chapters.id))
+        .leftJoin(courses, eq(chapters.courseId, courses.id))
+        .where(
+            eq(enrolledItems.studentId, studentId)
+        )
+        .orderBy(desc(enrolledItems.createdAt));
+
+    return SuccessResponse(res, { 
+        message: "Purchased chapters retrieved successfully", 
+        chapters: purchasedChapters.map(p => {
+            const isExpired = p.expiresAt && p.expiresAt < new Date();
+            return {
+                ...p.chapter,
+                courseName: p.course?.name,
+                enrollmentId: p.enrollmentId,
+                expiresAt: p.expiresAt,
+                status: isExpired ? "this is expired" : p.status,
+                purchasedAt: p.createdAt
+            };
+        })
     }, 200);
 }

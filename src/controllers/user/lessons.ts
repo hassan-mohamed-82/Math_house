@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { eq, asc, and, inArray } from "drizzle-orm";
+import { eq, asc, and, inArray, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound } from "../../Errors";
 import { lessons, lessonIdeas, chapters, courses, teachers, semesters, prices, enrolledItems } from "../../models/schema";
@@ -153,5 +153,42 @@ export const getLessonsByChapterId = async (req: Request, res: Response) => {
     }, 200);
 };
 
+// 3. Get purchased lessons
+export const getPurchasedLessons = async (req: Request, res: Response) => {
+    const studentId = req.user.id;
 
+    const purchasedLessons = await db
+        .select({
+            lesson: lessons,
+            chapter: chapters,
+            course: courses,
+            enrollmentId: enrolledItems.id,
+            expiresAt: enrolledItems.expiresAt,
+            status: enrolledItems.status,
+            createdAt: enrolledItems.createdAt,
+        })
+        .from(enrolledItems)
+        .innerJoin(lessons, eq(enrolledItems.lessonId, lessons.id))
+        .leftJoin(chapters, eq(lessons.chapterId, chapters.id))
+        .leftJoin(courses, eq(lessons.courseId, courses.id))
+        .where(
+            eq(enrolledItems.studentId, studentId)
+        )
+        .orderBy(desc(enrolledItems.createdAt));
 
+    return SuccessResponse(res, { 
+        message: "Purchased lessons retrieved successfully", 
+        lessons: purchasedLessons.map(p => {
+            const isExpired = p.expiresAt && p.expiresAt < new Date();
+            return {
+                ...p.lesson,
+                chapterName: p.chapter?.name,
+                courseName: p.course?.name,
+                enrollmentId: p.enrollmentId,
+                expiresAt: p.expiresAt,
+                status: isExpired ? "this is expired" : p.status,
+                purchasedAt: p.createdAt
+            };
+        })
+    }, 200);
+}
