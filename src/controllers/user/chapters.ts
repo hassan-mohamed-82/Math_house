@@ -156,6 +156,7 @@ export const getChapterById = async (req: Request, res: Response) => {
 
     // Check individual lesson enrollments (in case they bought a lesson but not the chapter)
     let enrolledLessonIds = new Set<string>();
+    let lessonPrices: any[] = [];
     if (chapterLessons.length > 0) {
         const lessonEnrollments = await db
             .select({ lessonId: enrolledItems.lessonId })
@@ -168,11 +169,22 @@ export const getChapterById = async (req: Request, res: Response) => {
                 )
             );
         enrolledLessonIds = new Set(lessonEnrollments.map(e => e.lessonId).filter((id): id is string => !!id));
+
+        lessonPrices = await db
+            .select()
+            .from(prices)
+            .where(
+                and(
+                    eq(prices.targetType, "lesson"),
+                    inArray(prices.targetId, chapterLessons.map(l => l.id))
+                )
+            );
     }
 
     const lessonsWithLockStatus = chapterLessons.map(lesson => ({
         ...lesson,
-        isLocked: !hasAccess && !enrolledLessonIds.has(lesson.id)
+        isLocked: !hasAccess && !enrolledLessonIds.has(lesson.id),
+        pricePlans: lessonPrices.filter(p => p.targetId === lesson.id)
     }));
 
     return SuccessResponse(res, {

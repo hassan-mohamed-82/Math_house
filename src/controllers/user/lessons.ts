@@ -129,10 +129,22 @@ export const getLessonsByChapterId = async (req: Request, res: Response) => {
     
     const enrolledLessonIds = new Set(lessonEnrollments.map(e => e.lessonId).filter((id): id is string => !!id));
 
-    // 5. Format results with isLocked status
+    // Fetch prices for all lessons
+    const lessonsPrices = await db
+        .select()
+        .from(prices)
+        .where(
+            and(
+                eq(prices.targetType, "lesson"),
+                inArray(prices.targetId, lessonIds)
+            )
+        );
+
+    // 5. Format results with isLocked status and prices
     const lessonsWithLockStatus = allLessons.map(row => ({
         ...row,
-        isLocked: !hasParentAccess && !enrolledLessonIds.has(row.lesson.id)
+        isLocked: !hasParentAccess && !enrolledLessonIds.has(row.lesson.id),
+        prices: lessonsPrices.filter(p => p.targetId === row.lesson.id)
     }));
 
     return SuccessResponse(res, {
