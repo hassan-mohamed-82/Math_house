@@ -382,27 +382,27 @@ export const getMyPurchases = async (req: Request, res: Response) => {
     const courseOfChapter  = aliasedTable(courses, "course_of_chapter");
     const chapterOfLesson  = aliasedTable(chapters, "chapter_of_lesson");
 
+    // 1. الشروط الأساسية مبنية على جدول الـ payment مباشرة لضمان عدم سقوط الـ rejected
     const conditions = [
-        eq(enrolledItems.studentId, studentId),
-        or(
-            eq(payment.purpose, "purchase"),
-            isNull(payment.purpose)
-        )
+        eq(payment.studentId, studentId),
+        eq(payment.purpose, "purchase") // جلب المشتريات فقط وتجاهل شحن المحفظة
     ];
 
-    if (status && typeof status === "string" && status.trim() !== "") {
-        conditions.push(eq(enrolledItems.status, status as any));
-    }
+    // 2. فلاتر اختيارية من الـ Query
     if (paymentStatus && typeof paymentStatus === "string" && paymentStatus.trim() !== "") {
         conditions.push(eq(payment.status, paymentStatus as any));
     }
+    if (status && typeof status === "string" && status.trim() !== "") {
+        conditions.push(eq(enrolledItems.status, status as any));
+    }
 
+    // 3. الاستعلام يبدأ من الـ payment لضمان ظهور الفاتورة المرفوضة
     const purchases = await db
         .select({
-            enrollmentId: enrolledItems.id,
-            status:       enrolledItems.status,
-            createdAt:    enrolledItems.createdAt,
-            expiresAt:    enrolledItems.expiresAt,
+            enrollmentId:  enrolledItems.id,
+            status:        enrolledItems.status, 
+            createdAt:     payment.createdAt,    
+            expiresAt:     enrolledItems.expiresAt,
             pricePlan: {
                 id:            prices.id,
                 label:         prices.durationLabel,
@@ -433,13 +433,14 @@ export const getMyPurchases = async (req: Request, res: Response) => {
             paymentDetails: {
                 id:      payment.id,
                 amount:  payment.amount,
-                status:  payment.status,
+                status:  payment.status, // pending, completed, rejected
                 method:  paymentMethod.name,
                 receipt: payment.receiptImg,
                 purpose: payment.purpose,
             },
         })
-        .from(enrolledItems)
+        .from(payment) // 👈 الانطلاق من هنا يضمن ألا تختفي أي فاتورة مرفوضة
+        .leftJoin(enrolledItems,    eq(enrolledItems.paymentId,  payment.id))
         .leftJoin(prices,           eq(enrolledItems.priceId,    prices.id))
         .leftJoin(courses,          eq(enrolledItems.courseId,   courses.id))
         .leftJoin(semesters,        eq(enrolledItems.semesterId, semesters.id))
@@ -448,12 +449,10 @@ export const getMyPurchases = async (req: Request, res: Response) => {
         .leftJoin(courseOfChapter,  eq(chapters.courseId,        courseOfChapter.id))
         .leftJoin(lessons,          eq(enrolledItems.lessonId,   lessons.id))
         .leftJoin(chapterOfLesson,  eq(lessons.chapterId,        chapterOfLesson.id))
-        .leftJoin(payment,          eq(enrolledItems.paymentId,  payment.id))
         .leftJoin(paymentMethod,    eq(payment.paymentMethodId,  paymentMethod.id))
         .where(and(...conditions))
-        .orderBy(sql`${enrolledItems.createdAt} DESC`);
+        .orderBy(sql`${payment.createdAt} DESC`);
 
-    // 5. مابينج البيانات لتسهيل قراءتها وتوحيدها للـ Front-end
     const formattedPurchases = purchases.map((item) => {
         let type: "course" | "semester" | "chapter" | "lesson" = "lesson";
         let details: any = item.lesson;
@@ -469,22 +468,23 @@ export const getMyPurchases = async (req: Request, res: Response) => {
             details = item.chapter;
         }
 
+        // إذا كانت الفاتورة مرفوضة ولم ينشأ لها سجل اشتراك، نضع تفاصيل تقريبية من الـ Price Plan أو نترك الـ details كما هي
         return {
-            id:            item.enrollmentId,
-            status:        item.status,
-            paymentStatus: item.paymentDetails.status ?? null,
+            id:            item.enrollmentId ?? `inv-${item.paymentDetails.id}`, // fallback id للفرونت إند
+            status:        item.status ?? "pending", 
+            paymentStatus: item.paymentDetails.status,
             date:          item.createdAt,
-            expiresAt:     item.expiresAt,
+            expiresAt:     item.expiresAt ?? null,
             type,
-            details,
-            pricePlan: item.pricePlan?.id ? item.pricePlan : null,
-            payment:   item.paymentDetails.id ? {
+            details:       item.course?.id || item.semester?.id || item.chapter?.id || item.lesson?.id ? details : { name: "طلب شراء مرفوض" },
+            pricePlan:     item.pricePlan?.id ? item.pricePlan : null,
+            payment: {
                 id:      item.paymentDetails.id,
                 amount:  item.paymentDetails.amount,
                 status:  item.paymentDetails.status,
                 method:  item.paymentDetails.method,
                 receipt: item.paymentDetails.receipt,
-            } : null,
+            },
         };
     });
 
