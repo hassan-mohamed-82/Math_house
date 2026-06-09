@@ -212,6 +212,21 @@ export const replytoPackageBuyRequest = async (req: Request, res: Response) => {
             .set({ status: newStatus })
             .where(eq(payment.id, paymentId));
 
+        // Notify student of rejection
+        if (existingPayment.studentId) {
+            const [student] = await db
+                .select({ email: Student.email, firstname: Student.firstname })
+                .from(Student)
+                .where(eq(Student.id, existingPayment.studentId));
+            if (student && student.email) {
+                await sendEmail({
+                    to: student.email,
+                    subject: "Package Purchase Request Rejected",
+                    html: `<h1>Purchase Request Rejected</h1><p>Hello ${student.firstname || 'Student'},</p><p>Unfortunately, your package purchase request has been rejected. Please contact support if you have any questions or try submitting a new request.</p>`
+                }).catch(console.error);
+            }
+        }
+
         return SuccessResponse(res, { message: `Payment request has been ${newStatus}` });
     }
 
@@ -483,21 +498,27 @@ export const replyToContentBuyRequest = async (req: Request, res: Response) => {
                 .update(enrolledItems)
                 .set({ status: 'active' })
                 .where(eq(enrolledItems.paymentId, paymentId));
-        } else {
-            await tx
-                .delete(enrolledItems)
-                .where(eq(enrolledItems.paymentId, paymentId));
         }
+        // On reject: enrolledItems intentionally left as "pending" so the
+        // student can see the rejected purchase in getMyPurchases via paymentStatus.
     });
 
-    if (action === 'approve' && existingPayment.studentId) {
-        const [student] = await db.select({ email: Student.email, firstname: Student.firstname }).from(Student).where(eq(Student.id, existingPayment.studentId));
+    // Notify student by email regardless of approve or reject
+    if (existingPayment.studentId) {
+        const [student] = await db
+            .select({ email: Student.email, firstname: Student.firstname })
+            .from(Student)
+            .where(eq(Student.id, existingPayment.studentId));
+
         if (student && student.email) {
+            const isApproved = action === 'approve';
             await sendEmail({
                 to: student.email,
-                subject: "Content Purchase Approved",
-                html: `<h1>Purchase Approved</h1><p>Hello ${student.firstname || 'Student'},</p><p>Your request to purchase content has been approved. You can now access your courses and lessons.</p>`
-            }).catch(console.error); // Catch email errors so it doesn't crash the request
+                subject: isApproved ? "Content Purchase Approved ✅" : "Content Purchase Request Rejected ❌",
+                html: isApproved
+                    ? `<h1>Purchase Approved</h1><p>Hello ${student.firstname || 'Student'},</p><p>Your request to purchase content has been <strong>approved</strong>. You can now access your courses and lessons.</p>`
+                    : `<h1>Purchase Request Rejected</h1><p>Hello ${student.firstname || 'Student'},</p><p>Unfortunately, your content purchase request has been <strong>rejected</strong>. Please contact support if you have any questions or try submitting a new request.</p>`
+            }).catch(console.error); // Never crash the request over an email failure
         }
     }
 

@@ -258,7 +258,7 @@ export const enrollInCourse = async (req: Request, res: Response) => {
 // ─── 2. My Purchases ─────────────────────────────────────────────────────────
 export const getMyPurchases = async (req: Request, res: Response) => {
     const studentId = req.user.id;
-    const { status } = req.query;
+    const { status, paymentStatus } = req.query;
 
     const courseOfSemester = aliasedTable(courses, "course_of_semester");
     const courseOfChapter  = aliasedTable(courses, "course_of_chapter");
@@ -298,7 +298,9 @@ export const getMyPurchases = async (req: Request, res: Response) => {
                 chapterName: chapterOfLesson.name,
             },
             paymentDetails: {
+                id:      payment.id,
                 amount:  payment.amount,
+                status:  payment.status,
                 method:  paymentMethod.name,
                 receipt: payment.receiptImg,
             },
@@ -321,6 +323,10 @@ export const getMyPurchases = async (req: Request, res: Response) => {
         query = query.where(eq(enrolledItems.status, status as any));
     }
 
+    if (paymentStatus) {
+        query = query.where(eq(payment.status, paymentStatus as any));
+    }
+
     const purchases = await query.orderBy(sql`${enrolledItems.createdAt} DESC`);
 
     const formattedPurchases = purchases.map((item) => {
@@ -339,14 +345,21 @@ export const getMyPurchases = async (req: Request, res: Response) => {
         }
 
         return {
-            id:        item.enrollmentId,
-            status:    item.status,
-            date:      item.createdAt,
-            expiresAt: item.expiresAt,
+            id:            item.enrollmentId,
+            status:        item.status,
+            paymentStatus: item.paymentDetails.status ?? null,
+            date:          item.createdAt,
+            expiresAt:     item.expiresAt,
             type,
             details,
             pricePlan: item.pricePlan?.id ? item.pricePlan : null,
-            payment:   item.paymentDetails.amount ? item.paymentDetails : null,
+            payment:   item.paymentDetails.amount ? {
+                id:      item.paymentDetails.id,
+                amount:  item.paymentDetails.amount,
+                status:  item.paymentDetails.status,
+                method:  item.paymentDetails.method,
+                receipt: item.paymentDetails.receipt,
+            } : null,
         };
     });
 
