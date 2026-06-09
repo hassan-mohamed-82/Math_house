@@ -172,7 +172,10 @@ export const getPurchasedLessons = async (req: Request, res: Response) => {
         .leftJoin(chapters, eq(lessons.chapterId, chapters.id))
         .leftJoin(courses, eq(lessons.courseId, courses.id))
         .where(
-            eq(enrolledItems.studentId, studentId)
+            and(
+                eq(enrolledItems.studentId, studentId),
+                inArray(enrolledItems.status, ["active", "expired"])
+            )
         )
         .orderBy(desc(enrolledItems.createdAt));
 

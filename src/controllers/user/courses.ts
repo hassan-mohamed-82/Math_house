@@ -154,7 +154,10 @@ export const getPurchasedCourses = async (req: Request, res: Response) => {
         .from(enrolledItems)
         .innerJoin(courses, eq(enrolledItems.courseId, courses.id))
         .where(
-            eq(enrolledItems.studentId, studentId)
+            and(
+                eq(enrolledItems.studentId, studentId),
+                inArray(enrolledItems.status, ["active", "expired"])
+            )
         )
         .orderBy(desc(enrolledItems.createdAt));
 
