@@ -256,6 +256,124 @@ export const enrollInCourse = async (req: Request, res: Response) => {
 };
 
 // ─── 2. My Purchases ─────────────────────────────────────────────────────────
+// export const getMyPurchases = async (req: Request, res: Response) => {
+//     const studentId = req.user.id;
+//     const { status, paymentStatus } = req.query;
+
+//     const courseOfSemester = aliasedTable(courses, "course_of_semester");
+//     const courseOfChapter  = aliasedTable(courses, "course_of_chapter");
+//     const chapterOfLesson  = aliasedTable(chapters, "chapter_of_lesson");
+
+//     let query = db
+//         .select({
+//             enrollmentId: enrolledItems.id,
+//             status:       enrolledItems.status,
+//             createdAt:    enrolledItems.createdAt,
+//             expiresAt:    enrolledItems.expiresAt,
+//             pricePlan: {
+//                 id:            prices.id,
+//                 label:         prices.durationLabel,
+//                 durationDays:  prices.durationDays,
+//                 priceEgp:      prices.totalPriceEgp,
+//                 priceUsd:      prices.totalPriceUsd,
+//             },
+//             course: {
+//                 id:    courses.id,
+//                 name:  courses.name,
+//                 image: courses.image,
+//             },
+//             semester: {
+//                 id:         semesters.id,
+//                 name:       semesters.name,
+//                 courseName: courseOfSemester.name,
+//             },
+//             chapter: {
+//                 id:         chapters.id,
+//                 name:       chapters.name,
+//                 courseName: courseOfChapter.name,
+//             },
+//             lesson: {
+//                 id:          lessons.id,
+//                 name:        lessons.name,
+//                 chapterName: chapterOfLesson.name,
+//             },
+//             paymentDetails: {
+//                 id:      payment.id,
+//                 amount:  payment.amount,
+//                 status:  payment.status,
+//                 method:  paymentMethod.name,
+//                 receipt: payment.receiptImg,
+//             },
+//         })
+//         .from(enrolledItems)
+//         .leftJoin(prices,           eq(enrolledItems.priceId,    prices.id))
+//         .leftJoin(courses,          eq(enrolledItems.courseId,   courses.id))
+//         .leftJoin(semesters,        eq(enrolledItems.semesterId, semesters.id))
+//         .leftJoin(courseOfSemester, eq(semesters.courseId,       courseOfSemester.id))
+//         .leftJoin(chapters,         eq(enrolledItems.chapterId,  chapters.id))
+//         .leftJoin(courseOfChapter,  eq(chapters.courseId,        courseOfChapter.id))
+//         .leftJoin(lessons,          eq(enrolledItems.lessonId,   lessons.id))
+//         .leftJoin(chapterOfLesson,  eq(lessons.chapterId,        chapterOfLesson.id))
+//         .leftJoin(payment,          eq(enrolledItems.paymentId,  payment.id))
+//         .leftJoin(paymentMethod,    eq(payment.paymentMethodId,  paymentMethod.id))
+//         .where(eq(enrolledItems.studentId, studentId))
+//         .$dynamic();
+
+//     if (status) {
+//         query = query.where(eq(enrolledItems.status, status as any));
+//     }
+
+//     if (paymentStatus) {
+//         query = query.where(eq(payment.status, paymentStatus as any));
+//     }
+
+//     const purchases = await query.orderBy(sql`${enrolledItems.createdAt} DESC`);
+
+//     const formattedPurchases = purchases.map((item) => {
+//         let type: "course" | "semester" | "chapter" | "lesson" = "lesson";
+//         let details: any = item.lesson;
+
+//         if (item.course?.id) {
+//             type = "course";
+//             details = item.course;
+//         } else if (item.semester?.id) {
+//             type = "semester";
+//             details = item.semester;
+//         } else if (item.chapter?.id) {
+//             type = "chapter";
+//             details = item.chapter;
+//         }
+
+//         return {
+//             id:            item.enrollmentId,
+//             status:        item.status,
+//             paymentStatus: item.paymentDetails.status ?? null,
+//             date:          item.createdAt,
+//             expiresAt:     item.expiresAt,
+//             type,
+//             details,
+//             pricePlan: item.pricePlan?.id ? item.pricePlan : null,
+//             payment:   item.paymentDetails.amount ? {
+//                 id:      item.paymentDetails.id,
+//                 amount:  item.paymentDetails.amount,
+//                 status:  item.paymentDetails.status,
+//                 method:  item.paymentDetails.method,
+//                 receipt: item.paymentDetails.receipt,
+//             } : null,
+//         };
+//     });
+
+//     return SuccessResponse(
+//         res,
+//         {
+//             message:   "My Library retrieved successfully",
+//             count:     formattedPurchases.length,
+//             purchases: formattedPurchases,
+//         },
+//         200
+//     );
+// };
+
 export const getMyPurchases = async (req: Request, res: Response) => {
     const studentId = req.user.id;
     const { status, paymentStatus } = req.query;
@@ -264,7 +382,25 @@ export const getMyPurchases = async (req: Request, res: Response) => {
     const courseOfChapter  = aliasedTable(courses, "course_of_chapter");
     const chapterOfLesson  = aliasedTable(chapters, "chapter_of_lesson");
 
-    let query = db
+    // 1. بناء الشروط الأساسية: (معرف الطالب + أن يكون غرض الدفع هو الشراء المباشر للحصص/المواد)
+    const conditions = [
+        eq(enrolledItems.studentId, studentId),
+        eq(payment.purpose, "purchase") // استرجاع عمليات الشراء فقط وتجاهل الـ wallet_recharge
+    ];
+
+    // 2. تصفية ديناميكية بناءً على حالة الاشتراك (إذا أرسلها الفرونت إند)
+    if (status && typeof status === "string" && status.trim() !== "") {
+        conditions.push(eq(enrolledItems.status, status as any));
+    }
+
+    // 3. تصفية ديناميكية بناءً على حالة الدفع (إذا أرسلها الفرونت إند)
+    // إذا لم يرسل الفرونت إند فلتر معين، سيعود الكود تلقائياً بكل الحالات (pending, completed, rejected)
+    if (paymentStatus && typeof paymentStatus === "string" && paymentStatus.trim() !== "") {
+        conditions.push(eq(payment.status, paymentStatus as any));
+    }
+
+    // 4. بناء الـ Query التنفيذية الاستعلامية دُفعة واحدة
+    const purchases = await db
         .select({
             enrollmentId: enrolledItems.id,
             status:       enrolledItems.status,
@@ -303,6 +439,7 @@ export const getMyPurchases = async (req: Request, res: Response) => {
                 status:  payment.status,
                 method:  paymentMethod.name,
                 receipt: payment.receiptImg,
+                purpose: payment.purpose, // ممرر للتأكيد والمراجعة بالـ console إذا لزم الأمر
             },
         })
         .from(enrolledItems)
@@ -316,19 +453,10 @@ export const getMyPurchases = async (req: Request, res: Response) => {
         .leftJoin(chapterOfLesson,  eq(lessons.chapterId,        chapterOfLesson.id))
         .leftJoin(payment,          eq(enrolledItems.paymentId,  payment.id))
         .leftJoin(paymentMethod,    eq(payment.paymentMethodId,  paymentMethod.id))
-        .where(eq(enrolledItems.studentId, studentId))
-        .$dynamic();
+        .where(and(...conditions)) // حماية كاملة ودمج آمن للشروط والـ Purpose
+        .orderBy(sql`${enrolledItems.createdAt} DESC`);
 
-    if (status) {
-        query = query.where(eq(enrolledItems.status, status as any));
-    }
-
-    if (paymentStatus) {
-        query = query.where(eq(payment.status, paymentStatus as any));
-    }
-
-    const purchases = await query.orderBy(sql`${enrolledItems.createdAt} DESC`);
-
+    // 5. مابينج البيانات لتسهيل قراءتها في جانب العميل
     const formattedPurchases = purchases.map((item) => {
         let type: "course" | "semester" | "chapter" | "lesson" = "lesson";
         let details: any = item.lesson;
