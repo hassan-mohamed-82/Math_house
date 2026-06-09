@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from "uuid";
 import { db } from "../../models/connection";
 import { enrolledItems, courses, chapters, lessons, semesters, wallet, walletTransaction, paymentMethod, payment, teachers } from "../../models/schema";
 import { prices } from "../../models/schema/admin/prices";
-import { eq, and, or, inArray, aliasedTable, sql, count } from "drizzle-orm";
+import { eq, and, or, inArray, aliasedTable, sql, count , isNull} from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { validateAndSaveLogo } from "../../utils/handleImages";
@@ -382,24 +382,21 @@ export const getMyPurchases = async (req: Request, res: Response) => {
     const courseOfChapter  = aliasedTable(courses, "course_of_chapter");
     const chapterOfLesson  = aliasedTable(chapters, "chapter_of_lesson");
 
-    // 1. بناء الشروط الأساسية: (معرف الطالب + أن يكون غرض الدفع هو الشراء المباشر للحصص/المواد)
     const conditions = [
         eq(enrolledItems.studentId, studentId),
-        eq(payment.purpose, "purchase") // استرجاع عمليات الشراء فقط وتجاهل الـ wallet_recharge
+        or(
+            eq(payment.purpose, "purchase"),
+            isNull(payment.purpose)
+        )
     ];
 
-    // 2. تصفية ديناميكية بناءً على حالة الاشتراك (إذا أرسلها الفرونت إند)
     if (status && typeof status === "string" && status.trim() !== "") {
         conditions.push(eq(enrolledItems.status, status as any));
     }
-
-    // 3. تصفية ديناميكية بناءً على حالة الدفع (إذا أرسلها الفرونت إند)
-    // إذا لم يرسل الفرونت إند فلتر معين، سيعود الكود تلقائياً بكل الحالات (pending, completed, rejected)
     if (paymentStatus && typeof paymentStatus === "string" && paymentStatus.trim() !== "") {
         conditions.push(eq(payment.status, paymentStatus as any));
     }
 
-    // 4. بناء الـ Query التنفيذية الاستعلامية دُفعة واحدة
     const purchases = await db
         .select({
             enrollmentId: enrolledItems.id,
@@ -439,7 +436,7 @@ export const getMyPurchases = async (req: Request, res: Response) => {
                 status:  payment.status,
                 method:  paymentMethod.name,
                 receipt: payment.receiptImg,
-                purpose: payment.purpose, // ممرر للتأكيد والمراجعة بالـ console إذا لزم الأمر
+                purpose: payment.purpose,
             },
         })
         .from(enrolledItems)
@@ -453,10 +450,10 @@ export const getMyPurchases = async (req: Request, res: Response) => {
         .leftJoin(chapterOfLesson,  eq(lessons.chapterId,        chapterOfLesson.id))
         .leftJoin(payment,          eq(enrolledItems.paymentId,  payment.id))
         .leftJoin(paymentMethod,    eq(payment.paymentMethodId,  paymentMethod.id))
-        .where(and(...conditions)) // حماية كاملة ودمج آمن للشروط والـ Purpose
+        .where(and(...conditions))
         .orderBy(sql`${enrolledItems.createdAt} DESC`);
 
-    // 5. مابينج البيانات لتسهيل قراءتها في جانب العميل
+    // 5. مابينج البيانات لتسهيل قراءتها وتوحيدها للـ Front-end
     const formattedPurchases = purchases.map((item) => {
         let type: "course" | "semester" | "chapter" | "lesson" = "lesson";
         let details: any = item.lesson;
@@ -481,7 +478,7 @@ export const getMyPurchases = async (req: Request, res: Response) => {
             type,
             details,
             pricePlan: item.pricePlan?.id ? item.pricePlan : null,
-            payment:   item.paymentDetails.amount ? {
+            payment:   item.paymentDetails.id ? {
                 id:      item.paymentDetails.id,
                 amount:  item.paymentDetails.amount,
                 status:  item.paymentDetails.status,
