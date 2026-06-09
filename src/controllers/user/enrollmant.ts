@@ -437,6 +437,7 @@ export const getMyPurchases = async (req: Request, res: Response) => {
                 method:  paymentMethod.name,
                 receipt: payment.receiptImg,
                 purpose: payment.purpose,
+                reason:  payment.reason,
             },
         })
         .from(payment) // 👈 الانطلاق من هنا يضمن ألا تختفي أي فاتورة مرفوضة
@@ -476,7 +477,7 @@ export const getMyPurchases = async (req: Request, res: Response) => {
             date:          item.createdAt,
             expiresAt:     item.expiresAt ?? null,
             type,
-            details:       item.course?.id || item.semester?.id || item.chapter?.id || item.lesson?.id ? details : { name: "طلب شراء مرفوض" },
+            details:       item.course?.id || item.semester?.id || item.chapter?.id || item.lesson?.id || null,
             pricePlan:     item.pricePlan?.id ? item.pricePlan : null,
             payment: {
                 id:      item.paymentDetails.id,
@@ -484,6 +485,7 @@ export const getMyPurchases = async (req: Request, res: Response) => {
                 status:  item.paymentDetails.status,
                 method:  item.paymentDetails.method,
                 receipt: item.paymentDetails.receipt,
+                reason:  item.paymentDetails.reason,
             },
         };
     });

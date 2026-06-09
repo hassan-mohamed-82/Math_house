@@ -16,5 +16,6 @@ export const payment = mysqlTable("payment", {
     source: mysqlEnum("source", ["student", "parent"]).notNull(),
     purpose: mysqlEnum("purpose", ["wallet_recharge", "purchase"]).notNull(),
     packageId: char("packageId", { length: 36 }).references(() => packages.id),
+    reason: char("reason", { length: 255 }),
     createdAt: timestamp("createdAt").defaultNow(),
 });

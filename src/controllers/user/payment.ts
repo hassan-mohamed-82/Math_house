@@ -294,6 +294,7 @@ export const getPackageBuyHistory = async (req: Request, res: Response) => {
             createdAt: payment.createdAt,
             receiptImg: payment.receiptImg,
             source: payment.source,
+            reason: payment.reason,
             package: {
                 id: packages.id,
                 name: packages.name,

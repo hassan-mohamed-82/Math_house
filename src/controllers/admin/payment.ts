@@ -8,7 +8,7 @@ import { sendEmail } from '../../utils/sendEmails';
 
 export const replyToRechargeRequest = async (req: Request, res: Response) => {
     const paymentId = req.params.paymentId || req.params.id;
-    const { action } = req.body;
+    const { action, reason } = req.body;
 
     if (!paymentId) {
         throw new BadRequest("Payment ID is required");
@@ -49,7 +49,7 @@ export const replyToRechargeRequest = async (req: Request, res: Response) => {
 
     await db
         .update(payment)
-        .set({ status: newStatus })
+        .set({ status: newStatus, reason: action === 'reject' ? reason : null })
         .where(eq(payment.id, paymentId));
 
     if (newStatus === 'completed') {
@@ -139,6 +139,7 @@ export const getRechargeRequests = async (req: Request, res: Response) => {
             receiptImg: payment.receiptImg,
             source: payment.source,
             purpose: payment.purpose,
+            reason: payment.reason,
             student: {
                 id: Student.id,
                 firstname: Student.firstname,
@@ -175,7 +176,7 @@ export const getRechargeRequests = async (req: Request, res: Response) => {
 
 export const replytoPackageBuyRequest = async (req: Request, res: Response) => {
     const paymentId = req.params.paymentId || req.params.id;
-    const { action } = req.body;
+    const { action, reason } = req.body;
 
     if (!paymentId) {
         throw new BadRequest("Payment ID is required");
@@ -209,7 +210,7 @@ export const replytoPackageBuyRequest = async (req: Request, res: Response) => {
     if (newStatus === 'rejected') {
         await db
             .update(payment)
-            .set({ status: newStatus })
+            .set({ status: newStatus, reason })
             .where(eq(payment.id, paymentId));
 
         // Notify student of rejection
@@ -219,10 +220,11 @@ export const replytoPackageBuyRequest = async (req: Request, res: Response) => {
                 .from(Student)
                 .where(eq(Student.id, existingPayment.studentId));
             if (student && student.email) {
+                const reasonHtml = reason ? `<p><strong>Reason:</strong> ${reason}</p>` : '';
                 await sendEmail({
                     to: student.email,
                     subject: "Package Purchase Request Rejected",
-                    html: `<h1>Purchase Request Rejected</h1><p>Hello ${student.firstname || 'Student'},</p><p>Unfortunately, your package purchase request has been rejected. Please contact support if you have any questions or try submitting a new request.</p>`
+                    html: `<h1>Purchase Request Rejected</h1><p>Hello ${student.firstname || 'Student'},</p><p>Unfortunately, your package purchase request has been rejected.</p>${reasonHtml}<p>Please contact support if you have any questions or try submitting a new request.</p>`
                 }).catch(console.error);
             }
         }
@@ -264,7 +266,7 @@ export const replytoPackageBuyRequest = async (req: Request, res: Response) => {
     await db.transaction(async (tx) => {
         await tx
             .update(payment)
-            .set({ status: newStatus })
+            .set({ status: newStatus, reason: action === 'reject' ? reason : null })
             .where(eq(payment.id, paymentId));
 
         switch (packageType) {
@@ -337,6 +339,7 @@ export const getPackageBuyRequests = async (req: Request, res: Response) => {
             source: payment.source,
             purpose: payment.purpose,
             packageId: payment.packageId,
+            reason: payment.reason,
             student: {
                 id: Student.id,
                 firstname: Student.firstname,
@@ -421,6 +424,7 @@ export const getContentBuyRequests = async (req: Request, res: Response) => {
             receiptImg: payment.receiptImg,
             source: payment.source,
             purpose: payment.purpose,
+            reason: payment.reason,
             student: {
                 id: Student.id,
                 firstname: Student.firstname,
@@ -457,7 +461,7 @@ export const getContentBuyRequests = async (req: Request, res: Response) => {
 
 export const replyToContentBuyRequest = async (req: Request, res: Response) => {
     const paymentId = req.params.paymentId || req.params.id;
-    const { action } = req.body;
+    const { action, reason } = req.body;
 
     if (!paymentId) {
         throw new BadRequest("Payment ID is required");
@@ -490,7 +494,7 @@ export const replyToContentBuyRequest = async (req: Request, res: Response) => {
     await db.transaction(async (tx) => {
         await tx
             .update(payment)
-            .set({ status: newStatus })
+            .set({ status: newStatus, reason: action === 'reject' ? reason : null })
             .where(eq(payment.id, paymentId));
 
         if (action === 'approve') {
@@ -512,12 +516,13 @@ export const replyToContentBuyRequest = async (req: Request, res: Response) => {
 
         if (student && student.email) {
             const isApproved = action === 'approve';
+            const reasonHtml = (!isApproved && reason) ? `<p><strong>Reason:</strong> ${reason}</p>` : '';
             await sendEmail({
                 to: student.email,
                 subject: isApproved ? "Content Purchase Approved ✅" : "Content Purchase Request Rejected ❌",
                 html: isApproved
                     ? `<h1>Purchase Approved</h1><p>Hello ${student.firstname || 'Student'},</p><p>Your request to purchase content has been <strong>approved</strong>. You can now access your courses and lessons.</p>`
-                    : `<h1>Purchase Request Rejected</h1><p>Hello ${student.firstname || 'Student'},</p><p>Unfortunately, your content purchase request has been <strong>rejected</strong>. Please contact support if you have any questions or try submitting a new request.</p>`
+                    : `<h1>Purchase Request Rejected</h1><p>Hello ${student.firstname || 'Student'},</p><p>Unfortunately, your content purchase request has been <strong>rejected</strong>.</p>${reasonHtml}<p>Please contact support if you have any questions or try submitting a new request.</p>`
             }).catch(console.error); // Never crash the request over an email failure
         }
     }

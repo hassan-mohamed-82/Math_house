@@ -408,6 +408,7 @@ export const getWalletTransactions = async (req: Request, res: Response) => {
             paymentId: walletTransaction.paymentId,
             paymentStatus: payment.status,
             paymentReceiptImg: payment.receiptImg,
+            paymentReason: payment.reason,
         })
         .from(walletTransaction)
         .innerJoin(wallet, eq(walletTransaction.walletId, wallet.id))
