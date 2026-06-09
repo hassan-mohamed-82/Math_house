@@ -102,7 +102,7 @@ export const getParentById = async (req: Request, res: Response) => {
 
 export const updateParent = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, email, phoneNumber, status, oldPassword, newPassword } = req.body;
+    const { name, email, phoneNumber, status, oldPassword, newPassword, studentIds } = req.body;
 
     const existingParent = await db
         .select()
@@ -113,6 +113,8 @@ export const updateParent = async (req: Request, res: Response) => {
         throw new NotFound("parent not found");
     }
 
+    const currentParentPhone = existingParent[0].phoneNumber;
+
     if (email && email !== existingParent[0].email) {
         const emailExists = await db
             .select()
@@ -120,7 +122,39 @@ export const updateParent = async (req: Request, res: Response) => {
             .where(eq(parents.email, email));
 
         if (emailExists.length > 0) {
-            throw new BadRequest("email is already exists");
+            throw new BadRequest("email already exists");
+        }
+    }
+
+    let uniqueStudentIds: string[] = [];
+    if (studentIds && Array.isArray(studentIds)) {
+        uniqueStudentIds = [...new Set(studentIds)] as string[];
+
+        if (uniqueStudentIds.length > 0) {
+            // جلب الطلاب المطلوبين للتأكد من وجودهم ومن حالات ربطهم الحالية
+            const studentsInDb = await db
+                .select({ 
+                    id: Student.id, 
+                    parentphone: Student.parentphone 
+                })
+                .from(Student)
+                .where(inArray(Student.id, uniqueStudentIds));
+
+            // أ. التأكد من أن جميع الـ IDs المرسلة صحيحة وموجودة بالقاعدة
+            if (studentsInDb.length !== uniqueStudentIds.length) {
+                throw new BadRequest("One or more students not found");
+            }
+
+            // ب. الـ Validation الصارم: التأكد أن الطالب ليس ملكاً لأحد آخر
+            for (const student of studentsInDb) {
+                if (
+                    student.parentphone && 
+                    student.parentphone.trim() !== "" && 
+                    student.parentphone !== currentParentPhone
+                ) {
+                    throw new BadRequest(`Student with ID ${student.id} is already linked to another parent`);
+                }
+            }
         }
     }
 
@@ -135,11 +169,9 @@ export const updateParent = async (req: Request, res: Response) => {
 
     if (newPassword && oldPassword) {
         const isPasswordValid = await bcrypt.compare(oldPassword, existingParent[0].password);
-
         if (!isPasswordValid) {
             throw new BadRequest("old password is not correct");
         }
-
         updateData.password = await bcrypt.hash(newPassword, 10);
     }
 
@@ -151,8 +183,24 @@ export const updateParent = async (req: Request, res: Response) => {
         .update(parents)
         .set(updateData)
         .where(eq(parents.id, id));
+    // نستخدم الـ phoneNumber الجديد إذا أُرسل، وإلا نعتمد الهاتف القديم لعملية الربط
+    const finalParentPhone = phoneNumber || currentParentPhone;
 
-    return SuccessResponse(res,  {message:"update parent success"});
+    // أولاً: تصفير وفك ارتباط الطلاب القدامى التابعين لولي الأمر هذا (لإتاحة التحديث الكامل بالـ Array الجديدة)
+    await db
+        .update(Student)
+        .set({ parentphone: null })
+        .where(eq(Student.parentphone, currentParentPhone));
+
+    // ثانياً: ربط مجموعة الطلاب الجديدة بولي الأمر دفعة واحدة بـ Query واحدة سريعة
+    if (uniqueStudentIds.length > 0) {
+        await db
+            .update(Student)
+            .set({ parentphone: finalParentPhone })
+            .where(inArray(Student.id, uniqueStudentIds));
+    }
+
+    return SuccessResponse(res, { message: "update parent and student links success" });
 };
 
 export const deleteParent = async (req: Request, res: Response) => {
