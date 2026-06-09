@@ -59,7 +59,7 @@ const getSmtpTransporter = () => {
 	});
 };
 
-const sendEmail = async ({
+export const sendEmail = async ({
 	to,
 	subject,
 	html,

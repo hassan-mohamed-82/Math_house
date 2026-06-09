@@ -4,7 +4,7 @@ import { BadRequest, NotFound, UnauthorizedError } from '../../Errors';
 import { SuccessResponse } from '../../utils/response';
 import { db } from '../../models/connection';
 import { packages, paymentMethod, Student, parents, payment } from "../../models/schema";
-import { and, count, desc, eq, like, or, sql } from 'drizzle-orm';
+import { and, count, desc, eq, like, or, sql, isNotNull } from 'drizzle-orm';
 import { validateAndSaveLogo } from "../../utils/handleImages";
 import { createPaymobCheckoutSession } from "../../utils/paymob";
 
@@ -272,6 +272,7 @@ export const getPackageBuyHistory = async (req: Request, res: Response) => {
     const whereCondition = and(
         eq(payment.studentId, studentId),
         eq(payment.purpose, 'purchase'),
+        isNotNull(payment.packageId),
         searchCondition,
     );
 
