@@ -116,8 +116,6 @@ export const getCourseById = async (req: Request, res: Response) => {
         .from(semesters)
         .where(eq(semesters.courseId, id));
 
-    const cha
-
     const hasAccess = await checkAccess(req.user.id, {
         courseId: id
     });
