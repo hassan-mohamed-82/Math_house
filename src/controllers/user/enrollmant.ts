@@ -10,10 +10,15 @@ import { validateAndSaveLogo } from "../../utils/handleImages";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
-/** Add `durationDays` to now and return the resulting Date. */
-function calcExpiresAt(durationDays: number): Date {
-    const d = new Date();
-    d.setDate(d.getDate() + durationDays);
+/** Add `durationDays` to now and return the resulting Date.
+ *  Forces the value to a real number to avoid MySQL returning
+ *  int columns as strings, which would cause string concatenation
+ *  in setDate() instead of numeric addition.
+ */
+function calcExpiresAt(durationDays: number, from: Date = new Date()): Date {
+    const days = Math.floor(Number(durationDays) || 0);
+    const d = new Date(from);
+    d.setDate(d.getDate() + days);
     return d;
 }
 

@@ -179,17 +179,19 @@ export const getPurchasedLessons = async (req: Request, res: Response) => {
         )
         .orderBy(desc(enrolledItems.createdAt));
 
+    const now = new Date();
+
     return SuccessResponse(res, { 
         message: "Purchased lessons retrieved successfully", 
         lessons: purchasedLessons.map(p => {
-            const isExpired = p.expiresAt && p.expiresAt < new Date();
+            const isExpired = p.expiresAt && p.expiresAt < now;
             return {
                 ...p.lesson,
                 chapterName: p.chapter?.name,
                 courseName: p.course?.name,
                 enrollmentId: p.enrollmentId,
                 expiresAt: p.expiresAt,
-                status: isExpired ? "this is expired" : p.status,
+                status: isExpired ? "expired" : p.status,
                 purchasedAt: p.createdAt
             };
         })

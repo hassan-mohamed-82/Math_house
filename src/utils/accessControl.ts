@@ -1,10 +1,11 @@
 import { db } from "../models/connection";
 import { enrolledItems } from "../models/schema";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, isNull, gt } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 
 /**
  * Checks if a student has access to an item.
- * An item can be accessed if the student has an active enrollment in:
+ * An item can be accessed if the student has an active, non-expired enrollment in:
  * - The item itself (Course, Chapter, or Lesson)
  * - Any of its parent items.
  */
@@ -16,6 +17,8 @@ export const checkAccess = async (studentId: string, ids: { courseId?: string, c
 
     if (conditions.length === 0) return false;
 
+    const now = new Date();
+
     const enrollment = await db
         .select()
         .from(enrolledItems)
@@ -23,7 +26,12 @@ export const checkAccess = async (studentId: string, ids: { courseId?: string, c
             and(
                 eq(enrolledItems.studentId, studentId),
                 eq(enrolledItems.status, "active"),
-                or(...conditions)
+                or(...conditions),
+                // Allow access if expiresAt is NULL (no expiry) OR if it hasn't passed yet
+                or(
+                    isNull(enrolledItems.expiresAt),
+                    gt(enrolledItems.expiresAt, now)
+                )
             )
         )
         .limit(1);

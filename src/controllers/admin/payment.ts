@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { BadRequest } from '../../Errors';
 import { db } from '../../models/connection';
 import { packages, payment, paymentMethod, Student, wallet, walletTransaction, enrolledItems } from '../../models/schema';
+import { prices } from '../../models/schema/admin/prices';
 import { and, count, desc, eq, like, or, sql, isNotNull, isNull } from 'drizzle-orm';
 import { SuccessResponse } from '../../utils/response';
 import { sendEmail } from '../../utils/sendEmails';
@@ -498,10 +499,41 @@ export const replyToContentBuyRequest = async (req: Request, res: Response) => {
             .where(eq(payment.id, paymentId));
 
         if (action === 'approve') {
-            await tx
-                .update(enrolledItems)
-                .set({ status: 'active' })
+            // Fetch all enrolled items for this payment to recalculate expiresAt
+            // from NOW (approval date) instead of the original purchase date.
+            const items = await tx
+                .select({
+                    id: enrolledItems.id,
+                    priceId: enrolledItems.priceId,
+                })
+                .from(enrolledItems)
                 .where(eq(enrolledItems.paymentId, paymentId));
+
+            for (const item of items) {
+                let newExpiresAt: Date | null = null;
+
+                if (item.priceId) {
+                    const [plan] = await tx
+                        .select({ durationDays: prices.durationDays })
+                        .from(prices)
+                        .where(eq(prices.id, item.priceId));
+
+                    if (plan) {
+                        const days = Math.floor(Number(plan.durationDays) || 0);
+                        const d = new Date();
+                        d.setDate(d.getDate() + days);
+                        newExpiresAt = d;
+                    }
+                }
+
+                await tx
+                    .update(enrolledItems)
+                    .set({
+                        status: 'active',
+                        ...(newExpiresAt ? { expiresAt: newExpiresAt } : {}),
+                    })
+                    .where(eq(enrolledItems.id, item.id));
+            }
         }
         // On reject: enrolledItems intentionally left as "pending" so the
         // student can see the rejected purchase in getMyPurchases via paymentStatus.
