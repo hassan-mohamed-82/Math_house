@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, asc } from "drizzle-orm";
 import { db } from "../../models/connection";
-import { quizzes, questions, quizQuestions, questionOptions, quizAttempts, studentQuizAnswers } from "../../models/schema";
+import { quizzes, questions, quizQuestions, questionOptions, quizAttempts, studentQuizAnswers, lessons } from "../../models/schema";
 import { randomUUID } from "crypto";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound, UnauthorizedError, BadRequest } from "../../Errors";
@@ -320,4 +320,54 @@ export const submitQuiz = async (req: Request, res: Response) => {
             status: finalStatus,
         },
     });
+};
+
+export const getQuizzesByLessonId = async (req: Request, res: Response) => {
+    const studentId = req.user.id;
+    const { lessonId } = req.params;
+
+    // 1. Get lesson info to check access
+    const [lessonData] = await db
+        .select({ 
+            id: lessons.id,
+            chapterId: lessons.chapterId,
+            courseId: lessons.courseId
+        })
+        .from(lessons)
+        .where(eq(lessons.id, lessonId));
+
+    if (!lessonData) {
+        throw new NotFound("Lesson not found");
+    }
+
+    // 2. Check access
+    const hasAccess = await checkAccess(studentId, {
+        lessonId: lessonId,
+        chapterId: lessonData.chapterId,
+        courseId: lessonData.courseId
+    });
+
+    if (!hasAccess) {
+        throw new BadRequest("You do not have access to this lesson's quizzes. Please purchase the lesson, chapter, or course.");
+    }
+
+    // 3. Fetch quizzes for this lesson
+    const lessonQuizzes = await db
+        .select({
+            id: quizzes.id,
+            title: quizzes.title,
+            description: quizzes.description,
+            durationHours: quizzes.durationHours,
+            durationMinutes: quizzes.durationMinutes,
+            totalScore: quizzes.totalScore,
+            quizOrder: quizzes.quizOrder,
+        })
+        .from(quizzes)
+        .where(eq(quizzes.lessonId, lessonId))
+        .orderBy(asc(quizzes.quizOrder));
+
+    return SuccessResponse(res, {
+        message: "Lesson quizzes fetched successfully",
+        quizzes: lessonQuizzes
+    }, 200);
 };
