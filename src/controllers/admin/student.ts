@@ -725,6 +725,79 @@ export const attendItems = async (req: Request, res: Response) => {
     const hasChapter = (chId: string) => existingEnrollments.some(e => e.chapterId === chId && !e.lessonId);
     const hasLesson = (lId: string) => existingEnrollments.some(e => e.lessonId === lId);
 
+    // 🚀 جلب خطط الأسعار لحساب تاريخ الصلاحية (expiresAt)
+    const explicitPriceIds = [
+        ...courseItems.map((i: any) => i.priceId),
+        ...chapterItems.map((i: any) => i.priceId),
+        ...lessonItems.map((i: any) => i.priceId),
+    ].filter(Boolean);
+
+    const courseIdsWithNullPrice = courseItems.filter((i: any) => !i.priceId).map((i: any) => i.id);
+    const chapterIdsWithNullPrice = chapterItems.filter((i: any) => !i.priceId).map((i: any) => i.id);
+    const lessonIdsWithNullPrice = lessonItems.filter((i: any) => !i.priceId).map((i: any) => i.id);
+
+    const pricePlans: any[] = [];
+
+    if (explicitPriceIds.length > 0) {
+        const found = await db.select().from(prices).where(inArray(prices.id, explicitPriceIds));
+        pricePlans.push(...found);
+    }
+    if (courseIdsWithNullPrice.length > 0) {
+        const found = await db.select().from(prices).where(
+            and(
+                eq(prices.targetType, "course"),
+                eq(prices.isDefault, true),
+                inArray(prices.targetId, courseIdsWithNullPrice)
+            )
+        );
+        pricePlans.push(...found);
+    }
+    if (chapterIdsWithNullPrice.length > 0) {
+        const found = await db.select().from(prices).where(
+            and(
+                eq(prices.targetType, "chapter"),
+                eq(prices.isDefault, true),
+                inArray(prices.targetId, chapterIdsWithNullPrice)
+            )
+        );
+        pricePlans.push(...found);
+    }
+    if (lessonIdsWithNullPrice.length > 0) {
+        const found = await db.select().from(prices).where(
+            and(
+                eq(prices.targetType, "lesson"),
+                eq(prices.isDefault, true),
+                inArray(prices.targetId, lessonIdsWithNullPrice)
+            )
+        );
+        pricePlans.push(...found);
+    }
+
+    // دالة مساعدة لحساب الصلاحية والـ priceId
+    const getEnrollmentMeta = (itemId: string, itemType: "course" | "chapter" | "lesson", explicitPriceId?: string) => {
+        let plan: any = null;
+        if (explicitPriceId) {
+            plan = pricePlans.find(p => p.id === explicitPriceId);
+        } else {
+            plan = pricePlans.find(p => p.targetId === itemId && p.targetType === itemType && p.isDefault === true);
+        }
+
+        if (plan) {
+            const days = Math.floor(Number(plan.durationDays) || 0);
+            const d = new Date();
+            d.setDate(d.getDate() + days);
+            return {
+                priceId: plan.id,
+                expiresAt: d,
+            };
+        }
+
+        return {
+            priceId: null,
+            expiresAt: null,
+        };
+    };
+
     const enrollmentValues: any[] = [];
 
     // 4. معالجة الكورسات (Courses)
@@ -738,13 +811,17 @@ export const attendItems = async (req: Request, res: Response) => {
 
         for (const item of courseItems) {
             if (hasCourse(item.id)) continue; // تخطي لو مشترك بالفعل في الكورس
+            
+            const meta = getEnrollmentMeta(item.id, "course", item.priceId);
+            
             enrollmentValues.push({
                 id: uuidv4(),
                 studentId: id,
                 courseId: item.id,
                 chapterId: null,
                 lessonId: null,
-                priceId: item.priceId || null,
+                priceId: meta.priceId,
+                expiresAt: meta.expiresAt,
                 status: "active"
             });
         }
@@ -766,13 +843,16 @@ export const attendItems = async (req: Request, res: Response) => {
             // الحماية: لو الطالب مشترك في الكورس الأب بالكامل أو في الشابتر نفسه ⬅️ تخطي
             if (hasCourse(chData.courseId) || hasChapter(item.id)) continue;
 
+            const meta = getEnrollmentMeta(item.id, "chapter", item.priceId);
+
             enrollmentValues.push({
                 id: uuidv4(),
                 studentId: id,
                 courseId: null, // يترك null لتمييز أنه اشتراك شابتر مستقل
                 chapterId: item.id,
                 lessonId: null,
-                priceId: item.priceId || null,
+                priceId: meta.priceId,
+                expiresAt: meta.expiresAt,
                 status: "active"
             });
         }
@@ -794,13 +874,16 @@ export const attendItems = async (req: Request, res: Response) => {
             // الحماية: لو مشترك في الكورس الأب أو الشابتر الأب أو الدرس نفسه ⬅️ تخطي
             if (hasCourse(lsData.courseId) || hasChapter(lsData.chapterId) || hasLesson(item.id)) continue;
 
+            const meta = getEnrollmentMeta(item.id, "lesson", item.priceId);
+
             enrollmentValues.push({
                 id: uuidv4(),
                 studentId: id,
                 courseId: null,
                 chapterId: null,
                 lessonId: item.id,
-                priceId: item.priceId || null,
+                priceId: meta.priceId,
+                expiresAt: meta.expiresAt,
                 status: "active"
             });
         }
