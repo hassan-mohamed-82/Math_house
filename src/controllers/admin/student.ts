@@ -572,7 +572,27 @@ export const getStudentContent = async (req: Request, res: Response) => {
         });
     }
 
-    // 2. جلب الكورسات التابعة لـ الـ Category الخاصة بالطالب فقط
+    // 2. إيجاد الفئات الفرعية التابعة للفئة الرئيسية للطالب
+    const childCategories = await db
+        .select({ id: category.id })
+        .from(category)
+        .where(
+            or(
+                eq(category.id, student.categoryId),
+                eq(category.parentCategoryId, student.categoryId)
+            )
+        );
+
+    if (childCategories.length === 0) {
+        return SuccessResponse(res, {
+            message: "Student has no category assigned",
+            data: { student, content: [] }
+        });
+    }
+
+    const childCategoryIds = childCategories.map((c) => c.id);
+
+    // 3. جلب الكورسات التابعة لهذه الفئات وتتطابق مع السنة الدراسية (grade) للطالب
     const filteredCourses = await db
         .select({
             id: courses.id,
@@ -585,10 +605,11 @@ export const getStudentContent = async (req: Request, res: Response) => {
         })
         .from(courses)
         .leftJoin(category, eq(courses.categoryId, category.id))
+        .leftJoin(gradeTable, eq(gradeTable.categoryId, category.id))
         .where(
-            or(
-                eq(category.parentCategoryId, student.categoryId),
-                eq(courses.categoryId, student.categoryId)
+            and(
+                inArray(courses.categoryId, childCategoryIds),
+                eq(gradeTable.id, student.gradeId)
             )
         );
 
