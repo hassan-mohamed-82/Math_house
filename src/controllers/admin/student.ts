@@ -585,7 +585,12 @@ export const getStudentContent = async (req: Request, res: Response) => {
         })
         .from(courses)
         .leftJoin(category, eq(courses.categoryId, category.id))
-        .where(eq(courses.categoryId, student.categoryId));
+        .where(
+            or(
+                eq(category.parentCategoryId, student.categoryId),
+                eq(courses.categoryId, student.categoryId)
+            )
+        );
 
     if (filteredCourses.length === 0) {
         return SuccessResponse(res, {
