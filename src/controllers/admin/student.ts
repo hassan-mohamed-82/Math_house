@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { category, Student, wallet, grade as gradeTable } from "../../models/schema";
-import { eq, or, like, isNull, and } from "drizzle-orm";
+import { category, Student, wallet, grade as gradeTable, courses, chapters, lessons, enrolledItems, prices } from "../../models/schema";
+import { eq, or, like, isNull, and, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -26,7 +26,7 @@ export const createStudent = async (req: Request, res: Response) => {
         avatar,
     } = req.body;
 
-    if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade ) {
+    if (!firstname || !lastname || !nickname || !email || !password || !phone || !categoryId || !grade) {
         throw new BadRequest("all fields are required");
     }
 
@@ -256,7 +256,7 @@ export const updateStudent = async (req: Request, res: Response) => {
     }
     let ImgUrl;
     if (avatar) {
-    ImgUrl = await handleImageUpdate(req, existingStudent[0].avatar, avatar, "students");
+        ImgUrl = await handleImageUpdate(req, existingStudent[0].avatar, avatar, "students");
     }
     const updateData: any = {};
 
@@ -539,6 +539,264 @@ export const getPaymentHistory = async (req: Request, res: Response) => {
             studentId: id,
             studentName: `${student.firstname} ${student.lastname}`,
             transactions: transactions
+        }
+    });
+};
+
+// ===================== CONTENT & ENROLLMENT APIs =====================
+
+export const getStudentContent = async (req: Request, res: Response) => {
+    const { id } = req.params; // studentId
+
+    // 1. جلب بيانات الطالب والـ CategoryId الخاص به لفلترة المحتوى
+    const [student] = await db
+        .select({
+            id: Student.id,
+            firstname: Student.firstname,
+            lastname: Student.lastname,
+            categoryId: Student.category,
+            gradeId: Student.grade
+        })
+        .from(Student)
+        .where(eq(Student.id, id));
+
+    if (!student) {
+        throw new NotFound("Student not found");
+    }
+
+    // إذا كان الطالب غير مسجل في أي كاتيغوري، نرجع مصفوفة فارغة
+    if (!student.categoryId || !student.gradeId) {
+        return SuccessResponse(res, {
+            message: "Student has no category assigned",
+            data: { student, content: [] }
+        });
+    }
+
+    // 2. جلب الكورسات التابعة لـ الـ Category الخاصة بالطالب فقط
+    const filteredCourses = await db
+        .select({
+            id: courses.id,
+            name: courses.name,
+            description: courses.description,
+            image: courses.image,
+            isHaveSemester: courses.isHaveSemester,
+            categoryId: courses.categoryId,
+            categoryName: category.name,
+        })
+        .from(courses)
+        .leftJoin(category, eq(courses.categoryId, category.id))
+        .where(eq(courses.categoryId, student.categoryId));
+
+    if (filteredCourses.length === 0) {
+        return SuccessResponse(res, {
+            message: "No courses found for this student's category",
+            data: { student, content: [] }
+        });
+    }
+
+    // 3. تجميع الـ IDs للكورسات المفلترة لاستخدامها في جلب الشباتر والدروس
+    const courseIds = filteredCourses.map(c => c.id);
+
+    // 4. جلب الشباتر التابعة لهذه الكورسات فقط
+    const filteredChapters = await db
+        .select({
+            id: chapters.id,
+            name: chapters.name,
+            description: chapters.description,
+            image: chapters.image,
+            courseId: chapters.courseId,
+            order: chapters.order,
+        })
+        .from(chapters)
+        .where(inArray(chapters.courseId, courseIds));
+
+    // 5. جلب الدروس التابعة لهذه الكورسات فقط
+    const filteredLessons = await db
+        .select({
+            id: lessons.id,
+            name: lessons.name,
+            description: lessons.description,
+            image: lessons.image,
+            courseId: lessons.courseId,
+            chapterId: lessons.chapterId,
+            order: lessons.order,
+        })
+        .from(lessons)
+        .where(inArray(lessons.courseId, courseIds));
+
+    // 6. جلب اشتراكات الطالب الحالية لمعرفة حالة الـ isEnrolled
+    const existingEnrollments = await db
+        .select({
+            courseId: enrolledItems.courseId,
+            chapterId: enrolledItems.chapterId,
+            lessonId: enrolledItems.lessonId,
+        })
+        .from(enrolledItems)
+        .where(eq(enrolledItems.studentId, id));
+
+    const enrolledCourseIds = new Set(existingEnrollments.filter(e => e.courseId && !e.chapterId && !e.lessonId).map(e => e.courseId));
+    const enrolledChapterIds = new Set(existingEnrollments.filter(e => e.chapterId && !e.lessonId).map(e => e.chapterId));
+    const enrolledLessonIds = new Set(existingEnrollments.map(e => e.lessonId).filter(Boolean));
+
+    // 7. بناء هيكل الشجرة النظيف (Courses -> Chapters -> Lessons)
+    const contentTree = filteredCourses.map(course => ({
+        ...course,
+        isEnrolled: enrolledCourseIds.has(course.id),
+        chapters: filteredChapters
+            .filter(ch => ch.courseId === course.id)
+            .sort((a, b) => a.order - b.order)
+            .map(chapter => ({
+                ...chapter,
+                isEnrolled: enrolledChapterIds.has(chapter.id),
+                lessons: filteredLessons
+                    .filter(ls => ls.chapterId === chapter.id)
+                    .sort((a, b) => a.order - b.order)
+                    .map(lesson => ({
+                        ...lesson,
+                        isEnrolled: enrolledLessonIds.has(lesson.id),
+                    }))
+            }))
+    }));
+
+    return SuccessResponse(res, {
+        message: "Student content filtered successfully",
+        data: {
+            student: {
+                id: student.id,
+                name: `${student.firstname} ${student.lastname}`,
+            },
+            content: contentTree,
+        }
+    });
+};
+
+export const attendItems = async (req: Request, res: Response) => {
+    const { id } = req.params; // studentId
+    const { courses: courseItems = [], chapters: chapterItems = [], lessons: lessonItems = [] } = req.body;
+
+    // 1. التحقق من أن هناك على الأقل عنصر واحد للإشتراك
+    if (courseItems.length === 0 && chapterItems.length === 0 && lessonItems.length === 0) {
+        throw new BadRequest("At least one item (course, chapter, or lesson) must be provided");
+    }
+
+    // 2. التحقق من وجود الطالب في قاعدة البيانات
+    const [student] = await db
+        .select({ id: Student.id, firstname: Student.firstname, lastname: Student.lastname })
+        .from(Student)
+        .where(eq(Student.id, id));
+
+    if (!student) {
+        throw new NotFound("Student not found");
+    }
+
+    // 3. جلب كل الاشتراكات الحالية للطالب (منع التكرار والـ Over-Enrollment)
+    const existingEnrollments = await db
+        .select()
+        .from(enrolledItems)
+        .where(eq(enrolledItems.studentId, id));
+
+    const hasCourse = (cId: string) => existingEnrollments.some(e => e.courseId === cId && !e.chapterId && !e.lessonId);
+    const hasChapter = (chId: string) => existingEnrollments.some(e => e.chapterId === chId && !e.lessonId);
+    const hasLesson = (lId: string) => existingEnrollments.some(e => e.lessonId === lId);
+
+    const enrollmentValues: any[] = [];
+
+    // 4. معالجة الكورسات (Courses)
+    if (courseItems.length > 0) {
+        const foundCourses = await db.select({ id: courses.id }).from(courses)
+            .where(inArray(courses.id, courseItems.map((i: any) => i.id)));
+
+        if (foundCourses.length !== courseItems.length) {
+            throw new BadRequest("One or more course IDs are invalid");
+        }
+
+        for (const item of courseItems) {
+            if (hasCourse(item.id)) continue; // تخطي لو مشترك بالفعل في الكورس
+            enrollmentValues.push({
+                id: uuidv4(),
+                studentId: id,
+                courseId: item.id,
+                chapterId: null,
+                lessonId: null,
+                priceId: item.priceId || null,
+                status: "active"
+            });
+        }
+    }
+
+    // 5. معالجة الشباتر (Chapters)
+    if (chapterItems.length > 0) {
+        const foundChapters = await db.select({ id: chapters.id, courseId: chapters.courseId }).from(chapters)
+            .where(inArray(chapters.id, chapterItems.map((i: any) => i.id)));
+
+        if (foundChapters.length !== chapterItems.length) {
+            throw new BadRequest("One or more chapter IDs are invalid");
+        }
+
+        for (const item of chapterItems) {
+            const chData = foundChapters.find(c => c.id === item.id);
+            if (!chData) continue;
+
+            // الحماية: لو الطالب مشترك في الكورس الأب بالكامل أو في الشابتر نفسه ⬅️ تخطي
+            if (hasCourse(chData.courseId) || hasChapter(item.id)) continue;
+
+            enrollmentValues.push({
+                id: uuidv4(),
+                studentId: id,
+                courseId: null, // يترك null لتمييز أنه اشتراك شابتر مستقل
+                chapterId: item.id,
+                lessonId: null,
+                priceId: item.priceId || null,
+                status: "active"
+            });
+        }
+    }
+
+    // 6. معالجة الدروس (Lessons)
+    if (lessonItems.length > 0) {
+        const foundLessons = await db.select({ id: lessons.id, chapterId: lessons.chapterId, courseId: lessons.courseId }).from(lessons)
+            .where(inArray(lessons.id, lessonItems.map((i: any) => i.id)));
+
+        if (foundLessons.length !== lessonItems.length) {
+            throw new BadRequest("One or more lesson IDs are invalid");
+        }
+
+        for (const item of lessonItems) {
+            const lsData = foundLessons.find(l => l.id === item.id);
+            if (!lsData) continue;
+
+            // الحماية: لو مشترك في الكورس الأب أو الشابتر الأب أو الدرس نفسه ⬅️ تخطي
+            if (hasCourse(lsData.courseId) || hasChapter(lsData.chapterId) || hasLesson(item.id)) continue;
+
+            enrollmentValues.push({
+                id: uuidv4(),
+                studentId: id,
+                courseId: null,
+                chapterId: null,
+                lessonId: item.id,
+                priceId: item.priceId || null,
+                status: "active"
+            });
+        }
+    }
+
+    // 7. تنفيذ عملية الحفظ في الداتابيز
+    if (enrollmentValues.length === 0) {
+        return SuccessResponse(res, {
+            message: "No new items to enroll (All selected items are already inherited or enrolled)",
+            data: { enrolled: 0 }
+        });
+    }
+
+    await db.transaction(async (tx) => {
+        await tx.insert(enrolledItems).values(enrollmentValues);
+    });
+
+    SuccessResponse(res, {
+        message: "Student enrolled successfully",
+        data: {
+            student: { id: student.id, name: `${student.firstname} ${student.lastname}` },
+            enrolledCount: enrollmentValues.length,
         }
     });
 };
