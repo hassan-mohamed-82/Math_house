@@ -2,7 +2,7 @@ import { Router } from "express";
 import {
     createStudent, deleteStudent, getAllStudents,
     getStudentById, updateStudent, selection, openStudentAccount, topUpWallet, getPaymentHistory,
-    getStudentContent, attendItems
+    getStudentContent, attendItems, getStudentPackages, purchasePackageForStudent
 } from "../../controllers/admin/student";
 import {
     catchAsync
@@ -28,5 +28,9 @@ router.get("/:id/payment-history", validate(idParamsSchema, "params"), catchAsyn
 // Content & Enrollment
 router.get("/:id/content", validate(idParamsSchema, "params"), catchAsync(getStudentContent));
 router.post("/:id/enroll", validate(idParamsSchema, "params"), catchAsync(attendItems));
+
+// Packages
+router.get("/:id/packages", validate(idParamsSchema, "params"), catchAsync(getStudentPackages));
+router.post("/:id/packages", validate(idParamsSchema, "params"), catchAsync(purchasePackageForStudent));
 
 export default router;

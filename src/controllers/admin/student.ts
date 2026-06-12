@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { category, Student, wallet, grade as gradeTable, courses, chapters, lessons, enrolledItems, prices } from "../../models/schema";
-import { eq, or, like, isNull, and, inArray } from "drizzle-orm";
+import { category, Student, wallet, grade as gradeTable, courses, chapters, lessons, enrolledItems, prices, packages, paymentMethod, payment, parents } from "../../models/schema";
+import { eq, or, like, isNull, and, inArray, isNotNull, sql } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -797,6 +797,257 @@ export const attendItems = async (req: Request, res: Response) => {
         data: {
             student: { id: student.id, name: `${student.firstname} ${student.lastname}` },
             enrolledCount: enrollmentValues.length,
+        }
+    });
+};
+
+// ===================== ADMIN STUDENT PACKAGES APIs =====================
+export const getStudentPackages = async (req: Request, res: Response) => {
+    const { id } = req.params; // studentId
+
+    // 1. جلب بيانات الطالب، والـ CategoryId، والـ Balances الحالية
+    const [student] = await db
+        .select({
+            id: Student.id,
+            firstname: Student.firstname,
+            lastname: Student.lastname,
+            categoryId: Student.category, // الفلترة على أساس السنة الدراسية للطالب
+            livebalance: Student.livebalance,
+            exambalance: Student.exambalance,
+            questionbalance: Student.questionbalance,
+        })
+        .from(Student)
+        .where(eq(Student.id, id));
+
+    if (!student) {
+        throw new NotFound("Student not found");
+    }
+
+    // 2. 🚀 جلب طرق الدفع اليدوية/المفعلة للأدمن (مثل الكاش، فودافون كاش، يدوي... إلخ)
+    // ملحوظة: إذا كان الحقل في الداتابيز عندك اسمه type قومي بالفلترة عليه، هنا بحثت بالاسم والـ isActive كأمان
+    const activeManualMethods = await db
+        .select({
+            id: paymentMethod.id,
+            name: paymentMethod.name,
+            // type: paymentMethod.type // يمكنك تفعيله لو الحقل متوفر في الموديل عندك
+        })
+        .from(paymentMethod)
+        .where(
+            and(
+                eq(paymentMethod.isActive, true),
+                or(
+                    like(paymentMethod.name, "%Cash%"),
+                    like(paymentMethod.name, "%Manual%"),
+                    like(paymentMethod.name, "%Admin%"),
+                    // eq(paymentMethod.type, "manual") // 👈 لو عندك حقل النوع صريح فك التشفير عن السطر ده
+                )
+            )
+        );
+
+    // حماية: إذا لم يكن الطالب مسجلاً في أي كاتيغوري، نرجع باقات فارغة مع طرق الدفع فوراً
+    if (!student.categoryId) {
+        return SuccessResponse(res, {
+            message: "Student has no category assigned",
+            data: {
+                student: {
+                    id: student.id,
+                    name: `${student.firstname} ${student.lastname}`,
+                    balances: { live: student.livebalance, exam: student.exambalance, question: student.questionbalance }
+                },
+                manualPaymentMethods: activeManualMethods, // إرسال الطرق حتى لو مفيش باقات
+                packages: []
+            }
+        });
+    }
+
+    // 3. جلب الباقات المخصصة للسنة الدراسية (Category) الخاصة بهذا الطالب فقط
+    const filteredPackages = await db
+        .select({
+            id: packages.id,
+            name: packages.name,
+            type: packages.type,
+            categoryId: packages.categoryId,
+            courseId: packages.courseId,
+            number: packages.number,
+            price: packages.price,
+            duration: packages.duration,
+        })
+        .from(packages)
+        .where(eq(packages.categoryId, student.categoryId));
+
+    // 4. جلب المشتريات التاريخية للباقات لهذا الطالب تحديداً
+    const purchases = await db
+        .select({
+            id: payment.id,
+            packageId: payment.packageId,
+            amount: payment.amount,
+            status: payment.status,
+            createdAt: payment.createdAt,
+        })
+        .from(payment)
+        .where(
+            and(
+                eq(payment.studentId, id),
+                eq(payment.purpose, "purchase"),
+                isNotNull(payment.packageId)
+            )
+        );
+
+    // 5. دمج المشتريات والـ Counters داخل الباقات المفلترة
+    const packagesWithPurchases = filteredPackages.map(pkg => {
+        const pkgPurchases = purchases.filter(p => p.packageId === pkg.id);
+        return {
+            ...pkg,
+            purchaseCount: pkgPurchases.length,
+            purchases: pkgPurchases,
+            isPurchasedBefore: pkgPurchases.some(p => p.status === "completed"),
+        };
+    });
+
+    SuccessResponse(res, {
+        message: "Student packages, balances, and manual payment methods retrieved successfully",
+        data: {
+            student: {
+                id: student.id,
+                name: `${student.firstname} ${student.lastname}`,
+                balances: {
+                    live: student.livebalance,
+                    exam: student.exambalance,
+                    question: student.questionbalance,
+                }
+            },
+            manualPaymentMethods: activeManualMethods, // 🚀 مصفوفة طرق الدفع اليدوية الجاهزة للـ Dropdown
+            packages: packagesWithPurchases,
+        }
+    });
+};
+
+export const purchasePackageForStudent = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { packageId, paymentMethodId } = req.body;
+
+    if (!packageId) {
+        throw new BadRequest("packageId is required");
+    }
+    if (!paymentMethodId) {
+        throw new BadRequest("paymentMethodId is required");
+    }
+
+    const [student] = await db
+        .select({
+            id: Student.id,
+            firstname: Student.firstname,
+            lastname: Student.lastname,
+            parentphone: Student.parentphone,
+        })
+        .from(Student)
+        .where(eq(Student.id, id));
+
+    if (!student) {
+        throw new NotFound("Student not found");
+    }
+
+    const [pkg] = await db
+        .select({
+            id: packages.id,
+            name: packages.name,
+            type: packages.type,
+            price: packages.price,
+            number: packages.number,
+        })
+        .from(packages)
+        .where(eq(packages.id, packageId));
+
+    if (!pkg) {
+        throw new NotFound("Package not found");
+    }
+
+    const [method] = await db
+        .select({ id: paymentMethod.id })
+        .from(paymentMethod)
+        .where(and(eq(paymentMethod.id, paymentMethodId), eq(paymentMethod.isActive, true)));
+
+    if (!method) {
+        throw new NotFound("The selected payment method is invalid or inactive");
+    }
+
+    let parentId = null;
+    if (student.parentphone) {
+        const [parent] = await db
+            .select({ id: parents.id })
+            .from(parents)
+            .where(eq(parents.phoneNumber, student.parentphone))
+            .limit(1);
+        if (parent) {
+            parentId = parent.id;
+        }
+    }
+
+    const paymentId = uuidv4();
+
+    await db.transaction(async (tx) => {
+        await tx.insert(payment).values({
+            id: paymentId,
+            studentId: id,
+            parentId,
+            purpose: "purchase",
+            paymentMethodId: paymentMethodId,
+            amount: Number(pkg.price),
+            source: "student",
+            packageId: pkg.id,
+            status: "completed",
+            reason: "Purchased and activated by Admin directly",
+        });
+
+        const amountToAdd = pkg.number;
+        switch (pkg.type) {
+            case "live":
+                await tx.update(Student)
+                    .set({ livebalance: sql`${Student.livebalance} + ${amountToAdd}` })
+                    .where(eq(Student.id, id));
+                break;
+            case "exam":
+                await tx.update(Student)
+                    .set({ exambalance: sql`${Student.exambalance} + ${amountToAdd}` })
+                    .where(eq(Student.id, id));
+                break;
+            case "question":
+                await tx.update(Student)
+                    .set({ questionbalance: sql`${Student.questionbalance} + ${amountToAdd}` })
+                    .where(eq(Student.id, id));
+                break;
+            default:
+                throw new BadRequest("Invalid package type structure detected");
+        }
+    });
+
+    const [updatedStudent] = await db
+        .select({
+            livebalance: Student.livebalance,
+            exambalance: Student.exambalance,
+            questionbalance: Student.questionbalance,
+        })
+        .from(Student)
+        .where(eq(Student.id, id));
+
+    SuccessResponse(res, {
+        message: "Package purchased and balance added successfully by Admin",
+        data: {
+            student: {
+                id: student.id,
+                name: `${student.firstname} ${student.lastname}`,
+            },
+            package: {
+                id: pkg.id,
+                name: pkg.name,
+                type: pkg.type,
+                addedAmount: pkg.number,
+            },
+            balances: {
+                live: updatedStudent?.livebalance,
+                exam: updatedStudent?.exambalance,
+                question: updatedStudent?.questionbalance,
+            }
         }
     });
 };
