@@ -564,7 +564,6 @@ export const getStudentContent = async (req: Request, res: Response) => {
         throw new NotFound("Student not found");
     }
 
-    // إذا كان الطالب غير مسجل في أي كاتيغوري، نرجع مصفوفة فارغة
     if (!student.categoryId || !student.gradeId) {
         return SuccessResponse(res, {
             message: "Student has no category assigned",
@@ -620,10 +619,9 @@ export const getStudentContent = async (req: Request, res: Response) => {
         });
     }
 
-    // 3. تجميع الـ IDs للكورسات المفلترة لاستخدامها في جلب الشباتر والدروس
     const courseIds = filteredCourses.map(c => c.id);
 
-    // 4. جلب الشباتر التابعة لهذه الكورسات فقط
+    // 4. جلب الشباتر التابعة لهذه الكورسات
     const filteredChapters = await db
         .select({
             id: chapters.id,
@@ -636,7 +634,7 @@ export const getStudentContent = async (req: Request, res: Response) => {
         .from(chapters)
         .where(inArray(chapters.courseId, courseIds));
 
-    // 5. جلب الدروس التابعة لهذه الكورسات فقط
+    // 5. جلب الدروس التابعة لهذه الكورسات
     const filteredLessons = await db
         .select({
             id: lessons.id,
@@ -650,7 +648,7 @@ export const getStudentContent = async (req: Request, res: Response) => {
         .from(lessons)
         .where(inArray(lessons.courseId, courseIds));
 
-    // 6. جلب اشتراكات الطالب الحالية لمعرفة حالة الـ isEnrolled
+    // 6. جلب اشتراكات الطالب الحالية (فقط الـ active أو pending لضمان الصلاحية)
     const existingEnrollments = await db
         .select({
             courseId: enrolledItems.courseId,
@@ -658,31 +656,50 @@ export const getStudentContent = async (req: Request, res: Response) => {
             lessonId: enrolledItems.lessonId,
         })
         .from(enrolledItems)
-        .where(eq(enrolledItems.studentId, id));
+        .where(
+            and(
+                eq(enrolledItems.studentId, id),
+                eq(enrolledItems.status, "active")
+            )
+        );
 
     const enrolledCourseIds = new Set(existingEnrollments.filter(e => e.courseId && !e.chapterId && !e.lessonId).map(e => e.courseId));
     const enrolledChapterIds = new Set(existingEnrollments.filter(e => e.chapterId && !e.lessonId).map(e => e.chapterId));
     const enrolledLessonIds = new Set(existingEnrollments.map(e => e.lessonId).filter(Boolean));
 
-    // 7. بناء هيكل الشجرة النظيف (Courses -> Chapters -> Lessons)
-    const contentTree = filteredCourses.map(course => ({
-        ...course,
-        isEnrolled: enrolledCourseIds.has(course.id),
-        chapters: filteredChapters
-            .filter(ch => ch.courseId === course.id)
-            .sort((a, b) => a.order - b.order)
-            .map(chapter => ({
-                ...chapter,
-                isEnrolled: enrolledChapterIds.has(chapter.id),
-                lessons: filteredLessons
-                    .filter(ls => ls.chapterId === chapter.id)
-                    .sort((a, b) => a.order - b.order)
-                    .map(lesson => ({
-                        ...lesson,
-                        isEnrolled: enrolledLessonIds.has(lesson.id),
-                    }))
-            }))
-    }));
+    // 7. 🚀 بناء هيكل الشجرة الذكي (الوراثي للتأكد من الشراء)
+    const contentTree = filteredCourses.map(course => {
+        const isCourseEnrolled = enrolledCourseIds.has(course.id);
+
+        return {
+            ...course,
+            isEnrolled: isCourseEnrolled,
+            chapters: filteredChapters
+                .filter(ch => ch.courseId === course.id)
+                .sort((a, b) => a.order - b.order)
+                .map(chapter => {
+                    // الشابتر متاح لو الكورس نفسه مشترى OR الشابتر مشترى يدوياً
+                    const isChapterEnrolled = isCourseEnrolled || enrolledChapterIds.has(chapter.id);
+
+                    return {
+                        ...chapter,
+                        isEnrolled: isChapterEnrolled,
+                        lessons: filteredLessons
+                            .filter(ls => ls.chapterId === chapter.id)
+                            .sort((a, b) => a.order - b.order)
+                            .map(lesson => {
+                                // الدرس متاح لو الكورس مشترى OR الشابتر مشترى OR الدرس مشترى يدوياً
+                                const isLessonEnrolled = isChapterEnrolled || enrolledLessonIds.has(lesson.id);
+
+                                return {
+                                    ...lesson,
+                                    isEnrolled: isLessonEnrolled,
+                                };
+                            })
+                    };
+                })
+        };
+    });
 
     return SuccessResponse(res, {
         message: "Student content filtered successfully",
