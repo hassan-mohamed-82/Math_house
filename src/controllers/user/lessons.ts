@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { eq, asc, and, inArray, desc } from "drizzle-orm";
+import { eq, asc, and, inArray, desc, or, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound } from "../../Errors";
 import { lessons, lessonIdeas, chapters, courses, teachers, semesters, prices, enrolledItems } from "../../models/schema";
@@ -167,33 +167,63 @@ export const getPurchasedLessons = async (req: Request, res: Response) => {
             status: enrolledItems.status,
             createdAt: enrolledItems.createdAt,
         })
-        .from(enrolledItems)
-        .innerJoin(lessons, eq(enrolledItems.lessonId, lessons.id))
+        .from(lessons)
+        // نربط الشابتر والكورس لجلب أسمائهم وفحص شروط الوراثة
         .leftJoin(chapters, eq(lessons.chapterId, chapters.id))
         .leftJoin(courses, eq(lessons.courseId, courses.id))
-        .where(
+        // 2. الـ innerJoin الذكي مع جدول الاشتراكات بـ 3 شروط (OR)
+        .innerJoin(
+            enrolledItems,
             and(
                 eq(enrolledItems.studentId, studentId),
-                inArray(enrolledItems.status, ["active", "expired"])
+                inArray(enrolledItems.status, ["active", "expired"]),
+                or(
+                    // الحالة الأولى: شراء الدرس عينه بذاته
+                    eq(enrolledItems.lessonId, lessons.id),
+                    
+                    // الحالة الثانية: شراء الشابتر كامل (الدرس ينتمي لهذا الشابتر، وحقل الدرس في الفاتورة فارغ)
+                    and(
+                        eq(enrolledItems.chapterId, lessons.chapterId),
+                        isNull(enrolledItems.lessonId)
+                    ),
+                    
+                    // الحالة الثالثة: شراء الكورس كامل (الدرس ينتمي لهذا الكورس، وحقول الشابتر والدرس في الفاتورة فارغة)
+                    and(
+                        eq(enrolledItems.courseId, lessons.courseId),
+                        isNull(enrolledItems.chapterId),
+                        isNull(enrolledItems.lessonId)
+                    )
+                )
             )
         )
         .orderBy(desc(enrolledItems.createdAt));
 
     const now = new Date();
+    
+    // 3. حماية لمنع تكرار الدروس في حال وجود اشتراك كورس واشتراك درس منفصل في نفس الوقت
+    const seenLessonIds = new Set<string>();
+    const formattedLessons: any[] = [];
+
+    for (const p of purchasedLessons) {
+        if (seenLessonIds.has(p.lesson.id)) continue;
+        seenLessonIds.add(p.lesson.id);
+
+        const isExpired = p.expiresAt && p.expiresAt < now;
+
+        formattedLessons.push({
+            ...p.lesson,
+            chapterName: p.chapter?.name ?? null,
+            courseName: p.course?.name ?? null,
+            enrollmentId: p.enrollmentId,
+            expiresAt: p.expiresAt,
+            status: isExpired ? "expired" : p.status,
+            purchasedAt: p.createdAt
+        });
+    }
 
     return SuccessResponse(res, { 
         message: "Purchased lessons retrieved successfully", 
-        lessons: purchasedLessons.map(p => {
-            const isExpired = p.expiresAt && p.expiresAt < now;
-            return {
-                ...p.lesson,
-                chapterName: p.chapter?.name,
-                courseName: p.course?.name,
-                enrollmentId: p.enrollmentId,
-                expiresAt: p.expiresAt,
-                status: isExpired ? "expired" : p.status,
-                purchasedAt: p.createdAt
-            };
-        })
+        count: formattedLessons.length,
+        lessons: formattedLessons
     }, 200);
-}
+};

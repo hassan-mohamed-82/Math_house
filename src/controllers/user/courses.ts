@@ -3,7 +3,7 @@ import { courses } from "../../models/schema/admin/courses";
 import { db } from "../../models/connection";
 import { category, teachers, chapters, courseTeachers, semesters, Student, grade, enrolledItems } from "../../models/schema";
 import { prices } from "../../models/schema/admin/prices";
-import { eq, count, inArray, and, or, desc } from "drizzle-orm";
+import { eq, count, inArray, and, or, desc, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { checkAccess } from "../../utils/accessControl";
@@ -156,22 +156,36 @@ export const getPurchasedCourses = async (req: Request, res: Response) => {
         .where(
             and(
                 eq(enrolledItems.studentId, studentId),
-                inArray(enrolledItems.status, ["active", "expired"])
+                inArray(enrolledItems.status, ["active", "expired"]),
+                // 🚀 صمام الأمان: نضمن أن السجل للكورس الكامل وليس لشراء شابتر أو درس فرعي
+                isNull(enrolledItems.chapterId),
+                isNull(enrolledItems.lessonId)
             )
         )
         .orderBy(desc(enrolledItems.createdAt));
 
+    // حماية إضافية لمنع تكرار الكورس في الـ Response لو تم تفعيل اشتراكه مرتين بالخطأ
+    const seenCourseIds = new Set<string>();
+    const formattedCourses: any[] = [];
+
+    for (const p of purchasedCourses) {
+        if (!p.course || seenCourseIds.has(p.course.id)) continue;
+        seenCourseIds.add(p.course.id);
+
+        const isExpired = p.expiresAt && p.expiresAt < new Date();
+        
+        formattedCourses.push({
+            ...p.course,
+            enrollmentId: p.enrollmentId,
+            expiresAt: p.expiresAt,
+            status: isExpired ? "this is expired" : p.status,
+            purchasedAt: p.createdAt
+        });
+    }
+
     return SuccessResponse(res, { 
         message: "Purchased courses retrieved successfully", 
-        courses: purchasedCourses.map(p => {
-            const isExpired = p.expiresAt && p.expiresAt < new Date();
-            return {
-                ...p.course,
-                enrollmentId: p.enrollmentId,
-                expiresAt: p.expiresAt,
-                status: isExpired ? "this is expired" : p.status,
-                purchasedAt: p.createdAt
-            };
-        })
+        count: formattedCourses.length,
+        courses: formattedCourses
     }, 200);
-}
+};

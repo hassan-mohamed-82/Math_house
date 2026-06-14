@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { chapters, courses, category, teachers, lessons, semesters, enrolledItems } from "../../models/schema";
 import { prices } from "../../models/schema/admin/prices";
-import { eq, asc, and, sql, inArray, isNotNull, desc } from "drizzle-orm";
+import { eq, asc, and, sql, inArray, isNotNull, desc, or, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { checkAccess } from "../../utils/accessControl";
@@ -201,42 +201,68 @@ export const getChapterById = async (req: Request, res: Response) => {
     }, 200);
 }
 
-// 4. Get purchased chapters
+// ─── 4. Get purchased chapters ──────────────────────────────────────────────
 export const getPurchasedChapters = async (req: Request, res: Response) => {
     const studentId = req.user.id;
 
+    // الاستعلام يبدأ من الـ chapters لضمان فحص علاقتها باشتراكات الكورسات أو اشتراكات الشباتر مباشرة
     const purchasedChapters = await db
         .select({
             chapter: chapters,
             course: courses,
+            // نأخذ بيانات الاشتراك سواء جاءت من اشتراك الشابتر نفسه أو اشتراك الكورس الأب
             enrollmentId: enrolledItems.id,
             expiresAt: enrolledItems.expiresAt,
             status: enrolledItems.status,
             createdAt: enrolledItems.createdAt,
         })
-        .from(enrolledItems)
-        .innerJoin(chapters, eq(enrolledItems.chapterId, chapters.id))
+        .from(chapters)
+        // 1. نربط الكورس التابع له الشابتر لمعرفة تفاصيله والتحقق من اشتراكه
         .leftJoin(courses, eq(chapters.courseId, courses.id))
-        .where(
+        // 2. نربط جدول الاشتراكات بشرط ذكي جداً:
+        .innerJoin(
+            enrolledItems,
             and(
                 eq(enrolledItems.studentId, studentId),
-                inArray(enrolledItems.status, ["active", "expired"])
+                inArray(enrolledItems.status, ["active", "expired"]),
+                or(
+                    // الحالة الأولى: الطالب اشترى الشابتر ده عينه بذاته
+                    eq(enrolledItems.chapterId, chapters.id),
+                    // الحالة الثانية: الطالب اشترى الكورس الكامل اللي الشابتر ده جواه
+                    and(
+                        eq(enrolledItems.courseId, chapters.courseId),
+                        isNull(enrolledItems.chapterId), // للتأكد أنه سطر الكورس الكامل وليس شيئاً آخر
+                        isNull(enrolledItems.lessonId)
+                    )
+                )
             )
         )
+        // ترتيب المشتريات من الأحدث للأقدم بناءً على تاريخ الاشتراك
         .orderBy(desc(enrolledItems.createdAt));
+
+    // لمنع التكرار في حال كان هناك اشتراك كورس واشتراك شابتر منفصل لنفس العنصر بالخطأ
+    const seenChapterIds = new Set<string>();
+    const formattedChapters: any[] = [];
+
+    for (const p of purchasedChapters) {
+        if (seenChapterIds.has(p.chapter.id)) continue;
+        seenChapterIds.add(p.chapter.id);
+
+        const isExpired = p.expiresAt && p.expiresAt < new Date();
+        
+        formattedChapters.push({
+            ...p.chapter,
+            courseName: p.course?.name ?? null,
+            enrollmentId: p.enrollmentId,
+            expiresAt: p.expiresAt,
+            status: isExpired ? "this is expired" : p.status,
+            purchasedAt: p.createdAt
+        });
+    }
 
     return SuccessResponse(res, { 
         message: "Purchased chapters retrieved successfully", 
-        chapters: purchasedChapters.map(p => {
-            const isExpired = p.expiresAt && p.expiresAt < new Date();
-            return {
-                ...p.chapter,
-                courseName: p.course?.name,
-                enrollmentId: p.enrollmentId,
-                expiresAt: p.expiresAt,
-                status: isExpired ? "this is expired" : p.status,
-                purchasedAt: p.createdAt
-            };
-        })
+        count: formattedChapters.length,
+        chapters: formattedChapters
     }, 200);
-}
+};
