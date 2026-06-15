@@ -15,6 +15,7 @@ import {
     deleteSession,
 } from "../../controllers/admin/Session";
 import { catchAsync } from "../../utils/catchAsync";
+import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 
@@ -27,10 +28,10 @@ router.get("/select/students", catchAsync(selectStudents));
 router.get("/select/teachers", catchAsync(selectTeachers));
 router.get("/select/groups", catchAsync(selectGroups)); 
 
-router.get("/", catchAsync(getAllSessions));
-router.post("/", catchAsync(createSession));
-router.get("/:id", catchAsync(getSessionById));
-router.put("/:id", catchAsync(updateSession));
-router.delete("/:id", catchAsync(deleteSession));
+router.get("/", requirePermission("sessions", "View"), catchAsync(getAllSessions));
+router.post("/", requirePermission("sessions", "Add"), catchAsync(createSession));
+router.get("/:id", requirePermission("sessions", "View"), catchAsync(getSessionById));
+router.put("/:id", requirePermission("sessions", "Edit"), catchAsync(updateSession));
+router.delete("/:id", requirePermission("sessions", "Delete"), catchAsync(deleteSession));
 
 export default router;

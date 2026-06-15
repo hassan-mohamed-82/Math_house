@@ -13,20 +13,29 @@ import {
     selectionCourses
 } from "../../controllers/admin/courses";
 import { catchAsync } from "../../utils/catchAsync";
+import { requirePermission } from "../../middlewares/requirePermission";
+
 const router = Router();
 
-router.post("/", catchAsync(createCourse));
-router.get("/", catchAsync(getAllCourses));
+// ── Selection helpers (open to any authenticated admin — used in dropdowns) ──
 router.get("/categories", catchAsync(getCategoriesSelection));
-router.get("/selection", catchAsync(selectionCourses));
-router.get("/:id", catchAsync(getCourseById));
-router.put("/:id", catchAsync(updateCourse));
-router.delete("/:id", catchAsync(deleteCourse));
+router.get("/selection",  catchAsync(selectionCourses));
 
-router.get("/category/:categoryId", catchAsync(getCoursesbyCategoryId));
-// Course-Teacher management endpoints
-router.get("/:id/teachers", catchAsync(getCourseTeachers));
-router.post("/:id/teachers", catchAsync(addTeacherToCourse));
-router.delete("/:id/teachers/:teacherId", catchAsync(removeTeacherFromCourse));
+// ── List & detail ─────────────────────────────────────────────────────────
+router.get("/",                         requirePermission("courses", "View"),   catchAsync(getAllCourses));
+router.get("/category/:categoryId",     requirePermission("courses", "View"),   catchAsync(getCoursesbyCategoryId));
+router.get("/:id",                      requirePermission("courses", "View"),   catchAsync(getCourseById));
+router.get("/:id/teachers",             requirePermission("courses", "View"),   catchAsync(getCourseTeachers));
 
-export default router;
+// ── Create ────────────────────────────────────────────────────────────────
+router.post("/",                        requirePermission("courses", "Add"),    catchAsync(createCourse));
+router.post("/:id/teachers",            requirePermission("courses", "Edit"),   catchAsync(addTeacherToCourse));
+
+// ── Update ────────────────────────────────────────────────────────────────
+router.put("/:id",                      requirePermission("courses", "Edit"),   catchAsync(updateCourse));
+
+// ── Delete ────────────────────────────────────────────────────────────────
+router.delete("/:id",                   requirePermission("courses", "Delete"), catchAsync(deleteCourse));
+router.delete("/:id/teachers/:teacherId", requirePermission("courses", "Edit"),catchAsync(removeTeacherFromCourse));
+
+export default router;

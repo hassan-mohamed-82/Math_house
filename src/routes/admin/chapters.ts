@@ -10,16 +10,26 @@ import {
 } from "../../controllers/admin/chapters";
 import { getSemestersByCourseId } from "../../controllers/admin/semester";
 import { catchAsync } from "../../utils/catchAsync";
-const router = Router();
-// No Authorization for this
-router.get("/selectionSemester/:courseId", catchAsync(getSemestersByCourseId));
-// ---------------------------
+import { requirePermission } from "../../middlewares/requirePermission";
 
-router.post("/", catchAsync(createChapter));
-router.get("/", catchAsync(getAllChapters));
-router.patch("/swap-order", catchAsync(swapChapterOrder));
-router.get("/course/:courseId", catchAsync(getAllChaptersByCourseId));
-router.put("/:id", catchAsync(updateChapter));
-router.delete("/:id", catchAsync(deleteChapter));
-router.get("/:id", catchAsync(getChapterById));
-export default router;
+const router = Router();
+
+// ── Selection helpers (open to any authenticated admin) ──────────────────
+router.get("/selectionSemester/:courseId", catchAsync(getSemestersByCourseId));
+
+// ── List & detail ─────────────────────────────────────────────────────────
+router.get("/",                   requirePermission("chapters", "View"),   catchAsync(getAllChapters));
+router.get("/course/:courseId",   requirePermission("chapters", "View"),   catchAsync(getAllChaptersByCourseId));
+router.get("/:id",                requirePermission("chapters", "View"),   catchAsync(getChapterById));
+
+// ── Create ────────────────────────────────────────────────────────────────
+router.post("/",                  requirePermission("chapters", "Add"),    catchAsync(createChapter));
+
+// ── Update ────────────────────────────────────────────────────────────────
+router.put("/:id",                requirePermission("chapters", "Edit"),   catchAsync(updateChapter));
+router.patch("/swap-order",       requirePermission("chapters", "Edit"),   catchAsync(swapChapterOrder));
+
+// ── Delete ────────────────────────────────────────────────────────────────
+router.delete("/:id",             requirePermission("chapters", "Delete"), catchAsync(deleteChapter));
+
+export default router;

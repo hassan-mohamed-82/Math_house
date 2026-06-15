@@ -3,9 +3,10 @@ import bcrypt from "bcrypt";
 import { eq } from "drizzle-orm";
 import { BadRequest, UnauthorizedError } from "../../Errors";
 import { db } from "../../models/connection";
-import { admins } from "../../models/schema";
+import { admins, roles } from "../../models/schema";
 import { SuccessResponse } from "../../utils/response";
 import { generateAdminToken } from "../../utils/jwt";
+import type { Role } from "../../types/custom";
 
 export const login = async (req: Request, res: Response) => {
 	const { email, password } = req.body;
@@ -32,14 +33,23 @@ export const login = async (req: Request, res: Response) => {
 		throw new UnauthorizedError("Admin is inactive");
 	}
 
-	if (admin.type !== "super_admin") {
-		throw new UnauthorizedError("Only super admins can access Drive");
+	let role = null;
+	if (admin.roleId) {
+		const [roleRow] = await db.select().from(roles).where(eq(roles.id, admin.roleId));
+		role = roleRow;
+	}
+
+	const isSuperAdmin = admin.type === "super_admin";
+	const isDriver = role && role.name === "driver";
+
+	if (!isSuperAdmin && !isDriver) {
+		throw new UnauthorizedError("Only super admins or drivers can access Drive");
 	}
 
 	const token = generateAdminToken({
 		id: admin.id,
 		name: admin.name,
-		role: "admin",
+		role: (isSuperAdmin ? "superadmin" : "driver") as Role,
 	});
 
 	return SuccessResponse(res, {

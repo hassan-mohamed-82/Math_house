@@ -8,13 +8,15 @@ import {
     getContentBuyRequests,
     replyToContentBuyRequest
  } from "../../controllers/admin/payment";
+import { requirePermission } from "../../middlewares/requirePermission";
+
 const router = Router();
 
-router.get("/recharge-requests", catchAsync(getRechargeRequests));
-router.post("/recharge-requests/:paymentId/reply", catchAsync(replyToRechargeRequest));
-router.get("/package-buy-requests", catchAsync(getPackageBuyRequests));
-router.post("/package-buy-requests/:paymentId/reply", catchAsync(replyToPackageBuyRequest));
-router.get("/content-buy-requests", catchAsync(getContentBuyRequests));
-router.post("/content-buy-requests/:paymentId/reply", catchAsync(replyToContentBuyRequest));
+router.get("/recharge-requests", requirePermission("payments", "View"), catchAsync(getRechargeRequests));
+router.post("/recharge-requests/:paymentId/reply", requirePermission("payments", "Edit"), catchAsync(replyToRechargeRequest));
+router.get("/package-buy-requests", requirePermission("payments", "View"), catchAsync(getPackageBuyRequests));
+router.post("/package-buy-requests/:paymentId/reply", requirePermission("payments", "Edit"), catchAsync(replyToPackageBuyRequest));
+router.get("/content-buy-requests", requirePermission("payments", "View"), catchAsync(getContentBuyRequests));
+router.post("/content-buy-requests/:paymentId/reply", requirePermission("payments", "Edit"), catchAsync(replyToContentBuyRequest));
 
 export default router;

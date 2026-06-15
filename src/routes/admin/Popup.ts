@@ -8,6 +8,7 @@ import {
     deletePopup,
     getActivePopups
 } from "../../controllers/admin/Popup";
+import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 
@@ -15,10 +16,10 @@ const router = Router();
 router.get("/active", catchAsync(getActivePopups));
 
 // Admin CRUD
-router.post("/", catchAsync(createPopup));
-router.get("/", catchAsync(getAllPopups));
-router.get("/:id", catchAsync(getPopupById));
-router.put("/:id", catchAsync(updatePopup));
-router.delete("/:id", catchAsync(deletePopup));
+router.post("/", requirePermission("popups", "Add"), catchAsync(createPopup));
+router.get("/", requirePermission("popups", "View"), catchAsync(getAllPopups));
+router.get("/:id", requirePermission("popups", "View"), catchAsync(getPopupById));
+router.put("/:id", requirePermission("popups", "Edit"), catchAsync(updatePopup));
+router.delete("/:id", requirePermission("popups", "Delete"), catchAsync(deletePopup));
 
 export default router;

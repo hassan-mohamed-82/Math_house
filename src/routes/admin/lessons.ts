@@ -16,27 +16,32 @@ import {
     getLessonsbyCourseId,
 } from "../../controllers/admin/lessons";
 import { catchAsync } from "../../utils/catchAsync";
+import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 
-// ─── Selection APIs ─────────────────────────────────────────────────────────
+// ── Selection helpers (open to any authenticated admin) ──────────────────
 router.get("/select-chapters", catchAsync(selectChapters));
 
-// ─── Lesson Routes ──────────────────────────────────────────────────────────
-router.post("/", catchAsync(createLesson));
-router.get("/", catchAsync(getAllLessons));
-router.get("/course/:courseId", catchAsync(getLessonsbyCourseId));
-router.patch("/swap-order", catchAsync(swapLessonOrder));
-router.get("/chapter/:chapterId", catchAsync(getLessonsByChapterId));
-router.get("/:id", catchAsync(getLessonById));
-router.put("/:id", catchAsync(updateLesson));
-router.delete("/:id", catchAsync(deleteLesson));
+// ── Lesson Routes ─────────────────────────────────────────────────────────
+router.get("/",                    requirePermission("lessons", "View"),   catchAsync(getAllLessons));
+router.get("/course/:courseId",    requirePermission("lessons", "View"),   catchAsync(getLessonsbyCourseId));
+router.get("/chapter/:chapterId",  requirePermission("lessons", "View"),   catchAsync(getLessonsByChapterId));
+router.get("/:id",                 requirePermission("lessons", "View"),   catchAsync(getLessonById));
 
-// ─── Lesson Idea Routes ─────────────────────────────────────────────────────
-router.post("/ideas", catchAsync(createLessonIdea));
-router.get("/ideas/lesson/:lessonId", catchAsync(getIdeasByLessonId));
-router.patch("/ideas/swap-order", catchAsync(swapIdeaOrder));
-router.put("/ideas/:id", catchAsync(updateLessonIdea));
-router.delete("/ideas/:id", catchAsync(deleteLessonIdea));
+router.post("/",                   requirePermission("lessons", "Add"),    catchAsync(createLesson));
+
+router.put("/:id",                 requirePermission("lessons", "Edit"),   catchAsync(updateLesson));
+router.patch("/swap-order",        requirePermission("lessons", "Edit"),   catchAsync(swapLessonOrder));
+
+router.delete("/:id",              requirePermission("lessons", "Delete"), catchAsync(deleteLesson));
+
+// ── Lesson Idea Routes ────────────────────────────────────────────────────
+router.get("/ideas/lesson/:lessonId", requirePermission("lessons", "View"),   catchAsync(getIdeasByLessonId));
+router.post("/ideas",                 requirePermission("lessons", "Edit"),   catchAsync(createLessonIdea));
+router.patch("/ideas/swap-order",     requirePermission("lessons", "Edit"),   catchAsync(swapIdeaOrder));
+router.put("/ideas/:id",              requirePermission("lessons", "Edit"),   catchAsync(updateLessonIdea));
+router.delete("/ideas/:id",           requirePermission("lessons", "Delete"), catchAsync(deleteLessonIdea));
 
 export default router;
+

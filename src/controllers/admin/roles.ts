@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
-import { MODULES, ACTION_NAMES } from "../../types/constant";
+import { MODULES, ACTION_NAMES, formatModuleLabel } from "../../types/constant";
 import { v4 as uuidv4 } from "uuid";
 import { Permission } from "../../types/custom";
 
@@ -55,42 +55,25 @@ const formatRole = (role: any) => ({
     createdAt: role.createdAt,
     updatedAt: role.updatedAt,
 });
-function formatLabel(str: string): string {
-    return str
-        .split("_")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(" ");
-}
 
-// Get Admin Modules with Actions
+
+// ── Get Admin Modules with Actions (schema for frontend permission builder) ──
 export const getAdminPermissions = async (req: Request, res: Response) => {
-    try {
-        const permissions = MODULES.map((module) => ({
-            module,
-            label: formatLabel(module),
-            actions: ACTION_NAMES.map((action) => ({
-                key: action.toLowerCase(),
-                label: action,
-                permission: `${module}.${action.toLowerCase()}`,
-            })),
-        }));
+    const permissions = MODULES.map((module) => ({
+        module,
+        label: formatModuleLabel(module),
+        actions: ACTION_NAMES.map((action) => ({
+            key: action.toLowerCase(),
+            label: action,
+            permission: `${module}.${action.toLowerCase()}`,
+        })),
+    }));
 
-        return res.status(200).json({
-            success: true,
-            data: {
-                modules: [...MODULES],
-                actions: [...ACTION_NAMES],
-                permissions,
-            },
-        });
-    } catch (error: any) {
-        console.error("Get admin permissions error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to get permissions",
-            error: error.message,
-        });
-    }
+    return SuccessResponse(res, {
+        modules: [...MODULES],
+        actions: [...ACTION_NAMES],
+        permissions,
+    }, 200);
 };
 
 // ✅ Get All Roles
@@ -260,19 +243,22 @@ export const toggleRoleStatus = async (req: Request, res: Response) => {
     }, 200);
 };
 
-// ✅ Get Available Permissions
+// ✅ Get Available Permissions — full catalogue with human-readable labels
 export const getAvailablePermissions = async (req: Request, res: Response) => {
     const permissions = MODULES.map((module) => ({
         module,
+        label: formatModuleLabel(module),
         actions: ACTION_NAMES.map((action) => ({
             id: generateActionId(),
             action,
+            label: action,
+            permission: `${module}.${action.toLowerCase()}`,
         })),
     }));
 
     SuccessResponse(res, {
-        modules: MODULES,
-        actions: ACTION_NAMES,
+        modules: [...MODULES],
+        actions: [...ACTION_NAMES],
         permissions,
     }, 200);
-};
+};

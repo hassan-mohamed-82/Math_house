@@ -19,32 +19,36 @@ import {
     getQuestionsbyCourseId,
     getQuestionsbySectiondId,
 } from "../../controllers/admin/questions";
-
 import { getExamCodes } from "../../controllers/admin/examCodes";
 import { selectLessons } from "../../controllers/admin/lessons";
+import { requirePermission } from "../../middlewares/requirePermission";
+
 const router = Router();
 
-// No Permissions Required
+// ── Selection helpers (open to any authenticated admin) ──────────────────
 router.get("/selectionExamCode", catchAsync(getExamCodes));
-router.get("/selectionLesson", catchAsync(selectLessons));
-// ---------------------------------------------------------
+router.get("/selectionLesson",   catchAsync(selectLessons));
 
+// ── OCR / AI helpers ──────────────────────────────────────────────────────
+router.post("/ocr",                requirePermission("questions", "Add"),  upload.single("image"), catchAsync(getTextfromImage));
+router.post("/parallel/generate",  requirePermission("questions", "Add"),  catchAsync(sendParallelQuestionGenerate));
 
-router.post("/ocr", upload.single('image'), catchAsync(getTextfromImage));
-router.post("/parallel/generate", catchAsync(sendParallelQuestionGenerate));
-router.post("/parallel", catchAsync(createParallelQuestion));
-router.put("/parallel/:id", catchAsync(updateParallelQuestion));
-router.delete("/parallel/:id", catchAsync(deleteParallelQuestion));
-router.get("/parallel/original/:id", catchAsync(getParallelQuestionsByOriginalId));
-router.get("/parallel/:id", catchAsync(getParallelQuestionbyId));
-router.get("/parallel", catchAsync(getAllParallelQuestions));
-router.post("/", catchAsync(createQuestion));
-router.get("/", catchAsync(getAllQuestions));
-router.get("/course/:courseId", catchAsync(getQuestionsbyCourseId));
-router.get("/lesson/:id", catchAsync(getQuestionsbyLessonId));
-router.get("/section/:sectionId", catchAsync(getQuestionsbySectiondId));
-router.get("/:id", catchAsync(getQuestionbyId));
-router.put("/:id", catchAsync(updateQuestion));
-router.delete("/:id", catchAsync(deleteQuestion));
+// ── Parallel questions ────────────────────────────────────────────────────
+router.get("/parallel",                          requirePermission("questions", "View"),   catchAsync(getAllParallelQuestions));
+router.get("/parallel/original/:id",             requirePermission("questions", "View"),   catchAsync(getParallelQuestionsByOriginalId));
+router.get("/parallel/:id",                      requirePermission("questions", "View"),   catchAsync(getParallelQuestionbyId));
+router.post("/parallel",                         requirePermission("questions", "Add"),    catchAsync(createParallelQuestion));
+router.put("/parallel/:id",                      requirePermission("questions", "Edit"),   catchAsync(updateParallelQuestion));
+router.delete("/parallel/:id",                   requirePermission("questions", "Delete"), catchAsync(deleteParallelQuestion));
 
-export default router;
+// ── Main questions ────────────────────────────────────────────────────────
+router.get("/",                                  requirePermission("questions", "View"),   catchAsync(getAllQuestions));
+router.get("/course/:courseId",                  requirePermission("questions", "View"),   catchAsync(getQuestionsbyCourseId));
+router.get("/lesson/:id",                        requirePermission("questions", "View"),   catchAsync(getQuestionsbyLessonId));
+router.get("/section/:sectionId",                requirePermission("questions", "View"),   catchAsync(getQuestionsbySectiondId));
+router.get("/:id",                               requirePermission("questions", "View"),   catchAsync(getQuestionbyId));
+router.post("/",                                 requirePermission("questions", "Add"),    catchAsync(createQuestion));
+router.put("/:id",                               requirePermission("questions", "Edit"),   catchAsync(updateQuestion));
+router.delete("/:id",                            requirePermission("questions", "Delete"), catchAsync(deleteQuestion));
+
+export default router;

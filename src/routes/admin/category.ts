@@ -1,14 +1,22 @@
 import { Router } from "express";
 import { createCategory, deleteCategory, getAllCategory, getCategoryById, updateCategory, getCategoryLineage } from "../../controllers/admin/category";
 import { catchAsync } from "../../utils/catchAsync";
+import { requirePermission } from "../../middlewares/requirePermission";
+
 const router = Router();
 
-router.post("/", catchAsync(createCategory));
-router.get("/", catchAsync(getAllCategory));
-router.get("/lineage/:id", catchAsync(getCategoryLineage));
+// ── List & detail ─────────────────────────────────────────────────────────
+router.get("/",           requirePermission("categories", "View"), catchAsync(getAllCategory));
+router.get("/lineage/:id",requirePermission("categories", "View"), catchAsync(getCategoryLineage));
+router.get("/:id",        requirePermission("categories", "View"), catchAsync(getCategoryById));
 
-router.put("/:id", catchAsync(updateCategory));
-router.delete("/:id", catchAsync(deleteCategory));
-router.get("/:id", catchAsync(getCategoryById));
+// ── Create ────────────────────────────────────────────────────────────────
+router.post("/",          requirePermission("categories", "Add"),  catchAsync(createCategory));
+
+// ── Update ────────────────────────────────────────────────────────────────
+router.put("/:id",        requirePermission("categories", "Edit"), catchAsync(updateCategory));
+
+// ── Delete ────────────────────────────────────────────────────────────────
+router.delete("/:id",     requirePermission("categories", "Delete"), catchAsync(deleteCategory));
 
 export default router;

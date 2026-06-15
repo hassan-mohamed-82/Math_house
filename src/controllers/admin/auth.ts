@@ -34,7 +34,7 @@ export async function login(req: Request, res: Response) {
     const tokenPayload = {
         id: admin[0].id,
         name: admin[0].name,
-        role: (role && role[0] ? role[0].name : "admin") as Role,
+        role: (admin[0].type === "super_admin" ? "superadmin" : (role && role[0] ? role[0].name : "admin")) as Role,
         // permissions: admin[0].permissions,
     };
 

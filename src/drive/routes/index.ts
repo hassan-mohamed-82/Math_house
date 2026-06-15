@@ -22,15 +22,15 @@ router.post('/auth/login', login);
 // ==========================================
 
 // 1. Initialize the secure direct upload to Bunny.net
-router.post('/upload/init', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, initializeVideoUpload);
+router.post('/upload/init', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, initializeVideoUpload);
 
 // [Placeholder] 2. Standard Drive CRUD operations for the Admin
 // An admin needs to be able to fetch the virtual folders and delete mistakes.
-router.get('/folders', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, getDriveContents);
-router.get('/folders/:folderId', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, getDriveContents);
-router.post('/folders', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, createFolder);
-router.delete('/folders/:folderId', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, deleteFolder);
-router.delete('/files/:videoId', authenticated, authorizeRoles('admin'), requireDriveSuperAdmin, deleteVideo);
+router.get('/folders', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, getDriveContents);
+router.get('/folders/:folderId', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, getDriveContents);
+router.post('/folders', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, createFolder);
+router.delete('/folders/:folderId', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, deleteFolder);
+router.delete('/files/:videoId', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, deleteVideo);
 
 
 // ==========================================
