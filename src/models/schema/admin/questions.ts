@@ -10,7 +10,7 @@ export const questions = mysqlTable("questions", {
     image: varchar("image", { length: 255 }),
     answerType: mysqlEnum("answerType", ["MCQ", "Grid in"]).notNull(),
     difficulty: mysqlEnum("difficulty", ["A", "B", "C", "D", "E"]).notNull(),
-    questionType: mysqlEnum("questionType", ["Trail", "Extra"]).notNull(),
+    questionType: mysqlEnum("questionType", ["Trail", "Extra", "Parallel"]).notNull(),
 
     // Linking
     lessonId: char("lesson_id", { length: 255 }).notNull().references(() => lessons.id),

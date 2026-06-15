@@ -308,6 +308,7 @@ export const getSelection = async (req: Request, res: Response) => {
 
 export const getAllDiagnosticExamsbyCourseId = async (req: Request, res: Response) => {
     const { courseId } = req.params;
+    
     const exams = await db
         .select({
             id: diagnosticExam.id,
@@ -337,6 +338,7 @@ export const getAllDiagnosticExamsbyCourseId = async (req: Request, res: Respons
         })
         .from(diagnosticExam)
         .leftJoin(rawScore, eq(diagnosticExam.rawScoreId, rawScore.id))
+        .leftJoin(courses, eq(diagnosticExam.courseId, courses.id)) 
         .leftJoin(semesters, eq(courses.id, semesters.courseId))
         .leftJoin(category, eq(courses.categoryId, category.id))
         .where(eq(diagnosticExam.courseId, courseId))
