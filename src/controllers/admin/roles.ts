@@ -101,6 +101,41 @@ export const getRoleById = async (req: Request, res: Response) => {
     SuccessResponse(res, { role: formatRole(role[0]) }, 200);
 };
 
+// Validation helper to ensure module and action names exist in constraints
+const validatePermissions = (permissions: any): void => {
+    if (!permissions) return;
+    if (!Array.isArray(permissions)) {
+        throw new BadRequest("Permissions must be an array");
+    }
+
+    for (const perm of permissions) {
+        if (!perm || typeof perm !== "object") {
+            throw new BadRequest("Each permission item must be an object");
+        }
+        if (!perm.module) {
+            throw new BadRequest("Each permission item must specify a module");
+        }
+        // Verify module exists in MODULES
+        if (!MODULES.includes(perm.module as any)) {
+            throw new BadRequest(`Module "${perm.module}" is invalid. Must be one of the defined module constants.`);
+        }
+
+        if (!Array.isArray(perm.actions)) {
+            throw new BadRequest(`Actions for module "${perm.module}" must be an array`);
+        }
+
+        for (const act of perm.actions) {
+            if (!act || typeof act !== "object" || !act.action) {
+                throw new BadRequest(`Each action in module "${perm.module}" must be an object with an action field`);
+            }
+            // Verify action exists in ACTION_NAMES
+            if (!ACTION_NAMES.includes(act.action as any)) {
+                throw new BadRequest(`Action "${act.action}" in module "${perm.module}" is invalid. Must be one of: ${ACTION_NAMES.join(", ")}`);
+            }
+        }
+    }
+};
+
 // ✅ Create Role
 export const createRole = async (req: Request, res: Response) => {
     const { name, permissions } = req.body;
@@ -119,6 +154,7 @@ export const createRole = async (req: Request, res: Response) => {
         throw new BadRequest("Role with this name already exists");
     }
 
+    validatePermissions(permissions);
     const permissionsWithIds = addIdsToPermissions(permissions || []);
 
     // ✅ ابعت array على طول - Drizzle هيتعامل معاه
@@ -167,6 +203,7 @@ export const updateRole = async (req: Request, res: Response) => {
         }
     }
 
+    validatePermissions(permissions);
     const currentPermissions = parsePermissions(existingRole[0].permissions);
     const updatedPermissions = permissions
         ? addIdsToPermissions(permissions)

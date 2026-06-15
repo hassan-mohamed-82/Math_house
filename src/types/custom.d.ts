@@ -20,7 +20,7 @@ export interface TokenPayload {
 declare global {
   namespace Express {
     interface Request {
-      user?: AppUser;
+      user: AppUser;
       admin?: AppUser;
     }
   }
