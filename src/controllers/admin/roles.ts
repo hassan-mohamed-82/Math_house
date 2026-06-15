@@ -296,6 +296,6 @@ export const getAvailablePermissions = async (req: Request, res: Response) => {
     SuccessResponse(res, {
         modules: [...MODULES],
         actions: [...ACTION_NAMES],
-        permissions,
+        // permissions,
     }, 200);
-};
+};
