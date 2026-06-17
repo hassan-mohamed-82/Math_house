@@ -47,7 +47,7 @@ function mergePermissions(
 
         if (existingIndex >= 0 && Array.isArray(merged[existingIndex]?.actions)) {
             for (const action of adminPerm.actions) {
-                if (!merged[existingIndex].actions.some((a) => a?.action === action?.action)) {
+                if (!merged[existingIndex].actions.includes(action)) {
                     merged[existingIndex].actions.push(action);
                 }
             }
