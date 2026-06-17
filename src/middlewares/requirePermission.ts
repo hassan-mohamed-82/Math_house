@@ -67,7 +67,7 @@ function mergePermissions(
         const existing = merged.find((m) => m.module === ap.module);
         if (existing) {
             for (const act of ap.actions) {
-                if (act?.action && !existing.actions.some((a) => a.action === act.action)) {
+                if (act && !existing.actions.includes(act)) {
                     existing.actions.push(act);
                 }
             }
@@ -89,7 +89,7 @@ function hasPermission(
 ): boolean {
     const modulePerm = permissions.find((p) => p.module === module);
     if (!modulePerm) return false;
-    return modulePerm.actions.some((a) => a.action === action);
+    return modulePerm.actions.includes(action);
 }
 
 // ─────────────────────────────────────────────────────────────────

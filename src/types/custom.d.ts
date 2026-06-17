@@ -37,12 +37,7 @@ export interface ApiResponse<T = any> {
   };
 }
 
-export interface PermissionAction {
-  id?: string;
-  action: ActionName;
-}
-
 export interface Permission {
   module: ModuleName;
-  actions: PermissionAction[];
+  actions: ActionName[];
 }

@@ -22,6 +22,19 @@ export const createAdmin = async (req: Request, res: Response) => {
         throw new BadRequest("email is already exists");
     }
 
+    // Validate roleId if provided
+    if (roleId) {
+        const roleExists = await db
+            .select({ id: roles.id })
+            .from(roles)
+            .where(eq(roles.id, roleId))
+            .limit(1);
+
+        if (!roleExists[0]) {
+            throw new BadRequest("Role not found");
+        }
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const id = uuidv4();
 
@@ -111,6 +124,19 @@ export const updateAdmin = async (req: Request, res: Response) => {
 
     if (existingAdmin.length === 0) {
         throw new NotFound("admin not found");
+    }
+
+    // Validate roleId if provided
+    if (roleId) {
+        const roleExists = await db
+            .select({ id: roles.id })
+            .from(roles)
+            .where(eq(roles.id, roleId))
+            .limit(1);
+
+        if (!roleExists[0]) {
+            throw new BadRequest("Role not found");
+        }
     }
 
     const updateData: any = {

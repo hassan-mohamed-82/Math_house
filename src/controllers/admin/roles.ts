@@ -6,22 +6,14 @@ import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
 import { MODULES, ACTION_NAMES, formatModuleLabel } from "../../types/constant";
-import { v4 as uuidv4 } from "uuid";
 import { Permission } from "../../types/custom";
 
-// Generate ID للـ Action
-const generateActionId = (): string => {
-    return uuidv4().replace(/-/g, "").substring(0, 24);
-};
 
-// إضافة IDs للـ Actions
-const addIdsToPermissions = (permissions: Permission[]): Permission[] => {
+// Strip to clean shape: { module, actions: ["View", "Add", ...] }
+const normalizePermissions = (permissions: Permission[]): Permission[] => {
     return permissions.map((perm) => ({
         module: perm.module,
-        actions: perm.actions.map((act) => ({
-            id: act.id || generateActionId(),
-            action: act.action,
-        })),
+        actions: perm.actions,
     }));
 };
 
@@ -115,7 +107,6 @@ const validatePermissions = (permissions: any): void => {
         if (!perm.module) {
             throw new BadRequest("Each permission item must specify a module");
         }
-        // Verify module exists in MODULES
         if (!MODULES.includes(perm.module as any)) {
             throw new BadRequest(`Module "${perm.module}" is invalid. Must be one of the defined module constants.`);
         }
@@ -125,12 +116,11 @@ const validatePermissions = (permissions: any): void => {
         }
 
         for (const act of perm.actions) {
-            if (!act || typeof act !== "object" || !act.action) {
-                throw new BadRequest(`Each action in module "${perm.module}" must be an object with an action field`);
+            if (typeof act !== "string") {
+                throw new BadRequest(`Each action in module "${perm.module}" must be a string (e.g. "View", "Add")`);
             }
-            // Verify action exists in ACTION_NAMES
-            if (!ACTION_NAMES.includes(act.action as any)) {
-                throw new BadRequest(`Action "${act.action}" in module "${perm.module}" is invalid. Must be one of: ${ACTION_NAMES.join(", ")}`);
+            if (!ACTION_NAMES.includes(act as any)) {
+                throw new BadRequest(`Action "${act}" in module "${perm.module}" is invalid. Must be one of: ${ACTION_NAMES.join(", ")}`);
             }
         }
     }
@@ -155,12 +145,12 @@ export const createRole = async (req: Request, res: Response) => {
     }
 
     validatePermissions(permissions);
-    const permissionsWithIds = addIdsToPermissions(permissions || []);
+    const normalized = normalizePermissions(permissions || []);
 
     // ✅ ابعت array على طول - Drizzle هيتعامل معاه
     await db.insert(roles).values({
         name,
-        permissions: permissionsWithIds,
+        permissions: normalized,
     });
 
     // جيب الـ role اللي اتعمل
@@ -206,7 +196,7 @@ export const updateRole = async (req: Request, res: Response) => {
     validatePermissions(permissions);
     const currentPermissions = parsePermissions(existingRole[0].permissions);
     const updatedPermissions = permissions
-        ? addIdsToPermissions(permissions)
+        ? normalizePermissions(permissions)
         : currentPermissions;
 
     // ✅ ابعت array على طول
@@ -286,7 +276,6 @@ export const getAvailablePermissions = async (req: Request, res: Response) => {
         module,
         label: formatModuleLabel(module),
         actions: ACTION_NAMES.map((action) => ({
-            id: generateActionId(),
             action,
             label: action,
             permission: `${module}.${action.toLowerCase()}`,
@@ -296,6 +285,6 @@ export const getAvailablePermissions = async (req: Request, res: Response) => {
     SuccessResponse(res, {
         modules: [...MODULES],
         actions: [...ACTION_NAMES],
-        // permissions,
+        permissions,
     }, 200);
 };
