@@ -1,10 +1,31 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { eq, asc, and } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound } from "../../Errors";
-import { lessons, lessonIdeas, quizzes, chapters } from "../../models/schema";
+import { lessons, lessonIdeas, quizzes } from "../../models/schema";
 import { checkAccess } from "../../utils/accessControl";
+import { generateSecureStreamUrl } from "../../drive/services/services";
+
+// ─── helper: resolve video for a single idea ────────────────────────────────
+// Never expose bunnyGuid to the client; generate a short-lived signed URL instead.
+const resolveVideo = (idea: {
+    video: string | null;
+    bunnyGuid: string | null;
+    [key: string]: unknown;
+}) => {
+    const { bunnyGuid, video, ...rest } = idea;
+
+    let videoPayload: { type: "bunny"; streamUrl: string } | { type: "external"; url: string } | null = null;
+
+    if (bunnyGuid) {
+        videoPayload = { type: "bunny", streamUrl: generateSecureStreamUrl(bunnyGuid) };
+    } else if (video) {
+        videoPayload = { type: "external", url: video };
+    }
+
+    return { ...rest, video: videoPayload };
+};
 
 export const getIdeasByLessonId = async (req: Request, res: Response) => {
     const { lessonId } = req.params;
@@ -35,12 +56,14 @@ export const getIdeasByLessonId = async (req: Request, res: Response) => {
         throw new BadRequest("You do not have access to this lesson's content. Please purchase the lesson, chapter, or course.");
     }
 
-    // 3. Fetch ideas
-    const ideas = await db
+    // 3. Fetch ideas and resolve video securely
+    const rawIdeas = await db
         .select()
         .from(lessonIdeas)
         .where(eq(lessonIdeas.lessonId, lessonId))
         .orderBy(asc(lessonIdeas.ideaOrder));
+
+    const ideas = rawIdeas.map(resolveVideo);
 
     // 4. Fetch quizzes for this lesson
     const lessonQuizzes = await db
@@ -99,7 +122,6 @@ export const getIdeaById = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, {
         message: "Idea fetched successfully",
-        idea: ideaData.idea
+        idea: resolveVideo(ideaData.idea as any)
     }, 200);
 };
-

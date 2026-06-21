@@ -70,4 +70,4 @@ export const formatActionLabel = (action: string): string =>
     action.charAt(0).toUpperCase() + action.slice(1).toLowerCase();
 
 export const BASE64_IMAGE_REGEX = /^data:image\/(jpeg|jpg|png|gif|webp);base64,/;
-
+export const BASE64_PDF_REGEX = /^data:application\/pdf;base64,/;

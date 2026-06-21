@@ -448,16 +448,42 @@ export const getLessonsbyCourseId = async (req: Request, res: Response) => {
 // Lesson Ideas
 
 export const createLessonIdea = async (req: Request, res: Response) => {
-    const { lessonId, idea, pdf, video } = req.body;
+    const { lessonId, idea, pdf, video, bunnyGuid } = req.body;
 
     if (!lessonId || !idea) {
         throw new BadRequest("Lesson ID and Idea are required");
+    }
+
+    // Validate that video and bunnyGuid are not both provided
+    if (video && bunnyGuid) {
+        throw new BadRequest("Provide either an external video link OR a Drive bunnyGuid, not both");
     }
 
     // Validate lesson exists
     const [existingLesson] = await db.select().from(lessons).where(eq(lessons.id, lessonId));
     if (!existingLesson) {
         throw new NotFound("Lesson not found");
+    }
+
+    // Validate bunnyGuid exists in drive_assets if provided
+    if (bunnyGuid) {
+        const { driveAssets } = await import("../../models/schema");
+        const [asset] = await db.select({ id: driveAssets.id, status: driveAssets.status })
+            .from(driveAssets)
+            .where(eq(driveAssets.bunnyGuid, bunnyGuid));
+        if (!asset) {
+            throw new NotFound("Video not found in Drive. Please upload the video first.");
+        }
+        if (asset.status === "failed") {
+            throw new BadRequest("The selected video failed to process. Please re-upload it.");
+        }
+    }
+
+    // Handle PDF: base64 upload OR external link
+    let pdfUrl = pdf;
+    if (pdf && pdf.startsWith("data:application/pdf;base64,")) {
+        const { validateAndSavePdf } = await import("../../utils/handleImages");
+        pdfUrl = await validateAndSavePdf(req, pdf, "ideas");
     }
 
     // Auto-compute ideaOrder: MAX(ideaOrder) + 1 for this lesson
@@ -468,8 +494,9 @@ export const createLessonIdea = async (req: Request, res: Response) => {
         lessonId,
         idea,
         ideaOrder: nextOrder,
-        pdf,
-        video,
+        pdf: pdfUrl,
+        video: video ?? null,
+        bunnyGuid: bunnyGuid ?? null,
     });
 
     return SuccessResponse(res, { message: "Lesson idea created successfully", ideaOrder: nextOrder }, 200);
@@ -509,17 +536,53 @@ export const swapIdeaOrder = async (req: Request, res: Response) => {
 
 export const updateLessonIdea = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { idea, pdf, video } = req.body;
+    const { idea, pdf, video, bunnyGuid } = req.body;
 
     const [existingIdea] = await db.select().from(lessonIdeas).where(eq(lessonIdeas.id, id));
     if (!existingIdea) {
         throw new NotFound("Lesson idea not found");
     }
 
+    // Validate that video and bunnyGuid are not both provided
+    if (video && bunnyGuid) {
+        throw new BadRequest("Provide either an external video link OR a Drive bunnyGuid, not both");
+    }
+
+    // Validate bunnyGuid exists in drive_assets if provided
+    if (bunnyGuid) {
+        const { driveAssets } = await import("../../models/schema");
+        const [asset] = await db.select({ id: driveAssets.id, status: driveAssets.status })
+            .from(driveAssets)
+            .where(eq(driveAssets.bunnyGuid, bunnyGuid));
+        if (!asset) {
+            throw new NotFound("Video not found in Drive. Please upload the video first.");
+        }
+        if (asset.status === "failed") {
+            throw new BadRequest("The selected video failed to process. Please re-upload it.");
+        }
+    }
+
+    // Handle PDF: base64 upload OR external link
+    let pdfUrl = pdf !== undefined ? pdf : existingIdea.pdf;
+    if (pdf && pdf.startsWith("data:application/pdf;base64,")) {
+        const { validateAndSavePdf, deleteImage } = await import("../../utils/handleImages");
+        pdfUrl = await validateAndSavePdf(req, pdf, "ideas");
+        // delete old pdf if it was a local upload
+        if (existingIdea.pdf && existingIdea.pdf.includes("/uploads/")) {
+            await deleteImage(existingIdea.pdf);
+        }
+    }
+
+    // Determine final video / bunnyGuid values
+    // Passing null explicitly clears the field; undefined keeps the existing value
+    const finalVideo = video !== undefined ? video : (bunnyGuid !== undefined ? null : existingIdea.video);
+    const finalBunnyGuid = bunnyGuid !== undefined ? bunnyGuid : (video !== undefined ? null : existingIdea.bunnyGuid);
+
     await db.update(lessonIdeas).set({
         idea: idea ?? existingIdea.idea,
-        pdf: pdf !== undefined ? pdf : existingIdea.pdf,
-        video: video !== undefined ? video : existingIdea.video,
+        pdf: pdfUrl,
+        video: finalVideo,
+        bunnyGuid: finalBunnyGuid,
     }).where(eq(lessonIdeas.id, id));
 
     return SuccessResponse(res, { message: "Lesson idea updated successfully" }, 200);

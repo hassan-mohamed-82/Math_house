@@ -51,6 +51,18 @@ export const validateAndSaveLogo = async (req: Request, logo: string, folder: st
   }
 };
 
+export const validateAndSavePdf = async (req: Request, file: string, folder: string): Promise<string> => {
+  if (!file.match(/^data:application\/pdf;base64,/)) {
+    throw new BadRequest("Invalid file format. Must be a base64 encoded PDF");
+  }
+  try {
+    const savedUrl = await saveBase64Image(file, req, folder);
+    return savedUrl;
+  } catch (error: any) {
+    throw new BadRequest(`Failed to save pdf: ${error.message}`);
+  }
+};
+
 export const deleteImage = async (image: string) => {
   if (image.includes("data:image") || image.length > 2000) {
     console.warn("Skipping deletion of likely base64 data in image field");

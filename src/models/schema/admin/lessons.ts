@@ -29,8 +29,9 @@ export const lessonIdeas = mysqlTable("lesson_ideas", {
     idea: varchar("idea", { length: 255 }).notNull(),
     lessonId: char("lesson_id", { length: 255 }).notNull().references(() => lessons.id),
     ideaOrder: int("idea_order").notNull(),
-    pdf: varchar("pdf", { length: 255 }),
-    video: varchar("video", { length: 255 }),
+    pdf: varchar("pdf", { length: 500 }),        // local upload URL or external link
+    video: varchar("video", { length: 500 }),    // external video link (e.g. YouTube)
+    bunnyGuid: varchar("bunny_guid", { length: 255 }), // Bunny.net GUID for secure streaming
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
