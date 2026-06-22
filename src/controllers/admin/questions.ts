@@ -23,7 +23,7 @@ import {
 import { eq, count, desc, like, or, SQL, and, isNull, asc } from "drizzle-orm";
 import { NotFound } from "../../Errors";
 import { addGenerationJob } from "../../queues/questionQueue";
-import { validateAndSaveLogo, deleteImage, handleImageUpdate } from "../../utils/handleImages";
+import { validateAndSaveLogo, deleteImage, handleImageUpdate, validateAndSavePdf } from "../../utils/handleImages";
 
 export const getTextfromImage = async (req: Request, res: Response) => {
     const imageSource = req.file?.buffer || req.body?.image;
@@ -39,7 +39,7 @@ export const getTextfromImage = async (req: Request, res: Response) => {
 // TODO: SAVE IMAGES TO THE DRIVE Rather than BASE64
 // Questions
 export const createQuestion = async (req: Request, res: Response) => {
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo, answerImage, answerText } = req.body;
 
     if (!question
         || !answerType
@@ -99,11 +99,23 @@ export const createQuestion = async (req: Request, res: Response) => {
             await tx.insert(questionOptions).values(formattedOptions);
         }
 
-        if (answerPdf || answerVideo) {
+        let finalAnswerPdf = answerPdf;
+        if (answerPdf && !answerPdf.startsWith("http")) {
+            finalAnswerPdf = await validateAndSavePdf(req, answerPdf, "questions");
+        }
+
+        let finalAnswerImage = answerImage;
+        if (answerImage && !answerImage.startsWith("http")) {
+            finalAnswerImage = await validateAndSaveLogo(req, answerImage, "questions");
+        }
+
+        if (finalAnswerPdf || answerVideo || finalAnswerImage || answerText) {
             await tx.insert(questionAnswers).values({
                 questionId: questionId,
-                pdf: answerPdf,
+                pdf: finalAnswerPdf,
                 video: answerVideo,
+                image: finalAnswerImage,
+                text: answerText,
             });
         }
     });
@@ -261,6 +273,8 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
         },
         pdf: questionAnswers.pdf,
         video: questionAnswers.video,
+        answerImage: questionAnswers.image,
+        answerText: questionAnswers.text,
     }).from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
@@ -284,7 +298,7 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
 
 export const updateQuestion = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo, answerImage, answerText } = req.body;
     if (!id) {
         throw new BadRequest("Question ID is required");
     }
@@ -346,13 +360,30 @@ export const updateQuestion = async (req: Request, res: Response) => {
             await tx.insert(questionOptions).values(formattedOptions);
         }
 
-        if (answerPdf !== undefined || answerVideo !== undefined) {
+        if (answerPdf !== undefined || answerVideo !== undefined || answerImage !== undefined || answerText !== undefined) {
             const existingAnswer = await tx.select().from(questionAnswers).where(eq(questionAnswers.questionId, id)).limit(1);
+
+            let finalAnswerPdf = answerPdf;
+            if (answerPdf !== undefined && answerPdf && !answerPdf.startsWith("http")) {
+                finalAnswerPdf = await validateAndSavePdf(req, answerPdf, "questions");
+                if (existingAnswer[0] && existingAnswer[0].pdf && !existingAnswer[0].pdf.startsWith("http")) {
+                    await deleteImage(existingAnswer[0].pdf);
+                }
+            }
+
+            let finalAnswerImage = answerImage;
+            if (answerImage !== undefined) {
+                finalAnswerImage = await handleImageUpdate(req, existingAnswer[0]?.image, answerImage, "questions");
+            } else {
+                finalAnswerImage = existingAnswer[0]?.image;
+            }
 
             if (existingAnswer[0]) {
                 const answerUpdateData: any = {};
-                if (answerPdf !== undefined) answerUpdateData.pdf = answerPdf;
+                if (answerPdf !== undefined) answerUpdateData.pdf = finalAnswerPdf;
                 if (answerVideo !== undefined) answerUpdateData.video = answerVideo;
+                if (answerImage !== undefined) answerUpdateData.image = finalAnswerImage;
+                if (answerText !== undefined) answerUpdateData.text = answerText;
 
                 if (Object.keys(answerUpdateData).length > 0) {
                     await tx.update(questionAnswers).set(answerUpdateData).where(eq(questionAnswers.questionId, id));
@@ -360,8 +391,10 @@ export const updateQuestion = async (req: Request, res: Response) => {
             } else {
                 await tx.insert(questionAnswers).values({
                     questionId: id,
-                    pdf: answerPdf || null, // Ensure at least one is null/undefined if not provided, though insert requires handling
+                    pdf: finalAnswerPdf || null,
                     video: answerVideo || null,
+                    image: finalAnswerImage || null,
+                    text: answerText || null,
                 });
             }
         }

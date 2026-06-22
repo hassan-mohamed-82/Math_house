@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, char, timestamp, double, int, mysqlEnum, boolean, year } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, double, int, mysqlEnum, boolean, year, text } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { lessons } from "./lessons";
 import { examCodes } from "./examCodes";
@@ -40,6 +40,8 @@ export const questionAnswers = mysqlTable("question_answers", {
     questionId: char("question_id", { length: 255 }).notNull().references(() => questions.id),
     pdf: varchar("answer_pdf", { length: 255 }),
     video: varchar("answer_video", { length: 255 }),
+    image: varchar("answer_image", { length: 255 }),
+    text: text("answer_text"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });
