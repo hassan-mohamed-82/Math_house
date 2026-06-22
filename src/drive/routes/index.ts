@@ -7,11 +7,18 @@ import {
   getDriveContents,
   handleBunnyWebhook, 
   initializeVideoUpload,
+  uploadDriveFile,
   getLessonVideo
 } from '../controllers/controller';
 import { authenticated } from '../../middlewares/authenticated';
 import { authorizeRoles } from '../../middlewares/authorized';
 import { requireDriveSuperAdmin } from '../middlewares/superAdmin';
+import multer from 'multer';
+
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit for general files
+});
 
 const router = Router();
 
@@ -23,6 +30,9 @@ router.post('/auth/login', login);
 
 // 1. Initialize the secure direct upload to Bunny.net
 router.post('/upload/init', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, initializeVideoUpload);
+
+// 1.5. Standard file and image upload to the local Drive
+router.post('/upload/file', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, upload.single('file'), uploadDriveFile);
 
 // [Placeholder] 2. Standard Drive CRUD operations for the Admin
 // An admin needs to be able to fetch the virtual folders and delete mistakes.

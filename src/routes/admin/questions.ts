@@ -18,6 +18,7 @@ import {
     getQuestionsbyLessonId,
     getQuestionsbyCourseId,
     getQuestionsbySectiondId,
+    selectDriveContents,
 } from "../../controllers/admin/questions";
 import { getExamCodes } from "../../controllers/admin/examCodes";
 import { selectLessons } from "../../controllers/admin/lessons";
@@ -28,6 +29,7 @@ const router = Router();
 // ── Selection helpers (open to any authenticated admin) ──────────────────
 router.get("/selectionExamCode", catchAsync(getExamCodes));
 router.get("/selectionLesson",   catchAsync(selectLessons));
+router.get("/selectionDriveContents", catchAsync(selectDriveContents));
 
 // ── OCR / AI helpers ──────────────────────────────────────────────────────
 router.post("/ocr",                requirePermission("questions", "Add"),  upload.single("image"), catchAsync(getTextfromImage));

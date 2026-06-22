@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
-import { and, asc, eq, isNull, or } from 'drizzle-orm';
+import { and, asc, eq, isNull, or, desc } from 'drizzle-orm';
+import path from "path";
+import fs from "fs/promises";
 import { BadRequest } from '../../Errors/BadRequest';
 import { NotFound, UnauthorizedError } from '../../Errors';
 import { SuccessResponse } from '../../utils/response';
@@ -58,6 +60,72 @@ export const initializeVideoUpload = async (req: Request, res: Response) => {
         }
 
         console.error('[Drive Controller] Error initializing upload:', error);
+        return res.status(500).json({ success: false, message: 'Internal Server Error' });
+    }
+};
+
+export const uploadDriveFile = async (req: Request, res: Response) => {
+    try {
+        const file = req.file;
+        const { folderId } = req.body;
+
+        if (!file) {
+            throw new BadRequest('File is required');
+        }
+
+        if (folderId) {
+            const [existingFolder] = await db.select()
+                .from(driveFolders)
+                .where(eq(driveFolders.id, folderId));
+
+            if (!existingFolder) {
+                throw new NotFound('Folder not found');
+            }
+        }
+
+        const ext = path.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
+        const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+        const rootDir = path.resolve(__dirname, "../../../");
+        const uploadsDir = path.join(rootDir, "uploads", "drive");
+
+        await fs.mkdir(uploadsDir, { recursive: true });
+        await fs.writeFile(path.join(uploadsDir, fileName), file.buffer);
+
+        const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
+        const sourceUrl = `${protocol}://${req.get("host")}/uploads/drive/${fileName}`;
+
+        let type: 'image' | 'pdf' | 'document' | 'other' = 'other';
+        if (ext.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+            type = 'image';
+        } else if (ext === '.pdf') {
+            type = 'pdf';
+        } else if (ext.match(/\.(doc|docx|txt)$/)) {
+            type = 'document';
+        }
+
+        await db.insert(driveAssets).values({
+            title: file.originalname,
+            type: type as any,
+            status: 'ready',
+            folderId: folderId || null,
+            sourceUrl: sourceUrl,
+        });
+
+        const [createdAsset] = await db.select()
+            .from(driveAssets)
+            .where(eq(driveAssets.sourceUrl, sourceUrl))
+            .orderBy(desc(driveAssets.createdAt));
+
+        return SuccessResponse(res, {
+            message: 'File uploaded successfully',
+            file: createdAsset,
+        }, 201);
+    } catch (error) {
+        if (error instanceof BadRequest || error instanceof NotFound) {
+            return res.status(error.statusCode).json({ success: false, message: error.message });
+        }
+
+        console.error('[Drive Controller] Error uploading file:', error);
         return res.status(500).json({ success: false, message: 'Internal Server Error' });
     }
 };

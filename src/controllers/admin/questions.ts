@@ -17,8 +17,10 @@ import {
     courses,
     semesters,
     category,
+    driveAssets,
+    driveFolders,
 } from "../../models/schema";
-import { eq, count, desc, like, or, SQL, and } from "drizzle-orm";
+import { eq, count, desc, like, or, SQL, and, isNull, asc } from "drizzle-orm";
 import { NotFound } from "../../Errors";
 import { addGenerationJob } from "../../queues/questionQueue";
 import { validateAndSaveLogo, deleteImage, handleImageUpdate } from "../../utils/handleImages";
@@ -989,3 +991,60 @@ export const getParallelQuestionsByOriginalId = async (req: Request, res: Respon
     }, 200);
 };
 
+export const selectDriveContents = async (req: Request, res: Response) => {
+    const folderId = typeof req.query.folderId === 'string' && req.query.folderId.trim()
+        ? req.query.folderId.trim()
+        : undefined;
+
+    // Optional all flag to bypass folder restriction and fetch everything flattened
+    const fetchAll = req.query.all === 'true';
+
+    const folders = await db
+        .select({
+            id: driveFolders.id,
+            name: driveFolders.name,
+            parentFolderId: driveFolders.parentFolderId,
+        })
+        .from(driveFolders)
+        .where(fetchAll ? undefined : (folderId ? eq(driveFolders.parentFolderId, folderId) : isNull(driveFolders.parentFolderId)))
+        .orderBy(asc(driveFolders.name));
+
+    const filesData = await db
+        .select({
+            id: driveAssets.id,
+            title: driveAssets.title,
+            type: driveAssets.type,
+            folderId: driveAssets.folderId,
+            sourceUrl: driveAssets.sourceUrl,
+            bunnyGuid: driveAssets.bunnyGuid
+        })
+        .from(driveAssets)
+        .where(fetchAll ? undefined : (folderId ? eq(driveAssets.folderId, folderId) : isNull(driveAssets.folderId)))
+        .orderBy(asc(driveAssets.title));
+
+    const files = filesData.map(file => {
+        let computedType = file.type;
+        const lowerTitle = file.title.toLowerCase();
+        
+        if (lowerTitle.endsWith('.pdf')) {
+            computedType = 'pdf';
+        } else if (lowerTitle.match(/\.(jpeg|jpg|png|gif|webp)$/)) {
+            computedType = 'image';
+        } else if (lowerTitle.match(/\.(mp4|avi|mov|mkv)$/)) {
+            computedType = 'video';
+        }
+
+        return {
+            ...file,
+            computedType
+        };
+    });
+
+    return SuccessResponse(res, {
+        message: "Drive contents fetched successfully",
+        data: {
+            folders,
+            files
+        }
+    }, 200);
+};
