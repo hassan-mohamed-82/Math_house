@@ -629,7 +629,7 @@ import { category } from "../../models/schema/admin/category";
 import { Sections } from "../../models/schema/admin/sections";
 import { questions, questionOptions, questionAnswers } from "../../models/schema/admin/questions";
 import { examCodes } from "../../models/schema/admin/examCodes";
-import { eq, and, inArray, sql } from "drizzle-orm";
+import { eq, and, inArray, sql, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 import { randomUUID } from "crypto";
@@ -1125,14 +1125,32 @@ export const showQuestionAnswer = async (req: Request, res: Response) => {
         .select({
             pdf: questionAnswers.pdf,
             video: questionAnswers.video,
+            image: questionAnswers.image,
+            text: questionAnswers.text,
         })
         .from(questionAnswers)
         .where(eq(questionAnswers.questionId, questionId));
+
+    // 4. جلب إجابة الطالب (إن وجدت)
+    const [latestStudentAnswer] = await db
+        .select({
+            selectedOptionId: studentAnswers.selectedOptionId,
+            gridInAnswer: studentAnswers.gridInAnswer,
+        })
+        .from(studentAnswers)
+        .innerJoin(examAttempts, eq(studentAnswers.attemptId, examAttempts.id))
+        .where(and(
+            eq(studentAnswers.questionId, questionId),
+            eq(examAttempts.studentId, studentId)
+        ))
+        .orderBy(desc(studentAnswers.createdAt))
+        .limit(1);
 
     SuccessResponse(res, {
         message: "Answer and explanations revealed",
         result: {
             correctOptions,
+            studentAnswer: latestStudentAnswer ?? req.body.studentAnswer ?? null,
             explanation: media ?? null // سيعيد null إذا لم يكن هناك فيديو أو PDF
         },
     });
