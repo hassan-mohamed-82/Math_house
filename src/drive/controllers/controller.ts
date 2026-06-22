@@ -297,6 +297,7 @@ const deleteFolderTree = async (folderId: string): Promise<{ deletedFolders: num
             id: driveAssets.id,
             type: driveAssets.type,
             bunnyGuid: driveAssets.bunnyGuid,
+            sourceUrl: driveAssets.sourceUrl,
         })
         .from(driveAssets)
         .where(eq(driveAssets.folderId, folderId));
@@ -304,6 +305,17 @@ const deleteFolderTree = async (folderId: string): Promise<{ deletedFolders: num
     for (const file of files) {
         if (file.type === 'video' && file.bunnyGuid) {
             await deleteBunnyVideo(file.bunnyGuid);
+        } else if (file.sourceUrl) {
+            try {
+                const relativePath = "uploads/" + file.sourceUrl.split("/uploads/")[1];
+                const rootDir = path.resolve(__dirname, "../../../");
+                const filePath = path.join(rootDir, relativePath);
+                await fs.unlink(filePath);
+            } catch (err: any) {
+                if (err.code !== 'ENOENT') {
+                    console.error("Failed to delete local file:", err);
+                }
+            }
         }
     }
 
@@ -519,53 +531,59 @@ export const getLessonVideo = async (req: Request, res: Response) => {
     }
 };
 
-export const deleteVideo = async (req: Request, res: Response) => {
+export const deleteDriveFile = async (req: Request, res: Response) => {
     try {
-        const { videoId } = req.params;
+        const { fileId } = req.params;
 
-        if (!videoId || typeof videoId !== 'string' || !videoId.trim()) {
-            throw new BadRequest('Video ID is required');
+        if (!fileId || typeof fileId !== 'string' || !fileId.trim()) {
+            throw new BadRequest('File ID is required');
         }
 
-        const normalizedVideoId = videoId.trim();
-        const [videoAsset] = await db
+        const normalizedFileId = fileId.trim();
+        const [asset] = await db
             .select({
                 id: driveAssets.id,
                 title: driveAssets.title,
                 type: driveAssets.type,
                 bunnyGuid: driveAssets.bunnyGuid,
+                sourceUrl: driveAssets.sourceUrl,
             })
             .from(driveAssets)
             .where(
                 or(
-                    eq(driveAssets.id, normalizedVideoId),
-                    eq(driveAssets.bunnyGuid, normalizedVideoId),
+                    eq(driveAssets.id, normalizedFileId),
+                    eq(driveAssets.bunnyGuid, normalizedFileId),
                 ),
             );
 
-        if (!videoAsset) {
-            throw new NotFound('Video not found');
+        if (!asset) {
+            throw new NotFound('File not found');
         }
 
-        if (videoAsset.type !== 'video') {
-            throw new BadRequest('Requested asset is not a video');
+        if (asset.type === 'video' && asset.bunnyGuid) {
+            await deleteBunnyVideo(asset.bunnyGuid);
+        } else if (asset.sourceUrl) {
+            try {
+                const relativePath = "uploads/" + asset.sourceUrl.split("/uploads/")[1];
+                const rootDir = path.resolve(__dirname, "../../../");
+                const filePath = path.join(rootDir, relativePath);
+                await fs.unlink(filePath);
+            } catch (err: any) {
+                if (err.code !== 'ENOENT') {
+                    console.error("Failed to delete local file:", err);
+                }
+            }
         }
 
-        // 2. Delete the actual file from Bunny.net storage to save costs
-        if (videoAsset.bunnyGuid) {
-            await deleteBunnyVideo(videoAsset.bunnyGuid);
-        }
-
-        // 3. Delete the record from your database
         await db
             .delete(driveAssets)
-            .where(eq(driveAssets.id, videoAsset.id));
+            .where(eq(driveAssets.id, asset.id));
 
         return SuccessResponse(res, {
-            message: 'Video permanently deleted from Drive and Storage',
-            video: {
-                id: videoAsset.id,
-                title: videoAsset.title,
+            message: 'File permanently deleted from Drive and Storage',
+            file: {
+                id: asset.id,
+                title: asset.title,
             },
         }, 200);
 
@@ -574,7 +592,7 @@ export const deleteVideo = async (req: Request, res: Response) => {
             return res.status(error.statusCode).json({ success: false, message: error.message });
         }
 
-        console.error("[Drive Controller] Error deleting video:", error);
+        console.error("[Drive Controller] Error deleting file:", error);
         return res.status(500).json({ success: false, message: "Internal Server Error" });
     }
 };

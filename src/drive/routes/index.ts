@@ -3,7 +3,7 @@ import { login } from '../controllers/auth';
 import { 
   createFolder,
   deleteFolder,
-  deleteVideo,
+  deleteDriveFile,
   getDriveContents,
   handleBunnyWebhook, 
   initializeVideoUpload,
@@ -40,7 +40,7 @@ router.get('/folders', authenticated, authorizeRoles('admin', 'driver'), require
 router.get('/folders/:folderId', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, getDriveContents);
 router.post('/folders', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, createFolder);
 router.delete('/folders/:folderId', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, deleteFolder);
-router.delete('/files/:videoId', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, deleteVideo);
+router.delete('/files/:fileId', authenticated, authorizeRoles('admin', 'driver'), requireDriveSuperAdmin, deleteDriveFile);
 
 
 // ==========================================
