@@ -638,7 +638,127 @@ const getStudentId = (req: Request): string => {
     if (!req.user?.id) throw new UnauthorizedError("Not authenticated");
     return req.user.id;
 };
+// export const getExams = async (req: Request, res: Response) => {
+//     const studentId = getStudentId(req);
 
+//     // 1. Get student's category and balance
+//     const [student] = await db
+//         .select({ categoryId: Student.category, examBalance: Student.exambalance })
+//         .from(Student)
+//         .where(eq(Student.id, studentId));
+
+//     if (!student) throw new NotFound("Student not found");
+
+//     // 2. Build Category Hierarchy (Upwards & Downwards)
+//     const categoryIds: string[] = [];
+
+//     // -- Upwards: Get current category + all ancestors (Parents)
+//     let currentId: string | null = student.categoryId;
+//     while (currentId) {
+//         if (!categoryIds.includes(currentId)) {
+//             categoryIds.push(currentId);
+//         }
+//         const [cat]: any = await db
+//             .select({ parentCategoryId: category.parentCategoryId })
+//             .from(category)
+//             .where(eq(category.id, currentId));
+
+//         currentId = cat?.parentCategoryId ?? null;
+//     }
+
+//     // -- Downwards: Get direct children (Sub-categories / Grades)
+//     // This ensures if the exam is on a sub-level, it still appears
+//     const children = await db
+//         .select({ id: category.id })
+//         .from(category)
+//         .where(eq(category.parentCategoryId, student.categoryId));
+
+//     children.forEach(child => {
+//         if (!categoryIds.includes(child.id)) {
+//             categoryIds.push(child.id);
+//         }
+//     });
+
+//     // 3. Get courses that belong to any of these categories
+//     const studentCourses = await db
+//         .select({ id: courses.id })
+//         .from(courses)
+//         .where(inArray(courses.categoryId, categoryIds));
+
+//     const courseIds = studentCourses.map(c => c.id);
+
+//     // If no courses found, return early with empty exams
+//     if (courseIds.length === 0) {
+//         return SuccessResponse(res, {
+//             examBalance: student.examBalance,
+//             exams: [],
+//             debugInfo: { checkedCategories: categoryIds } // Optional for debugging
+//         });
+//     }
+
+//     // 4. Get active exams for those courses
+//     const exams = await db
+//         .select({
+//             id: Exams.id,
+//             title: Exams.title,
+//             description: Exams.description,
+//             duration: Exams.duration,
+//             totalScore: Exams.totalScore,
+//             passScore: Exams.passScore,
+//             examType: Exams.examType,
+//             year: Exams.year,
+//             month: Exams.Month,
+//             courseName: courses.name,
+//             codeName: examCodes.code,
+//             createdAt: Exams.createdAt,
+//         })
+//         .from(Exams)
+//         .leftJoin(courses, eq(Exams.courseId, courses.id))
+//         .leftJoin(examCodes, eq(Exams.codeId, examCodes.id))
+//         .where(and(
+//             inArray(Exams.courseId, courseIds),
+//             eq(Exams.isActive, true),
+//         ))
+//         .orderBy(Exams.createdAt);
+
+//     // 5. Get attempts for status mapping
+//     const examIds = exams.map(e => e.id);
+//     let attemptsMap = new Map<string, { status: string; score: number | null; isPassed: boolean | null }>();
+
+//     if (examIds.length > 0) {
+//         const attempts = await db
+//             .select({
+//                 examId: examAttempts.examId,
+//                 status: examAttempts.status,
+//                 score: examAttempts.score,
+//                 isPassed: examAttempts.isPassed,
+//             })
+//             .from(examAttempts)
+//             .where(and(
+//                 eq(examAttempts.studentId, studentId),
+//                 inArray(examAttempts.examId, examIds),
+//             ));
+
+//         for (const attempt of attempts) {
+//             attemptsMap.set(attempt.examId, {
+//                 status: attempt.status,
+//                 score: attempt.score,
+//                 isPassed: attempt.isPassed,
+//             });
+//         }
+//     }
+
+//     // Map attempts back to exams
+//     const examsWithStatus = exams.map(exam => ({
+//         ...exam,
+//         attempt: attemptsMap.get(exam.id) ?? null,
+//     }));
+
+//     return SuccessResponse(res, {
+//         examBalance: student.examBalance,
+//         exams: examsWithStatus
+//     });
+//};
 // ===================== GET ALL EXAMS (filtered by student's category) =====================
 export const getExams = async (req: Request, res: Response) => {
     const studentId = getStudentId(req);
@@ -683,17 +803,28 @@ export const getExams = async (req: Request, res: Response) => {
 
     // 3. Get courses that belong to any of these categories
     const studentCourses = await db
-        .select({ id: courses.id })
+        .select({
+            id: courses.id,
+            name: courses.name,
+            categoryId: courses.categoryId,
+            description: courses.description,
+            image: courses.image,
+            preRequisition: courses.preRequisition,
+            whatYouGain: courses.whatYouGain,
+            isHaveSemester: courses.isHaveSemester,
+            createdAt: courses.createdAt,
+            updatedAt: courses.updatedAt,
+        })
         .from(courses)
         .where(inArray(courses.categoryId, categoryIds));
 
     const courseIds = studentCourses.map(c => c.id);
 
-    // If no courses found, return early with empty exams
+    // If no courses found, return early with empty courses
     if (courseIds.length === 0) {
         return SuccessResponse(res, {
             examBalance: student.examBalance,
-            exams: [],
+            courses: [],
             debugInfo: { checkedCategories: categoryIds } // Optional for debugging
         });
     }
@@ -710,6 +841,7 @@ export const getExams = async (req: Request, res: Response) => {
             examType: Exams.examType,
             year: Exams.year,
             month: Exams.Month,
+            courseId: Exams.courseId,
             courseName: courses.name,
             codeName: examCodes.code,
             createdAt: Exams.createdAt,
@@ -756,9 +888,25 @@ export const getExams = async (req: Request, res: Response) => {
         attempt: attemptsMap.get(exam.id) ?? null,
     }));
 
+    // Group exams by courseId
+    const examsByCourse = new Map<string, typeof examsWithStatus>();
+    for (const exam of examsWithStatus) {
+        if (exam.courseId) {
+            const list = examsByCourse.get(exam.courseId) ?? [];
+            list.push(exam);
+            examsByCourse.set(exam.courseId, list);
+        }
+    }
+
+    // Nest exams inside their corresponding courses
+    const coursesWithExams = studentCourses.map(course => ({
+        ...course,
+        exams: examsByCourse.get(course.id) ?? [],
+    }));
+
     return SuccessResponse(res, {
         examBalance: student.examBalance,
-        exams: examsWithStatus
+        courses: coursesWithExams
     });
 };
 
@@ -1048,7 +1196,7 @@ export const submitExam = async (req: Request, res: Response) => {
     if (!attempt) throw new NotFound("No active attempt");
 
     const [exam] = await db.select({ duration: Exams.duration, passScore: Exams.passScore, totalScore: Exams.totalScore }).from(Exams).where(eq(Exams.id, examId));
-    
+
     const isTimedOut = (Date.now() - new Date(attempt.startedAt).getTime()) > (exam.duration * 60 * 1000);
     const sectionQs = await db.select({ qId: SectionQuestions.questionId, score: SectionQuestions.score, type: questions.answerType })
         .from(SectionQuestions).innerJoin(ExamSections, eq(SectionQuestions.sectionId, ExamSections.id))

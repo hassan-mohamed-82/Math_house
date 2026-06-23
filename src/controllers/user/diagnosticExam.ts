@@ -166,6 +166,20 @@ export const submitDiagnosticExam = async (studentId: string, attemptId: string,
 };
 // ------------------------------
 export const getDiagnosticExams = async (req: Request, res: Response) => {
+    // 1. Fetch all courses
+    const allCourses = await db.select({
+        id: courses.id,
+        name: courses.name,
+        description: courses.description,
+        image: courses.image,
+        preRequisition: courses.preRequisition,
+        whatYouGain: courses.whatYouGain,
+        isHaveSemester: courses.isHaveSemester,
+        createdAt: courses.createdAt,
+        updatedAt: courses.updatedAt,
+    }).from(courses);
+
+    // 2. Fetch all diagnostic exams
     const diagnosticExams = await db.select({
         id: diagnosticExam.id,
         name: diagnosticExam.title,
@@ -177,15 +191,25 @@ export const getDiagnosticExams = async (req: Request, res: Response) => {
         numberOfQuestions: diagnosticExam.numberOfQuestions,
         isActive: diagnosticExam.isActive,
         courseId: diagnosticExam.courseId,
-        course: {
-            Id: courses.id,
-            name: courses.name,
-            description: courses.description,
-        }
-    }).from(diagnosticExam)
-        .leftJoin(courses, eq(diagnosticExam.courseId, courses.id));
+    }).from(diagnosticExam);
 
-    return SuccessResponse(res, { message: "Diagnostic Exam retrieved successfully", data: diagnosticExams });
+    // 3. Group diagnostic exams by courseId
+    const examsByCourse = new Map<string, typeof diagnosticExams>();
+    for (const exam of diagnosticExams) {
+        if (exam.courseId) {
+            const list = examsByCourse.get(exam.courseId) ?? [];
+            list.push(exam);
+            examsByCourse.set(exam.courseId, list);
+        }
+    }
+
+    // 4. Nest diagnostic exams inside their corresponding courses
+    const coursesWithExams = allCourses.map(course => ({
+        ...course,
+        diagnosticExams: examsByCourse.get(course.id) ?? [],
+    }));
+
+    return SuccessResponse(res, { message: "Diagnostic Exam retrieved successfully", data: coursesWithExams });
 };
 
 export const getDiagnosticExamById = async (req: Request, res: Response) => {
