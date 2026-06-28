@@ -1,4 +1,4 @@
-import { mysqlTable, char, varchar, timestamp, int, boolean, foreignKey, mysqlEnum } from "drizzle-orm/mysql-core";
+import { mysqlTable, char, varchar, timestamp, int, boolean, foreignKey, mysqlEnum, json } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { questions } from "./questions";
 import { rawScore } from "./rawScore";
@@ -24,6 +24,9 @@ export const Exams = mysqlTable("exams", {
     year: int("year").notNull(),
     Month: mysqlEnum("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]).notNull(),
     codeId: char("code_id", { length: 255 }).notNull().references(() => examCodes.id),
+
+    // Calculators allowed for this exam (subset of CALCULATOR_TYPES)
+    calculators: json("calculators").$type<string[]>().default([]),
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

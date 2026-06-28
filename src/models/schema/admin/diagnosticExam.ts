@@ -1,4 +1,4 @@
-import { mysqlTable, char, varchar, timestamp, int, boolean, foreignKey } from "drizzle-orm/mysql-core";
+import { mysqlTable, char, varchar, timestamp, int, boolean, foreignKey, json } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { questions } from "./questions";
 import { rawScore } from "./rawScore";
@@ -14,6 +14,10 @@ export const diagnosticExam = mysqlTable("diagnostic_exam", {
     numberOfQuestions: int("number_of_questions").notNull(),
     isActive: boolean("is_active").notNull().default(true),
     courseId: char("course_id", { length: 255 }).notNull().references(() => courses.id),
+
+    // Calculators allowed for this exam (subset of CALCULATOR_TYPES)
+    calculators: json("calculators").$type<string[]>().default([]),
+
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });

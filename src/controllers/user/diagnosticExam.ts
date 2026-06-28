@@ -250,6 +250,7 @@ export const getDiagnosticExams = async (req: Request, res: Response) => {
         numberOfQuestions: diagnosticExam.numberOfQuestions,
         isActive: diagnosticExam.isActive,
         courseId: diagnosticExam.courseId,
+        calculators: diagnosticExam.calculators,
     }).from(diagnosticExam).where(inArray(diagnosticExam.courseId, courseIds));
 
     // 5. Group diagnostic exams by courseId
@@ -284,6 +285,7 @@ export const getDiagnosticExamById = async (req: Request, res: Response) => {
         numberOfQuestions: diagnosticExam.numberOfQuestions,
         isActive: diagnosticExam.isActive,
         courseId: diagnosticExam.courseId,
+        calculators: diagnosticExam.calculators,
         course: {
             Id: courses.id,
             name: courses.name,

@@ -6,6 +6,7 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors/NotFound";
 import { v4 as uuidv4 } from "uuid";
+import { CALCULATOR_TYPES } from "../../constants/calculators";
 
 // Helper to calculate dynamic scores
 const calculateDynamicScores = (exam: any, rawScoreData: any) => {
@@ -26,10 +27,21 @@ const calculateDynamicScores = (exam: any, rawScoreData: any) => {
 };
 
 export const createDiagnosticExam = async (req: Request, res: Response) => {
-    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
+    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds, calculators } = req.body;
 
     if (!title || !duration || !rawScoreId || !numberOfQuestions || !passScore) {
         throw new BadRequest("Title, Duration, Raw Score ID, Number of Questions, and Pass Score are required");
+    }
+
+    // Validate calculators if provided
+    const validatedCalculators: string[] = [];
+    if (calculators && Array.isArray(calculators)) {
+        for (const calc of calculators) {
+            if (!(CALCULATOR_TYPES as readonly string[]).includes(calc)) {
+                throw new BadRequest(`Invalid calculator type: "${calc}". Allowed values: ${CALCULATOR_TYPES.join(", ")}`);
+            }
+            validatedCalculators.push(calc);
+        }
     }
 
     const existingRawScore = await db.select().from(rawScore).where(eq(rawScore.id, rawScoreId)).limit(1);
@@ -53,6 +65,7 @@ export const createDiagnosticExam = async (req: Request, res: Response) => {
         rawScoreId,
         numberOfQuestions,
         isActive: isActive !== undefined ? isActive : true,
+        calculators: validatedCalculators,
     });
 
     // Calculate grade per question for default score
@@ -205,7 +218,7 @@ export const getDiagnosticExamById = async (req: Request, res: Response) => {
 
 export const updateDiagnosticExam = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
+    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds, calculators } = req.body;
 
     const existingExam = await db.select().from(diagnosticExam).where(eq(diagnosticExam.id, id)).limit(1);
     if (!existingExam[0]) {
@@ -225,6 +238,19 @@ export const updateDiagnosticExam = async (req: Request, res: Response) => {
         rawScoreData = existingRawScore[0];
     }
 
+    // Validate calculators if provided
+    let validatedCalculators: string[] | undefined = undefined;
+    if (calculators !== undefined) {
+        if (!Array.isArray(calculators)) throw new BadRequest("calculators must be an array");
+        validatedCalculators = [];
+        for (const calc of calculators) {
+            if (!(CALCULATOR_TYPES as readonly string[]).includes(calc)) {
+                throw new BadRequest(`Invalid calculator type: "${calc}". Allowed values: ${CALCULATOR_TYPES.join(", ")}`);
+            }
+            validatedCalculators.push(calc);
+        }
+    }
+
     await db.update(diagnosticExam).set({
         title: title !== undefined ? title : existingExam[0].title,
         description: description !== undefined ? description : existingExam[0].description,
@@ -237,6 +263,7 @@ export const updateDiagnosticExam = async (req: Request, res: Response) => {
         courseId: courseId !== undefined ? courseId : existingExam[0].courseId,
         numberOfQuestions: numberOfQuestions !== undefined ? numberOfQuestions : existingExam[0].numberOfQuestions,
         isActive: isActive !== undefined ? isActive : existingExam[0].isActive,
+        ...(validatedCalculators !== undefined ? { calculators: validatedCalculators } : {}),
     }).where(eq(diagnosticExam.id, id));
 
     // Handle Questions Update

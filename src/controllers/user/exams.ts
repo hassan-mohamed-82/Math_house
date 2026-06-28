@@ -104,6 +104,7 @@ export const getExams = async (req: Request, res: Response) => {
             courseId: Exams.courseId,
             courseName: courses.name,
             codeName: examCodes.code,
+            calculators: Exams.calculators,
             createdAt: Exams.createdAt,
         })
         .from(Exams)
@@ -200,6 +201,7 @@ export const getExamById = async (req: Request, res: Response) => {
             courseName: courses.name,
             courseCategoryId: courses.categoryId,
             codeName: examCodes.code,
+            calculators: Exams.calculators,
         })
         .from(Exams)
         .leftJoin(courses, eq(Exams.courseId, courses.id))

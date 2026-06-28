@@ -6,13 +6,14 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { randomUUID } from "crypto";
 import { examCodes, questions, Sections, rawScore, courses, semesters, category } from "../../models/schema";
+import { CALCULATOR_TYPES } from "../../constants/calculators";
 
 
 export const selectionOptions = async (req: Request, res: Response) => {
     const All_examCodes = await db.select({ id: examCodes.id, code: examCodes.code }).from(examCodes);
     const All_sections = await db.select({ id: Sections.id, sectionName: Sections.sectionName }).from(Sections);
     const All_rawScores = await db.select({ id: rawScore.id, score: rawScore.score }).from(rawScore);
-    return SuccessResponse(res, { message: "Selection options fetched successfully", data: { examCodes: All_examCodes, sections: All_sections, rawScores: All_rawScores } }, 200);
+    return SuccessResponse(res, { message: "Selection options fetched successfully", data: { examCodes: All_examCodes, sections: All_sections, rawScores: All_rawScores, calculatorTypes: CALCULATOR_TYPES } }, 200);
 };
 
 export const createExam = async (req: Request, res: Response) => {
@@ -20,12 +21,24 @@ export const createExam = async (req: Request, res: Response) => {
     switch (examType) {
         case "static":
 
-            const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, rawScoreId } = req.body;
+            const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, rawScoreId, calculators } = req.body;
             // sections structure: { sectionId: string, sectionOrder: number, questionIds: string[] }[]
+
+            // Validate calculators if provided
+            const validatedCalculators: string[] = [];
+            if (calculators && Array.isArray(calculators)) {
+                for (const calc of calculators) {
+                    if (!(CALCULATOR_TYPES as readonly string[]).includes(calc)) {
+                        throw new BadRequest(`Invalid calculator type: "${calc}". Allowed values: ${CALCULATOR_TYPES.join(", ")}`);
+                    }
+                    validatedCalculators.push(calc);
+                }
+            }
 
             if (!title || !description || !duration || !totalScore || !passScore || !courseId || !year || !month || !codeId || !sections) {
                 throw new BadRequest("All fields are required");
             }
+
 
             if (!Array.isArray(sections) || sections.length === 0) {
                 throw new BadRequest("Sections must be a non-empty array");
@@ -121,7 +134,8 @@ export const createExam = async (req: Request, res: Response) => {
                     codeId,
                     isActive: true, // Default
                     examType: "static",
-                    rawScoreId: existingRawScore[0].id
+                    rawScoreId: existingRawScore[0].id,
+                    calculators: validatedCalculators,
                 });
 
                 // Bulk Insert Exam Sections
@@ -147,7 +161,7 @@ export const createExam = async (req: Request, res: Response) => {
 
 export const updateExam = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, isActive, rawScoreId } = req.body;
+    const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, isActive, rawScoreId, calculators } = req.body;
 
     const existingExam = await db.select().from(Exams).where(eq(Exams.id, id));
     if (existingExam.length === 0) {
@@ -167,6 +181,15 @@ export const updateExam = async (req: Request, res: Response) => {
     if (codeId) updateData.codeId = codeId;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (rawScoreId) updateData.rawScoreId = rawScoreId;
+    if (calculators !== undefined) {
+        if (!Array.isArray(calculators)) throw new BadRequest("calculators must be an array");
+        for (const calc of calculators) {
+            if (!(CALCULATOR_TYPES as readonly string[]).includes(calc)) {
+                throw new BadRequest(`Invalid calculator type: "${calc}". Allowed values: ${CALCULATOR_TYPES.join(", ")}`);
+            }
+        }
+        updateData.calculators = calculators;
+    }
 
     await db.transaction(async (tx) => {
         // 1. Update Exam Metadata
