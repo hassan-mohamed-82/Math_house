@@ -426,6 +426,8 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
             correctOptionAnswer: questionOptions.answer,
             explanationPdf: questionAnswers.pdf,
             explanationVideo: questionAnswers.video,
+            explanationText: questionAnswers.text,
+            explanationImage: questionAnswers.image,
             lessonName: lessons.name,
             chapterName: chapters.name,
             courseName: courses.name,
@@ -462,7 +464,9 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
                 correctAnswers: [],
                 explanationContent: {
                     pdf: ans.explanationPdf,
-                    video: ans.explanationVideo
+                    video: ans.explanationVideo,
+                    image: ans.explanationImage,
+                    text: ans.explanationText,
                 },
                 recommendationToRecap: ans.isCorrect ? null : {
                     lessonName: ans.lessonName,
