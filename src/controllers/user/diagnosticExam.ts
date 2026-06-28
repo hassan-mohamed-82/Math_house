@@ -2,6 +2,9 @@ import { Request, Response } from "express";
 import { SuccessResponse } from "../../utils/response";
 import { db } from "../../models/connection";
 import { courses, diagnosticExam, diagnosticExamQuestions, questions, questionOptions, diagnosticExamAttempt, studentDiagnosticAnswers, rawScore, questionAnswers, lessons, chapters } from "../../models/schema";
+import { Student } from "../../models/schema/admin/Student";
+import { category } from "../../models/schema/admin/category";
+import { NotFound } from "../../Errors";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { BadRequest } from "../../Errors";
@@ -14,6 +17,24 @@ export const startDiagnosticExam = async (studentId: string, examId: string) => 
     if (!exam) {
         throw new Error("Diagnostic exam not found");
     }
+
+    const [existingAttempt] = await db
+        .select()
+        .from(diagnosticExamAttempt)
+        .where(
+            and(
+                eq(diagnosticExamAttempt.studentId, studentId),
+                eq(diagnosticExamAttempt.diagnosticExamId, examId)
+            )
+        );
+
+    if (existingAttempt) {
+        if (existingAttempt.isCompleted) {
+            throw new BadRequest("This exam attempt has already been submitted");
+        }
+        return { message: "Exam already in progress", attemptId: existingAttempt.id, endTime: existingAttempt.endedAt };
+    }
+
     const now = new Date();
     const endTime = new Date(now.getTime() + exam.duration * 60 * 1000);
     const attemptId = randomUUID();
@@ -166,8 +187,41 @@ export const submitDiagnosticExam = async (studentId: string, attemptId: string,
 };
 // ------------------------------
 export const getDiagnosticExams = async (req: Request, res: Response) => {
-    // 1. Fetch all courses
-    const allCourses = await db.select({
+    const studentId = req.user?.id;
+    if (!studentId) throw new BadRequest("Not authenticated");
+
+    // 1. Get student's category
+    const [student] = await db
+        .select({ categoryId: Student.category })
+        .from(Student)
+        .where(eq(Student.id, studentId));
+
+    if (!student) throw new NotFound("Student not found");
+
+    // 2. Build category hierarchy: current + all ancestors (upward)
+    const categoryIds: string[] = [];
+    let currentId: string | null = student.categoryId;
+    while (currentId) {
+        if (!categoryIds.includes(currentId)) categoryIds.push(currentId);
+        const [cat]: any = await db
+            .select({ parentCategoryId: category.parentCategoryId })
+            .from(category)
+            .where(eq(category.id, currentId));
+        currentId = cat?.parentCategoryId ?? null;
+    }
+
+    // Also include direct children (sub-categories / grades)
+    const children = await db
+        .select({ id: category.id })
+        .from(category)
+        .where(eq(category.parentCategoryId, student.categoryId));
+
+    children.forEach(child => {
+        if (!categoryIds.includes(child.id)) categoryIds.push(child.id);
+    });
+
+    // 3. Fetch courses that belong to the student's category hierarchy
+    const studentCourses = await db.select({
         id: courses.id,
         name: courses.name,
         description: courses.description,
@@ -177,9 +231,14 @@ export const getDiagnosticExams = async (req: Request, res: Response) => {
         isHaveSemester: courses.isHaveSemester,
         createdAt: courses.createdAt,
         updatedAt: courses.updatedAt,
-    }).from(courses);
+    }).from(courses).where(inArray(courses.categoryId, categoryIds));
 
-    // 2. Fetch all diagnostic exams
+    if (studentCourses.length === 0) {
+        return SuccessResponse(res, { message: "Diagnostic Exam retrieved successfully", data: [] });
+    }
+
+    // 4. Fetch all diagnostic exams for these courses
+    const courseIds = studentCourses.map(c => c.id);
     const diagnosticExams = await db.select({
         id: diagnosticExam.id,
         name: diagnosticExam.title,
@@ -191,9 +250,9 @@ export const getDiagnosticExams = async (req: Request, res: Response) => {
         numberOfQuestions: diagnosticExam.numberOfQuestions,
         isActive: diagnosticExam.isActive,
         courseId: diagnosticExam.courseId,
-    }).from(diagnosticExam);
+    }).from(diagnosticExam).where(inArray(diagnosticExam.courseId, courseIds));
 
-    // 3. Group diagnostic exams by courseId
+    // 5. Group diagnostic exams by courseId
     const examsByCourse = new Map<string, typeof diagnosticExams>();
     for (const exam of diagnosticExams) {
         if (exam.courseId) {
@@ -203,8 +262,8 @@ export const getDiagnosticExams = async (req: Request, res: Response) => {
         }
     }
 
-    // 4. Nest diagnostic exams inside their corresponding courses
-    const coursesWithExams = allCourses.map(course => ({
+    // 6. Nest diagnostic exams inside their corresponding courses
+    const coursesWithExams = studentCourses.map(course => ({
         ...course,
         diagnosticExams: examsByCourse.get(course.id) ?? [],
     }));
@@ -367,6 +426,9 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
             correctOptionAnswer: questionOptions.answer,
             explanationPdf: questionAnswers.pdf,
             explanationVideo: questionAnswers.video,
+            lessonName: lessons.name,
+            chapterName: chapters.name,
+            courseName: courses.name,
         })
         .from(studentDiagnosticAnswers)
         .innerJoin(questions, eq(studentDiagnosticAnswers.questionId, questions.id))
@@ -381,7 +443,10 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
                 eq(questionOptions.isCorrect, true)
             )
         )
-        .leftJoin(questionAnswers, eq(questionAnswers.questionId, studentDiagnosticAnswers.questionId));
+        .leftJoin(questionAnswers, eq(questionAnswers.questionId, studentDiagnosticAnswers.questionId))
+        .leftJoin(lessons, eq(questions.lessonId, lessons.id))
+        .leftJoin(chapters, eq(lessons.chapterId, chapters.id))
+        .leftJoin(courses, eq(lessons.courseId, courses.id));
 
     const uniqueAnswersMap = new Map();
     for (const ans of allAnswers) {
@@ -398,6 +463,11 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
                 explanationContent: {
                     pdf: ans.explanationPdf,
                     video: ans.explanationVideo
+                },
+                recommendationToRecap: ans.isCorrect ? null : {
+                    lessonName: ans.lessonName,
+                    chapterName: ans.chapterName,
+                    courseName: ans.courseName,
                 }
             });
         }
