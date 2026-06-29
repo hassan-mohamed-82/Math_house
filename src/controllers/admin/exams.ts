@@ -298,6 +298,7 @@ export const getAllExams = async (req: Request, res: Response) => {
         year: Exams.year,
         Month: Exams.Month,
         isActive: Exams.isActive,
+        calculators: Exams.calculators,
         createdAt: Exams.createdAt,
         updatedAt: Exams.updatedAt,
         // Joins
@@ -341,6 +342,7 @@ export const getExamById = async (req: Request, res: Response) => {
         year: Exams.year,
         Month: Exams.Month,
         isActive: Exams.isActive,
+        calculators: Exams.calculators,
         createdAt: Exams.createdAt,
         updatedAt: Exams.updatedAt,
         courseId: Exams.courseId,
@@ -480,6 +482,7 @@ export const getExamsByCourseId = async (req: Request, res: Response) => {
         year: Exams.year,
         Month: Exams.Month,
         isActive: Exams.isActive,
+        calculators: Exams.calculators,
         createdAt: Exams.createdAt,
         updatedAt: Exams.updatedAt,
         // Joins

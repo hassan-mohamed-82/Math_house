@@ -115,6 +115,7 @@ export const getAllDiagnosticExams = async (req: Request, res: Response) => {
             passScore: diagnosticExam.passScore,
             numberOfQuestions: diagnosticExam.numberOfQuestions,
             isActive: diagnosticExam.isActive,
+            calculators: diagnosticExam.calculators,
             createdAt: diagnosticExam.createdAt,
             rawScore: {
                 id: rawScore.id,
@@ -166,6 +167,7 @@ export const getDiagnosticExamById = async (req: Request, res: Response) => {
             passScore: diagnosticExam.passScore,
             numberOfQuestions: diagnosticExam.numberOfQuestions,
             isActive: diagnosticExam.isActive,
+            calculators: diagnosticExam.calculators,
             createdAt: diagnosticExam.createdAt,
             rawScore: {
                 id: rawScore.id,
@@ -329,6 +331,7 @@ export const getSelection = async (req: Request, res: Response) => {
         message: "Selection options fetched successfully",
         data: {
             rawScores: rawScoresData,
+            calculatorTypes: CALCULATOR_TYPES,
         }
     }, 200);
 };
@@ -346,6 +349,7 @@ export const getAllDiagnosticExamsbyCourseId = async (req: Request, res: Respons
             passScore: diagnosticExam.passScore,
             numberOfQuestions: diagnosticExam.numberOfQuestions,
             isActive: diagnosticExam.isActive,
+            calculators: diagnosticExam.calculators,
             createdAt: diagnosticExam.createdAt,
             rawScore: {
                 id: rawScore.id,

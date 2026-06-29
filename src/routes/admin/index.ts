@@ -32,6 +32,7 @@ import reportsRouter from "./reports"
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import authRouter from "./auth"
+import selectionRouter from "./generalSelection"
 import { catchAsync } from "../../utils/catchAsync";
 const router = Router()
 
@@ -66,4 +67,6 @@ router.use("/promoCodes", promoCodesRouter)
 router.use("/paymentMethod", paymentMethodRouter)
 router.use("/payment", paymentRouter)
 router.use("/reports", reportsRouter)
+
+router.use("/selection", selectionRouter)
 export default router
