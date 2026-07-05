@@ -174,18 +174,57 @@ export const getStudentById = async (req: Request, res: Response) => {
                 name: gradeTable.name,
                 nameAr: gradeTable.nameAr,
             },
-            parentphone: Student.parentphone
+            parentphone: Student.parentphone,
+            wallet: {
+                walletId: wallet.id,
+                balance: wallet.balance,
+            },
         })
         .from(Student)
         .leftJoin(category, eq(Student.category, category.id))
         .leftJoin(gradeTable, eq(Student.grade, gradeTable.id))
+        .leftJoin(wallet, eq(Student.id, wallet.studentId))
         .where(eq(Student.id, id));
 
     if (!student) {
         throw new NotFound("student not found");
     }
 
-    SuccessResponse(res, { message: "get student success", data: student });
+    const studentCourses = await db
+        .select({
+            id: courses.id,
+            name: courses.name,
+            image: courses.image,
+        })
+        .from(enrolledItems)
+        .innerJoin(courses, eq(enrolledItems.courseId, courses.id))
+        .where(eq(enrolledItems.studentId, id))
+        .groupBy(courses.id);
+
+    const studentPackages = await db
+        .select({
+            id: packages.id,
+            name: packages.name,
+            type: packages.type,
+            price: packages.price,
+        })
+        .from(payment)
+        .innerJoin(packages, eq(payment.packageId, packages.id))
+        .where(
+            and(
+                eq(payment.studentId, id),
+                eq(payment.status, "completed")
+            )
+        )
+        .groupBy(packages.id);
+
+    const fullStudentData = {
+        ...student,
+        courses: studentCourses,
+        packages: studentPackages
+    };
+
+    SuccessResponse(res, { message: "get student success", data: fullStudentData });
 };
 
 export const updateStudent = async (req: Request, res: Response) => {
