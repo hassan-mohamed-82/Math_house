@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { category, Student, wallet, grade as gradeTable, courses, chapters, lessons, enrolledItems, prices, packages, paymentMethod, payment, parents } from "../../models/schema";
-import { eq, or, like, isNull, and, inArray, isNotNull, sql } from "drizzle-orm";
+import { category, Student, wallet, grade as gradeTable, courses, chapters, lessons, enrolledItems, prices, packages, paymentMethod, payment, parents, examAttempts, Exams } from "../../models/schema";
+import { eq, or, like, isNull, and, inArray, isNotNull, sql, gt } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -218,10 +218,73 @@ export const getStudentById = async (req: Request, res: Response) => {
         )
         .groupBy(packages.id);
 
+    // Fetch all exam attempts for the student
+    const studentExamAttempts = await db
+        .select()
+        .from(examAttempts)
+        .where(eq(examAttempts.studentId, id));
+
+    const attemptExamIds = studentExamAttempts.map(a => a.examId);
+
+    // Fetch all exams in student's category OR exams that the student has attempted
+    const examWhereConditions: any[] = [
+        eq(courses.categoryId, student.category)
+    ];
+    if (attemptExamIds.length > 0) {
+        examWhereConditions.push(inArray(Exams.id, attemptExamIds));
+    }
+
+    const allExams = await db
+        .select({
+            id: Exams.id,
+            title: Exams.title,
+            description: Exams.description,
+            totalScore: Exams.totalScore,
+            passScore: Exams.passScore,
+            isActive: Exams.isActive,
+        })
+        .from(Exams)
+        .innerJoin(courses, eq(Exams.courseId, courses.id))
+        .where(or(...examWhereConditions));
+
+    const studentExams = allExams.map(exam => {
+        const attempt = studentExamAttempts.find(a => a.examId === exam.id);
+        let status = "absent";
+        let score = null;
+        let attemptId = null;
+        let date = null;
+
+        if (attempt) {
+            if (attempt.status === "completed" || attempt.status === "timed_out") {
+                status = "attend";
+                score = attempt.score;
+                attemptId = attempt.id;
+                date = attempt.endedAt;
+            } else if (attempt.status === "in_progress") {
+                status = "waiting";
+                attemptId = attempt.id;
+            }
+        }
+
+        return {
+            examId: exam.id,
+            examName: exam.title,
+            description: exam.description,
+            totalScore: exam.totalScore,
+            passScore: exam.passScore,
+            isActive: exam.isActive,
+            status,
+            attemptId,
+            score,
+            date,
+        };
+    });
+
     const fullStudentData = {
         ...student,
         courses: studentCourses,
-        packages: studentPackages
+        packages: studentPackages,
+        exams: studentExams,
     };
 
     SuccessResponse(res, { message: "get student success", data: fullStudentData });
@@ -1213,6 +1276,118 @@ export const purchasePackageForStudent = async (req: Request, res: Response) => 
                 exam: updatedStudent?.exambalance,
                 question: updatedStudent?.questionbalance,
             }
+        }
+    });
+};
+
+// ===================== LESSON DURATION INCREASE API =====================
+
+export const increaseLessonsDuration = async (req: Request, res: Response) => {
+    const { id } = req.params; // studentId
+    const { lessonIds, days } = req.body;
+
+    if (!Array.isArray(lessonIds) || lessonIds.length === 0) {
+        throw new BadRequest("lessonIds must be a non-empty array");
+    }
+    if (!days || Number(days) <= 0) {
+        throw new BadRequest("days must be a positive number");
+    }
+
+    // 1. Verify student exists
+    const [student] = await db
+        .select({ id: Student.id, firstname: Student.firstname, lastname: Student.lastname })
+        .from(Student)
+        .where(eq(Student.id, id));
+
+    if (!student) {
+        throw new NotFound("Student not found");
+    }
+
+    // 2. Verify all lesson IDs exist
+    const foundLessons = await db
+        .select({ id: lessons.id, chapterId: lessons.chapterId, courseId: lessons.courseId })
+        .from(lessons)
+        .where(inArray(lessons.id, lessonIds));
+
+    if (foundLessons.length !== lessonIds.length) {
+        const foundIds = foundLessons.map(l => l.id);
+        const invalidIds = lessonIds.filter((lid: string) => !foundIds.includes(lid));
+        throw new BadRequest(`The following lesson IDs are invalid: ${invalidIds.join(", ")}`);
+    }
+
+    const daysToAdd = Number(days);
+    const now = new Date();
+
+    // 3. Fetch existing enrollments for these lessons
+    const existingEnrollments = await db
+        .select()
+        .from(enrolledItems)
+        .where(
+            and(
+                eq(enrolledItems.studentId, id),
+                inArray(enrolledItems.lessonId, lessonIds)
+            )
+        );
+
+    const enrollmentByLessonId = new Map<string, any>(
+        existingEnrollments.map(e => [e.lessonId!, e])
+    );
+
+    const updatedLessons: string[] = [];
+    const newlyEnrolledLessons: string[] = [];
+
+    await db.transaction(async (tx) => {
+        for (const lesson of foundLessons) {
+            const existing = enrollmentByLessonId.get(lesson.id);
+
+            if (existing) {
+                // Extend existing enrollment:
+                // If still active (future expiry or no expiry), extend from current expiresAt
+                // If expired, extend from now
+                let baseDate: Date;
+                if (existing.expiresAt && existing.expiresAt > now) {
+                    baseDate = new Date(existing.expiresAt);
+                } else {
+                    baseDate = new Date(now);
+                }
+                baseDate.setDate(baseDate.getDate() + daysToAdd);
+
+                await tx
+                    .update(enrolledItems)
+                    .set({ expiresAt: baseDate, status: "active" })
+                    .where(eq(enrolledItems.id, existing.id));
+
+                updatedLessons.push(lesson.id);
+            } else {
+                // Create new enrollment for this lesson
+                const expiresAt = new Date(now);
+                expiresAt.setDate(expiresAt.getDate() + daysToAdd);
+
+                await tx.insert(enrolledItems).values({
+                    id: uuidv4(),
+                    studentId: id,
+                    courseId: null,
+                    chapterId: null,
+                    lessonId: lesson.id,
+                    priceId: null,
+                    expiresAt,
+                    status: "active",
+                });
+
+                newlyEnrolledLessons.push(lesson.id);
+            }
+        }
+    });
+
+    return SuccessResponse(res, {
+        message: "Lesson duration increased successfully",
+        data: {
+            student: { id: student.id, name: `${student.firstname} ${student.lastname}` },
+            daysAdded: daysToAdd,
+            updatedEnrollments: updatedLessons.length,
+            newEnrollments: newlyEnrolledLessons.length,
+            updatedLessonIds: updatedLessons,
+            newlyEnrolledLessonIds: newlyEnrolledLessons,
         }
     });
 };

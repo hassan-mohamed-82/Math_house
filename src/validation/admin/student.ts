@@ -44,3 +44,8 @@ export const idParamsSchema = z.object({
 export const gradeSchema = z.string().uuid("grade id is not valid");
 
 export const categoryIdSchema = z.string().uuid("معرف الفئة غير صالح");
+
+export const increaseLessonsDurationSchema = z.object({
+    lessonIds: z.array(z.string().uuid("معرف الدرس غير صالح")),
+    days: z.number().int().positive("عدد الأيام يجب أن يكون رقماً موجباً"),
+});
