@@ -3,6 +3,7 @@ import { db } from "../models/connection";
 import { admins } from "../models/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcrypt";
+import { v4 as uuidv4 } from "uuid";
 
 export async function seedAdmins(roleId: string) {
     const hashedPassword = await bcrypt.hash("password123", 10);
@@ -31,13 +32,15 @@ export async function seedAdmins(roleId: string) {
         }
 
         await db.insert(admins).values({
+            id: uuidv4(),
             name: adminData.name,
             email: adminData.email,
             password: hashedPassword,
             phoneNumber: adminData.phoneNumber,
-            roleId,
+            roleId: adminData.type === "super_admin" ? null : roleId,
             type: adminData.type,
-            status: "active"
+            status: "active",
+            permissions: []
         });
 
         console.log(`${adminData.type} account created successfully`);
