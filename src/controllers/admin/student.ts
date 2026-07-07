@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { category, Student, wallet, grade as gradeTable, courses, chapters, lessons, enrolledItems, prices, packages, paymentMethod, payment, parents, examAttempts, Exams } from "../../models/schema";
+import { category, Student, wallet, walletTransaction, grade as gradeTable, courses, chapters, lessons, enrolledItems, prices, packages, paymentMethod, payment, parents, examAttempts, Exams } from "../../models/schema";
 import { eq, or, like, isNull, and, inArray, isNotNull, sql, gt } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
@@ -567,42 +567,86 @@ export const openStudentAccount = async (req: Request, res: Response) => {
 // 🔥 Top Up Wallet - شحن المحفظة
 export const topUpWallet = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { amount, description } = req.body;
+    const { amount, operation } = req.body;
     const adminId = (req as any).user?.id;
 
-    if (!amount || Number(amount) <= 0) {
-        throw new BadRequest("Invalid amount");
+    // Validate amount
+    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
+        throw new BadRequest("Amount must be a positive number");
     }
 
+    // Validate operation
+    if (!operation || !['deposit', 'withdrawal'].includes(operation)) {
+        throw new BadRequest("Operation must be 'deposit' or 'withdrawal'");
+    }
+
+    const numericAmount = Number(amount);
+
+    // Check student exists
     const [student] = await db
         .select()
         .from(Student)
         .where(eq(Student.id, id));
 
     if (!student) {
-        throw new NotFound("student not found");
+        throw new NotFound("Student not found");
     }
 
-    // لو عندك جدول wallet أو walletBalance في الـ Student
-    // هنا هتضيف الـ Logic بتاع الشحن
+    // Find or create wallet for this student
+    let [studentWallet] = await db
+        .select()
+        .from(wallet)
+        .where(eq(wallet.studentId, id));
 
-    // مثال: لو عندك جدول transactions
-    /*
-    await db.insert(walletTransactions).values({
-        studentId: id,
-        amount: amount,
-        type: "topup",
-        description: description || "Wallet Top Up",
-        createdBy: adminId
+    if (!studentWallet) {
+        const newWalletId = uuidv4();
+        await db.insert(wallet).values({
+            id: newWalletId,
+            studentId: id,
+            balance: 0,
+        });
+        [studentWallet] = await db
+            .select()
+            .from(wallet)
+            .where(eq(wallet.studentId, id));
+    }
+
+    // For withdrawal, ensure sufficient balance
+    if (operation === 'withdrawal' && studentWallet.balance < numericAmount) {
+        throw new BadRequest(
+            `Insufficient balance. Current balance: ${studentWallet.balance}, requested withdrawal: ${numericAmount}`
+        );
+    }
+
+    // Update wallet balance
+    const newBalance = operation === 'deposit'
+        ? studentWallet.balance + numericAmount
+        : studentWallet.balance - numericAmount;
+
+    await db
+        .update(wallet)
+        .set({ balance: newBalance })
+        .where(eq(wallet.id, studentWallet.id));
+
+    // Record the transaction
+    await db.insert(walletTransaction).values({
+        id: uuidv4(),
+        walletId: studentWallet.id,
+        amount: numericAmount,
+        type: operation,
+        source: 'Admin',
     });
-    */
 
     SuccessResponse(res, {
-        message: "Wallet topped up successfully",
+        message: operation === 'deposit'
+            ? `Wallet topped up successfully`
+            : `Wallet deducted successfully`,
         data: {
             studentId: id,
-            amount: Number(amount),
-            description: description || "Wallet Top Up"
+            operation,
+            amount: numericAmount,
+            previousBalance: studentWallet.balance,
+            newBalance,
         }
     });
 };
