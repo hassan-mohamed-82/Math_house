@@ -18,9 +18,9 @@ export const initializeVideoUpload = async (req: Request, res: Response) => {
     try {
         const { videoTitle, folderId } = req.body;
 
-        if (!videoTitle || typeof videoTitle !== 'string' || !videoTitle.trim()) {
-            throw new BadRequest('Video title is required');
-        }
+        // if (!videoTitle || typeof videoTitle !== 'string' || !videoTitle.trim()) {
+        //     throw new BadRequest('Video title is required');
+        // }
 
         if (folderId) {
             const [existingFolder] = await db.select()
@@ -32,8 +32,19 @@ export const initializeVideoUpload = async (req: Request, res: Response) => {
             }
         }
 
-        // 1. Create the placeholder in Bunny to get the GUID (Video ID)
-        const trimmedVideoTitle = videoTitle.trim();
+        // Auto-extract filename from TUS Upload-Metadata header if videoTitle not provided
+        const tusMetadata = req.headers['upload-metadata'];
+        let extractedFileName: string | undefined;
+        if (tusMetadata && typeof tusMetadata === 'string') {
+            const filenamePart = tusMetadata.split(',').find(part => part.trim().startsWith('filename'));
+            if (filenamePart) {
+                const encoded = filenamePart.trim().split(' ')[1];
+                if (encoded) {
+                    extractedFileName = Buffer.from(encoded, 'base64').toString('utf-8');
+                }
+            }
+        }
+        const trimmedVideoTitle = videoTitle ? videoTitle.trim() : (extractedFileName ? extractedFileName.trim() : 'Untitled Video');
         const videoId = await createBunnyVideoEntry(trimmedVideoTitle);
 
         // 2. Generate the secure TUS signature for the browser
@@ -67,7 +78,7 @@ export const initializeVideoUpload = async (req: Request, res: Response) => {
 export const uploadDriveFile = async (req: Request, res: Response) => {
     try {
         const file = req.file;
-        const { folderId } = req.body;
+        const { folderId , title } = req.body;
 
         if (!file) {
             throw new BadRequest('File is required');
@@ -104,7 +115,7 @@ export const uploadDriveFile = async (req: Request, res: Response) => {
         }
 
         await db.insert(driveAssets).values({
-            title: file.originalname,
+            title: title ? title : file.originalname,
             type: type as any,
             status: 'ready',
             folderId: folderId || null,
