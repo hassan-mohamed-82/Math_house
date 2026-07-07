@@ -14,6 +14,7 @@ import {
     sessionAttendance
 } from "../../models/schema";
 import { eq, like, or, and, inArray, sql, asc } from "drizzle-orm";
+import { alias } from "drizzle-orm/mysql-core";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
@@ -553,6 +554,7 @@ export const getSessionById = async (req: Request, res: Response) => {
         .where(eq(sessionGroups.sessionId, id));
 
     // Fetch linked lessons with full academic hierarchy
+    const parentCategory = alias(category, 'parentCategory');
     const sessionLessonsData = await db.select({
         id: lessons.id,
         name: lessons.name,
@@ -564,9 +566,13 @@ export const getSessionById = async (req: Request, res: Response) => {
             id: courses.id,
             name: courses.name,
         },
-        category: {
+        subcategory: {
             id: category.id,
             name: category.name,
+        },
+        category: {
+            id: parentCategory.id,
+            name: parentCategory.name,
         },
     })
         .from(sessionLessons)
@@ -574,6 +580,7 @@ export const getSessionById = async (req: Request, res: Response) => {
         .innerJoin(chapters, eq(lessons.chapterId, chapters.id))
         .innerJoin(courses, eq(chapters.courseId, courses.id))
         .innerJoin(category, eq(courses.categoryId, category.id))
+        .leftJoin(parentCategory, eq(category.parentCategoryId, parentCategory.id))
         .where(eq(sessionLessons.sessionId, id));
 
     // Fetch all students enrolled in this session
