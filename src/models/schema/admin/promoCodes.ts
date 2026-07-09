@@ -18,29 +18,29 @@ export const promoCodes = mysqlTable("promoCodes", {
 
 export const promoCodesCourses = mysqlTable("promoCodesCourses", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
-    promoCodeId: char("promoCodeId", { length: 255 }).references(() => promoCodes.id).notNull(),
-    courseId: char("courseId", { length: 255 }).references(() => courses.id).notNull(),
+    promoCodeId: char("promoCodeId", { length: 255 }).references(() => promoCodes.id, { onDelete: "cascade" }).notNull(),
+    courseId: char("courseId", { length: 255 }).references(() => courses.id, { onDelete: "cascade" }).notNull(),
     createdAt: timestamp("createdAt").defaultNow(),
 });
 
 export const promoCodesPackages = mysqlTable("promoCodesPackages", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
-    promoCodeId: char("promoCodeId", { length: 255 }).references(() => promoCodes.id).notNull(),
-    packageId: char("packageId", { length: 255 }).references(() => packages.id).notNull(),
+    promoCodeId: char("promoCodeId", { length: 255 }).references(() => promoCodes.id, { onDelete: "cascade" }).notNull(),
+    packageId: char("packageId", { length: 255 }).references(() => packages.id, { onDelete: "cascade" }).notNull(),
     createdAt: timestamp("createdAt").defaultNow(),
 });
 
 export const promoCodesUsers = mysqlTable("promoCodesUsers", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
-    promoCodeId: char("promoCodeId", { length: 255 }).references(() => promoCodes.id).notNull(),
-    userId: char("userId", { length: 255 }).references(() => Student.id).notNull(),
+    promoCodeId: char("promoCodeId", { length: 255 }).references(() => promoCodes.id, { onDelete: "cascade" }).notNull(),
+    userId: char("userId", { length: 255 }).references(() => Student.id, { onDelete: "cascade" }).notNull(),
     createdAt: timestamp("createdAt").defaultNow(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
 });
 
 export const promoCodesCurrency = mysqlTable("promoCodesCurrency", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
-    promoCodeId: char("promoCodeId", { length: 255 }).references(() => promoCodes.id).notNull(),
-    currencyId: char("currencyId", { length: 255 }).references(() => Currency.id).notNull(),
+    promoCodeId: char("promoCodeId", { length: 255 }).references(() => promoCodes.id, { onDelete: "cascade" }).notNull(),
+    currencyId: char("currencyId", { length: 255 }).references(() => Currency.id, { onDelete: "cascade" }).notNull(),
     createdAt: timestamp("createdAt").defaultNow(),
 });

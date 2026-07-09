@@ -1,4 +1,3 @@
-// models/schema/admin/notifications.ts
 import { mysqlTable, varchar, char, timestamp, text, datetime, boolean, mysqlEnum } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 
@@ -16,7 +15,7 @@ export const notifications = mysqlTable("notifications", {
 // جدول لربط الـ Notifications بالـ Parents
 export const notificationParents = mysqlTable("notification_parents", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-    notificationId: char("notification_id", { length: 36 }).notNull().references(() => notifications.id),
+    notificationId: char("notification_id", { length: 36 }).notNull().references(() => notifications.id, { onDelete: "cascade" }),
     parentId: char("parent_id", { length: 36 }).notNull(),
     isRead: boolean("is_read").default(false),
     createdAt: timestamp("created_at").defaultNow(),
@@ -25,7 +24,7 @@ export const notificationParents = mysqlTable("notification_parents", {
 // جدول لربط الـ Notifications بالـ Students
 export const notificationStudents = mysqlTable("notification_students", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-    notificationId: char("notification_id", { length: 36 }).notNull().references(() => notifications.id),
+    notificationId: char("notification_id", { length: 36 }).notNull().references(() => notifications.id, { onDelete: "cascade" }),
     studentId: char("student_id", { length: 36 }).notNull(),
     isRead: boolean("is_read").default(false),
     createdAt: timestamp("created_at").defaultNow(),
@@ -34,7 +33,7 @@ export const notificationStudents = mysqlTable("notification_students", {
 // جدول لربط الـ Notifications بالـ Teachers
 export const notificationTeachers = mysqlTable("notification_teachers", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-    notificationId: char("notification_id", { length: 36 }).notNull().references(() => notifications.id),
+    notificationId: char("notification_id", { length: 36 }).notNull().references(() => notifications.id, { onDelete: "cascade" }),
     teacherId: char("teacher_id", { length: 36 }).notNull(),
     isRead: boolean("is_read").default(false),
     createdAt: timestamp("created_at").defaultNow(),

@@ -2,7 +2,6 @@ import { mysqlTable, varchar, char, timestamp, mysqlEnum, boolean } from "drizzl
 import { sql } from "drizzle-orm";
 import { Currency } from "./currency";
 
-
 export const paymentMethod = mysqlTable("paymentMethod", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     name: varchar("name", { length: 255 }).notNull(),
@@ -16,8 +15,8 @@ export const paymentMethod = mysqlTable("paymentMethod", {
 
 export const paymentMethodCurrency = mysqlTable("paymentMethodCurrency", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-    paymentMethodId: char("paymentMethodId", { length: 36 }).references(() => paymentMethod.id).notNull(),
-    currencyId: char("currencyId", { length: 36 }).references(() => Currency.id).notNull(),
+    paymentMethodId: char("paymentMethodId", { length: 36 }).references(() => paymentMethod.id, { onDelete: "cascade" }).notNull(),
+    currencyId: char("currencyId", { length: 36 }).references(() => Currency.id, { onDelete: "cascade" }).notNull(),
     createdAt: timestamp("createdAt").defaultNow(),
     updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
 });

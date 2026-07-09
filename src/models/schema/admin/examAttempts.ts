@@ -6,8 +6,8 @@ import { v4 as uuidv4 } from "uuid";
 
 export const examAttempts = mysqlTable("exam_attempts", {
     id: char("id", { length: 255 }).primaryKey().notNull().$defaultFn(() => uuidv4()),
-    studentId: char("student_id", { length: 36 }).notNull().references(() => Student.id),
-    examId: char("exam_id", { length: 255 }).notNull().references(() => Exams.id),
+    studentId: char("student_id", { length: 36 }).notNull().references(() => Student.id, { onDelete: "cascade" }),
+    examId: char("exam_id", { length: 255 }).notNull().references(() => Exams.id, { onDelete: "cascade" }),
     startedAt: datetime("started_at").notNull().default(sql`(now())`),
     endedAt: datetime("ended_at"),
     score: int("score"),

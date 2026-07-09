@@ -5,7 +5,7 @@ import { courses } from "./courses";
 export const rawScore = mysqlTable("raw_score", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     name: varchar("name", { length: 255 }).notNull(),
-    courseId: char("course_id", { length: 255 }).notNull().references(() => courses.id),
+    courseId: char("course_id", { length: 255 }).notNull().references(() => courses.id, { onDelete: "cascade" }),
 
     score: int("score").notNull(),
     is_giftingScore: boolean("is_gift").notNull().default(false),

@@ -11,8 +11,8 @@ export const Student = mysqlTable("student", {
     email:varchar("email",{length:255}).notNull().unique(),
     password:varchar("password",{length:255}).notNull(),
     phone:varchar("phone",{length:255}).notNull(),
-    category:char("category",{length:36}).notNull().references(()=>category.id),
-    grade:char("grade",{length:36}).notNull().references(()=>grade.id),
+    category:char("category",{length:36}).notNull().references(() => category.id, { onDelete: "cascade" }),
+    grade:char("grade",{length:36}).notNull().references(() => grade.id, { onDelete: "cascade" }),
     parentphone:varchar("parent_phone",{length:255}),
     isVerified:boolean("is_verified").notNull().default(false),
 

@@ -15,15 +15,15 @@ export const Exams = mysqlTable("exams", {
     duration: int("duration").notNull(), // Duration in minutes
     totalScore: int("total_score").notNull(),
     passScore: int("pass_score").notNull(),
-    rawScoreId: char("raw_score_id", { length: 255 }).notNull().references(() => rawScore.id),
+    rawScoreId: char("raw_score_id", { length: 255 }).notNull().references(() => rawScore.id, { onDelete: "cascade" }),
     isActive: boolean("is_active").notNull().default(true),
     examType: examType,
 
     // Details
-    courseId: char("course_id", { length: 255 }).notNull().references(() => courses.id),
+    courseId: char("course_id", { length: 255 }).notNull().references(() => courses.id, { onDelete: "cascade" }),
     year: int("year").notNull(),
     Month: mysqlEnum("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]).notNull(),
-    codeId: char("code_id", { length: 255 }).notNull().references(() => examCodes.id),
+    codeId: char("code_id", { length: 255 }).notNull().references(() => examCodes.id, { onDelete: "cascade" }),
 
     // Calculators allowed for this exam (subset of CALCULATOR_TYPES)
     calculators: json("calculators").$type<string[]>().default([]),
@@ -34,9 +34,9 @@ export const Exams = mysqlTable("exams", {
 
 export const ExamSections = mysqlTable("exam_sections", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
-    sectionId: char("section_id", { length: 255 }).notNull().references(() => Sections.id),
+    sectionId: char("section_id", { length: 255 }).notNull().references(() => Sections.id, { onDelete: "cascade" }),
     sectionOrder: int("section_order").notNull(),
-    examId: char("exam_id", { length: 255 }).notNull().references(() => Exams.id),
+    examId: char("exam_id", { length: 255 }).notNull().references(() => Exams.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });
@@ -44,8 +44,8 @@ export const ExamSections = mysqlTable("exam_sections", {
 export const SectionQuestions = mysqlTable("section_questions", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     questionOrder: int("question_order").notNull(),
-    sectionId: char("section_id", { length: 255 }).notNull().references(() => ExamSections.id),
-    questionId: char("question_id", { length: 255 }).notNull().references(() => questions.id),
+    sectionId: char("section_id", { length: 255 }).notNull().references(() => ExamSections.id, { onDelete: "cascade" }),
+    questionId: char("question_id", { length: 255 }).notNull().references(() => questions.id, { onDelete: "cascade" }),
     score: int("score").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
@@ -53,7 +53,7 @@ export const SectionQuestions = mysqlTable("section_questions", {
 
 export const AdaptiveExam = mysqlTable("adaptive_exam", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
-    examId: char("exam_id", { length: 255 }).notNull().references(() => Exams.id),
+    examId: char("exam_id", { length: 255 }).notNull().references(() => Exams.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });

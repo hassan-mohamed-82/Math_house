@@ -1,4 +1,4 @@
-import { mysqlTable, varchar, char, timestamp, uniqueIndex } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, uniqueIndex, boolean } from "drizzle-orm/mysql-core";
 import { category } from "./category";
 import { v4 as uuidv4 } from "uuid";
 
@@ -6,8 +6,8 @@ export const grade = mysqlTable("grade", {
     id: char("id", { length: 36 }).primaryKey().notNull().$defaultFn(() => uuidv4()),
     name: varchar("name", { length: 255 }).notNull(),
     nameAr: varchar("name_ar", { length: 255 }).notNull(),
-    categoryId: char("category_id", { length: 36 }).notNull().references(() => category.id),
-    parentCategoryId: char("parent_category_id", { length: 36 }).references(() => category.id),
+    categoryId: char("category_id", { length: 36 }).notNull().references(() => category.id, { onDelete: "cascade" }),
+    parentCategoryId: char("parent_category_id", { length: 36 }).references(() => category.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 }, (table) => ({

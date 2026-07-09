@@ -1,5 +1,5 @@
 // schema/sessions.ts
-import { mysqlTable, varchar, char, timestamp, mysqlEnum, date, time, int, text, uniqueIndex } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, mysqlEnum, date, time, int, text, uniqueIndex, boolean } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { teachers } from "./teacher";
 import { Student } from "./Student";
@@ -19,7 +19,7 @@ export const sessions = mysqlTable("sessions", {
     timeFrom: time("time_from").notNull(),
     timeTo:   time("time_to").notNull(),
 
-    teacherId: char("teacher_id", { length: 255 }).notNull().references(() => teachers.id),
+    teacherId: char("teacher_id", { length: 255 }).notNull().references(() => teachers.id, { onDelete: "cascade" }),
 
     session_link:          varchar("session_link",          { length: 500 }),
     material_link:         varchar("material_link",         { length: 500 }),
@@ -34,26 +34,26 @@ export const sessions = mysqlTable("sessions", {
 /** Junction table – one session can be linked to multiple groups */
 export const sessionGroups = mysqlTable("session_groups", {
     id:        char("id",         { length: 36 }).primaryKey().default(sql`(UUID())`),
-    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id),
-    groupId:   char("group_id",   { length: 36 }).notNull().references(() => groups.id),
+    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id, { onDelete: "cascade" }),
+    groupId:   char("group_id",   { length: 36 }).notNull().references(() => groups.id, { onDelete: "cascade" }),
 });
 
 export const sessionUsers = mysqlTable("session_users", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id),
-    studentId: char("student_id", { length: 36 }).notNull().references(() => Student.id),
+    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id, { onDelete: "cascade" }),
+    studentId: char("student_id", { length: 36 }).notNull().references(() => Student.id, { onDelete: "cascade" }),
 });
 
 export const sessionLessons = mysqlTable("session_academic_info", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id),
-    lessonId: char("lesson_id", { length: 36 }).notNull().references(() => lessons.id),
+    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id, { onDelete: "cascade" }),
+    lessonId: char("lesson_id", { length: 36 }).notNull().references(() => lessons.id, { onDelete: "cascade" }),
 });
 
 export const sessionRatings = mysqlTable("session_ratings", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id),
-    studentId: char("student_id", { length: 36 }).notNull().references(() => Student.id),
+    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id, { onDelete: "cascade" }),
+    studentId: char("student_id", { length: 36 }).notNull().references(() => Student.id, { onDelete: "cascade" }),
     rating: int("rating").notNull(), // 1-10
     comment: text("comment"),
     createdAt: timestamp("created_at").defaultNow(),
@@ -62,8 +62,8 @@ export const sessionRatings = mysqlTable("session_ratings", {
 
 export const sessionAttendance = mysqlTable("session_attendance", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
-    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id),
-    studentId: char("student_id", { length: 36 }).notNull().references(() => Student.id),
+    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id, { onDelete: "cascade" }),
+    studentId: char("student_id", { length: 36 }).notNull().references(() => Student.id, { onDelete: "cascade" }),
     status: mysqlEnum("status", ["present", "absent"]).notNull().default("absent"),
     attendedAt: timestamp("attended_at"),
     createdAt: timestamp("created_at").defaultNow(),
