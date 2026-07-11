@@ -3,6 +3,7 @@ import { eq, and, inArray, asc } from "drizzle-orm";
 import { db } from "../../models/connection";
 import { quizzes, questions, quizQuestions, questionOptions, quizAttempts, studentQuizAnswers, lessons } from "../../models/schema";
 import { randomUUID } from "crypto";
+import { isEquivalentGridInAnswer } from "../../utils/checkGridInAnswer";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound, UnauthorizedError, BadRequest } from "../../Errors";
 import { checkAccess } from "../../utils/accessControl";
@@ -237,6 +238,7 @@ export const submitQuiz = async (req: Request, res: Response) => {
             .select({
                 id: questionOptions.id,
                 questionId: questionOptions.questionId,
+                answer: questionOptions.answer,
             })
             .from(questionOptions)
             .where(and(
@@ -244,9 +246,15 @@ export const submitQuiz = async (req: Request, res: Response) => {
                 eq(questionOptions.isCorrect, true),
             ));
 
-        correctOptionMap = new Map(
-            correctOptions.map(opt => [opt.questionId, opt.id])
-        );
+        // Use array to support multiple correct options
+        const groupedOptions = new Map<string, any[]>();
+        for (const opt of correctOptions) {
+            if (!groupedOptions.has(opt.questionId)) {
+                groupedOptions.set(opt.questionId, []);
+            }
+            groupedOptions.get(opt.questionId)!.push(opt);
+        }
+        correctOptionMap = groupedOptions;
     }
 
     let totalAchievedScore = 0;
@@ -270,8 +278,11 @@ export const submitQuiz = async (req: Request, res: Response) => {
         let achievedScore = 0;
 
         if (questionInfo.answerType === "MCQ" && selectedOptionId) {
-            const correctOptionId = correctOptionMap.get(questionId);
-            isCorrect = selectedOptionId === correctOptionId;
+            const correctOpts = correctOptionMap.get(questionId) || [];
+            isCorrect = correctOpts.some((opt: any) => opt.id === selectedOptionId);
+        } else if (questionInfo.answerType === "Grid in" && gridInAnswer) {
+            const correctOpts = correctOptionMap.get(questionId) || [];
+            isCorrect = correctOpts.some((opt: any) => isEquivalentGridInAnswer(gridInAnswer, opt.answer));
         }
 
         if (isCorrect) {

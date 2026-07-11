@@ -8,7 +8,7 @@ import { NotFound } from "../../Errors";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { BadRequest } from "../../Errors";
-// -----------------------------------------
+import { isEquivalentGridInAnswer } from "../../utils/checkGridInAnswer";
 export const startDiagnosticExam = async (studentId: string, examId: string) => {
     const [exam] = await db
         .select({ duration: diagnosticExam.duration })
@@ -153,10 +153,12 @@ export const submitDiagnosticExam = async (studentId: string, attemptId: string,
                             eq(questionOptions.isCorrect, true)
                         )
                     );
+                //TODO: for now we will use exact match or mathematical approximation
+                //const normalizedSubmit = studentGridInAnswer.trim().toLowerCase();
+                //isCorrect = correctOptions.some(opt => opt.answer.trim().toLowerCase() === normalizedSubmit);
 
-                // Allow if text matches any valid correct grid-in answer (case-insensitive trim)
-                const normalizedSubmit = studentGridInAnswer.trim().toLowerCase();
-                isCorrect = correctOptions.some(opt => opt.answer.trim().toLowerCase() === normalizedSubmit);
+                // Allow if text matches any valid correct grid-in answer
+                isCorrect = correctOptions.some(opt => isEquivalentGridInAnswer(studentGridInAnswer!, opt.answer));
             }
         }
         // If no submittedAnswer is found, isCorrect remains false 

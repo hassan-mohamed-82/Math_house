@@ -13,6 +13,7 @@ import { eq, and, inArray, sql, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 import { randomUUID } from "crypto";
+import { isEquivalentGridInAnswer } from "../../utils/checkGridInAnswer";
 
 const getStudentId = (req: Request): string => {
     if (!req.user?.id) throw new UnauthorizedError("Not authenticated");
@@ -472,7 +473,10 @@ export const submitExam = async (req: Request, res: Response) => {
         const info = sectionQs.find(q => q.qId === ans.questionId);
         if (!info) return null;
         const correct = correctMap.get(ans.questionId);
-        const isCorrect = info.type === "MCQ" ? ans.selectedOptionId === correct?.id : ans.gridInAnswer?.trim().toLowerCase() === correct?.answer.trim().toLowerCase();
+        //TODO: for now we will use exact match or mathematical approximation
+        //const isCorrect = info.type === "MCQ" ? ans.selectedOptionId === correct?.id : ans.gridInAnswer?.trim().toLowerCase() === correct?.answer.trim().toLowerCase();
+
+        const isCorrect = info.type === "MCQ" ? ans.selectedOptionId === correct?.id : (ans.gridInAnswer && correct?.answer ? isEquivalentGridInAnswer(ans.gridInAnswer, correct.answer) : false);
         if (isCorrect) totalAchievedScore += info.score;
         return { id: randomUUID(), attemptId: attempt.id, questionId: ans.questionId, isCorrect, score: isCorrect ? info.score : 0, selectedOptionId: ans.selectedOptionId, gridInAnswer: ans.gridInAnswer };
     }).filter(Boolean);
