@@ -104,11 +104,11 @@ export const searchStudents = async (req: Request, res: Response) => {
 
 // إنشاء Group جديد
 export const createGroup = async (req: Request, res: Response) => {
-    const { name, teacherId, days, timeFrom, timeTo, studentIds, isActive = true } = req.body;
+    const { name, studentIds, isActive = true } = req.body;
 
     // Validation
-    if (!name || !teacherId || !days || !timeFrom || !timeTo) {
-        throw new BadRequest("Missing required fields");
+    if (!name) {
+        throw new BadRequest("name is required");
     }
 
     const groupId = randomUUID();
@@ -117,10 +117,6 @@ export const createGroup = async (req: Request, res: Response) => {
     await db.insert(groups).values({
         id: groupId,
         name,
-        teacherId,
-        days: days, // ["Sun", "Mon", etc.]
-        timeFrom,
-        timeTo,
         isActive
     });
 
@@ -147,16 +143,10 @@ export const getAllGroups = async (req: Request, res: Response) => {
         .select({
             id: groups.id,
             name: groups.name,
-            teacherId: groups.teacherId,
-            teacherName: teachers.name,
-            days: groups.days,
-            timeFrom: groups.timeFrom,
-            timeTo: groups.timeTo,
             isActive: groups.isActive,
             createdAt: groups.createdAt,
         })
         .from(groups)
-        .leftJoin(teachers, eq(groups.teacherId, teachers.id))
         .limit(Number(limit))
         .offset(offset);
 
@@ -174,7 +164,6 @@ export const getAllGroups = async (req: Request, res: Response) => {
 
             return {
                 ...group,
-                days: typeof group.days === "string" ? JSON.parse(group.days) : group.days,
                 students
             };
         })
@@ -192,15 +181,9 @@ export const getGroupById = async (req: Request, res: Response) => {
         .select({
             id: groups.id,
             name: groups.name,
-            teacherId: groups.teacherId,
-            teacherName: teachers.name,
-            days: groups.days,
-            timeFrom: groups.timeFrom,
-            timeTo: groups.timeTo,
             isActive: groups.isActive,
         })
         .from(groups)
-        .leftJoin(teachers, eq(groups.teacherId, teachers.id))
         .where(eq(groups.id, id));
 
     if (!group) {
@@ -220,7 +203,6 @@ export const getGroupById = async (req: Request, res: Response) => {
 
     SuccessResponse(res, {
         ...group,
-        days: typeof group.days === "string" ? JSON.parse(group.days as string) : group.days,
         students
     });
 
@@ -229,16 +211,12 @@ export const getGroupById = async (req: Request, res: Response) => {
 // تحديث Group
 export const updateGroup = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, teacherId, days, timeFrom, timeTo, studentIds, isActive } = req.body;
+    const { name, studentIds, isActive } = req.body;
 
     // تحديث الـ Group
     await db.update(groups)
         .set({
             name,
-            teacherId,
-            days,
-            timeFrom,
-            timeTo,
             isActive,
             updatedAt: new Date()
         })
