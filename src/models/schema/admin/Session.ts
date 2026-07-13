@@ -1,5 +1,5 @@
 // schema/sessions.ts
-import { mysqlTable, varchar, char, timestamp, mysqlEnum, date, time, int, text, uniqueIndex, boolean } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, mysqlEnum, date, time, int, text, uniqueIndex, index } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { teachers } from "./teacher";
 import { Student } from "./Student";
@@ -69,4 +69,5 @@ export const sessionAttendance = mysqlTable("session_attendance", {
     createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
     uniqueIndex("session_student_unique").on(table.sessionId, table.studentId),
+    index("session_attendance_student_status_idx").on(table.studentId, table.status)
 ]);

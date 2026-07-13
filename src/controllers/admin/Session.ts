@@ -954,3 +954,102 @@ export const deleteSession = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: `Successfully deleted ${sessionIdsToDelete.length} session(s)` }, 200);
 };
+
+
+export const getStudentsCourseAttendance = async (req: Request, res: Response) => {
+    const { studentIds, courseId } = req.body;
+
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        throw new BadRequest("studentIds array is required");
+    }
+
+    if (!courseId) {
+        throw new BadRequest("courseId is required");
+    }
+
+    // Query: get all present attendance records with lesson/chapter info
+    const attendanceRecords = await db
+        .select({
+            studentId: Student.id,
+            studentFirstName: Student.firstname,
+            studentLastName: Student.lastname,
+            chapterId: chapters.id,
+            chapterName: chapters.name,
+            lessonId: lessons.id,
+            lessonName: lessons.name,
+        })
+        .from(sessionAttendance)
+        .innerJoin(Student, eq(sessionAttendance.studentId, Student.id))
+        .innerJoin(sessions, eq(sessionAttendance.sessionId, sessions.id))
+        .innerJoin(sessionLessons, eq(sessionLessons.sessionId, sessions.id))
+        .innerJoin(lessons, eq(sessionLessons.lessonId, lessons.id))
+        .innerJoin(chapters, eq(lessons.chapterId, chapters.id))
+        .innerJoin(courses, eq(chapters.courseId, courses.id))
+        .where(
+            and(
+                inArray(sessionAttendance.studentId, studentIds),
+                eq(sessionAttendance.status, "present"),
+                eq(courses.id, courseId)
+            )
+        );
+
+    // Build nested structure: student → chapters → lessons
+    const studentAttendanceById = new Map<string, any>();
+
+    for (const record of attendanceRecords) {
+        // Initialize student entry if not exists
+        if (!studentAttendanceById.has(record.studentId)) {
+            studentAttendanceById.set(record.studentId, {
+                studentId: record.studentId,
+                studentName: `${record.studentFirstName} ${record.studentLastName}`,
+                chaptersById: new Map<string, any>(),
+            });
+        }
+
+        const studentAttendance = studentAttendanceById.get(record.studentId);
+
+        // Initialize chapter entry if not exists
+        if (!studentAttendance.chaptersById.has(record.chapterId)) {
+            studentAttendance.chaptersById.set(record.chapterId, {
+                id: record.chapterId,
+                name: record.chapterName,
+                lessons: [],
+            });
+        }
+
+        const chapterAttendance = studentAttendance.chaptersById.get(record.chapterId);
+
+        // Add lesson only if not already present (deduplicate)
+        const isLessonAlreadyAdded = chapterAttendance.lessons.some(
+            (lesson: any) => lesson.id === record.lessonId
+        );
+
+        if (!isLessonAlreadyAdded) {
+            chapterAttendance.lessons.push({
+                id: record.lessonId,
+                name: record.lessonName,
+            });
+        }
+    }
+
+    // Build final response preserving input student order
+    const studentsWithAttendance = studentIds.map((studentId) => {
+        const attendanceData = studentAttendanceById.get(studentId);
+
+        if (!attendanceData) {
+            return {
+                studentId,
+                studentName: null,
+                chapters: [],
+            };
+        }
+
+        return {
+            studentId: attendanceData.studentId,
+            studentName: attendanceData.studentName,
+            chapters: Array.from(attendanceData.chaptersById.values()),
+        };
+    });
+
+    return SuccessResponse(res, { students: studentsWithAttendance }, 200);
+};
