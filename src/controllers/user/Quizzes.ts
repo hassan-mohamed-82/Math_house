@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { eq, and, inArray, asc } from "drizzle-orm";
+import { eq, and, inArray, asc, desc } from "drizzle-orm";
 import { db } from "../../models/connection";
 import { quizzes, questions, quizQuestions, questionOptions, quizAttempts, studentQuizAnswers, lessons } from "../../models/schema";
 import { randomUUID } from "crypto";
@@ -98,7 +98,8 @@ export const getQuizById = async (req: Request, res: Response) => {
         .where(and(
             eq(quizAttempts.studentId, studentId),
             eq(quizAttempts.quizId, quizId),
-        ));
+        ))
+        .orderBy(desc(quizAttempts.startedAt));
 
     const questionsCount = await db
         .select()
@@ -154,17 +155,18 @@ export const startQuiz = async (req: Request, res: Response) => {
         });
     }
 
-    const [completedAttempt] = await db
+    const [passedAttempt] = await db
         .select({ id: quizAttempts.id })
         .from(quizAttempts)
         .where(and(
             eq(quizAttempts.studentId, studentId),
             eq(quizAttempts.quizId, quizId),
-            eq(quizAttempts.status, "completed"),
+            inArray(quizAttempts.status, ["completed", "timed_out"]),
+            eq(quizAttempts.isPassed, true)
         ));
 
-    if (completedAttempt) {
-        throw new BadRequest("You have already completed this quiz");
+    if (passedAttempt) {
+        throw new BadRequest("You have already passed this quiz. You cannot take it again.");
     }
 
     const attemptId = randomUUID();

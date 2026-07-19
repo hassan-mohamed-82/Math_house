@@ -32,6 +32,10 @@ export const getExams = async (req: Request, res: Response) => {
 
     if (!student) throw new NotFound("Student not found");
 
+    if (student.examBalance <= 0) {
+        throw new BadRequest("You do not have balance, please try to purchase an exam package.");
+    }
+
     // 2. Build Category Hierarchy (Upwards & Downwards)
     const categoryIds: string[] = [];
 
@@ -133,7 +137,8 @@ export const getExams = async (req: Request, res: Response) => {
             .where(and(
                 eq(examAttempts.studentId, studentId),
                 inArray(examAttempts.examId, examIds),
-            ));
+            ))
+            .orderBy(examAttempts.startedAt);
 
         for (const attempt of attempts) {
             attemptsMap.set(attempt.examId, {
@@ -177,13 +182,17 @@ export const getExamById = async (req: Request, res: Response) => {
     const studentId = getStudentId(req);
     const { examId } = req.params;
 
-    // 1. Get student's category
+    // 1. Get student's category and balance
     const [student] = await db
-        .select({ categoryId: Student.category })
+        .select({ categoryId: Student.category, examBalance: Student.exambalance })
         .from(Student)
         .where(eq(Student.id, studentId));
 
     if (!student) throw new NotFound("Student not found");
+
+    if (student.examBalance <= 0) {
+        throw new BadRequest("You do not have balance, please try to purchase an exam package.");
+    }
 
     // 2. Fetch exam with course info
     const [exam] = await db
@@ -320,7 +329,8 @@ export const getExamById = async (req: Request, res: Response) => {
         .where(and(
             eq(examAttempts.studentId, studentId),
             eq(examAttempts.examId, examId),
-        ));
+        ))
+        .orderBy(desc(examAttempts.startedAt));
 
     return SuccessResponse(res, {
         exam: {
@@ -407,18 +417,19 @@ export const startExam = async (req: Request, res: Response) => {
         });
     }
 
-    // 5. Check if already completed
-    const [completedAttempt] = await db
+    // 5. Check if already passed
+    const [passedAttempt] = await db
         .select({ id: examAttempts.id })
         .from(examAttempts)
         .where(and(
             eq(examAttempts.studentId, studentId),
             eq(examAttempts.examId, examId),
             inArray(examAttempts.status, ["completed", "timed_out"]),
+            eq(examAttempts.isPassed, true)
         ));
 
-    if (completedAttempt) {
-        throw new BadRequest("You have already completed this exam");
+    if (passedAttempt) {
+        throw new BadRequest("You have already passed this exam. You cannot take it again.");
     }
 
     // Check balance only for new attempts
