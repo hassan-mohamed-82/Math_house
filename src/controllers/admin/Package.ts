@@ -1,4 +1,3 @@
-// controllers/packages.controller.ts
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { packages } from "../../models/schema/admin/Package";
@@ -9,7 +8,6 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
 import { v4 as uuidv4 } from "uuid";
-
 
 // ===================== SELECT OPTIONS =====================
 
@@ -52,28 +50,36 @@ export const getCoursesByCategory = async (req: Request, res: Response) => {
 export const selectionPackages = async (req: Request, res: Response) => {
     const { courseId } = req.query;
 
-    let query = db.select({
+    let conditions: any[] = [];
+
+    if (courseId) {
+        conditions.push(eq(packages.courseId, courseId as string));
+    }
+
+    const packagesList = await db.select({
         id: packages.id,
         name: packages.name,
         type: packages.type,
         price: packages.price,
+        hasAnswers: packages.hasAnswers,
+        answersPrice: packages.answersPrice,
         categoryId: packages.categoryId,
         courseId: packages.courseId,
-    }).from(packages);
-
-    if (courseId) {
-        query = query.where(eq(packages.courseId, courseId as string)) as any;
-    }
-
-    const packagesList = await query;
+    })
+    .from(packages)
+    .where(conditions.length > 0 ? and(...conditions) : undefined);
 
     SuccessResponse(res, packagesList.map(p => ({
         value: p.id,
-        label: `${p.name} - ${p.price}$`,
+        label: `${p.name} - Base: ${p.price}$ ${p.type === 'exam' ? `(Add-on Answers: +${p.answersPrice}$)` : ''}`,
         type: p.type,
         categoryId: p.categoryId,
         courseId: p.courseId,
         price: p.price,
+        ...(p.type === 'exam' ? {
+            hasAnswers: p.hasAnswers,
+            answersPrice: p.answersPrice
+        } : {})
     })));
 };
 
@@ -87,12 +93,18 @@ export const createPackage = async (req: Request, res: Response) => {
         courseId,
         number,
         price,
-        duration
+        duration,
+        hasAnswers = false,      
+        answersPrice = "0"       
     } = req.body;
 
     if (!name || !type || !categoryId || !courseId || !number || !price || !duration) {
         throw new BadRequest("All fields are required");
     }
+
+    // الـ Business Logic للتسعير: لو النوع ليس امتحاناً، يجب تصفير حقول الإجابات تلقائياً لحماية اللوجيك
+    const finalHasAnswers = type === "exam" ? Boolean(hasAnswers) : false;
+    const finalAnswersPrice = type === "exam" ? String(answersPrice) : "0";
 
     const id = uuidv4();
 
@@ -104,17 +116,19 @@ export const createPackage = async (req: Request, res: Response) => {
         courseId,
         number: Number(number),
         price: String(price),
-        duration: Number(duration)
+        duration: Number(duration),
+        hasAnswers: finalHasAnswers,
+        answersPrice: finalAnswersPrice
     });
 
-    SuccessResponse(res, { id }, 201);
+    SuccessResponse(res, { id, message: "Package with custom price-flow created successfully" }, 201);
 };
 
 export const getAllPackages = async (req: Request, res: Response) => {
     const { page = 1, limit = 10, type, categoryId, courseId } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
 
-    const conditions = [];
+    const conditions: any[] = [];
 
     if (type) {
         conditions.push(eq(packages.type, type as "exam" | "question" | "live"));
@@ -137,6 +151,8 @@ export const getAllPackages = async (req: Request, res: Response) => {
             courseName: courses.name,
             number: packages.number,
             price: packages.price,
+            hasAnswers: packages.hasAnswers,
+            answersPrice: packages.answersPrice,
             duration: packages.duration,
         })
         .from(packages)
@@ -163,6 +179,8 @@ export const getPackageById = async (req: Request, res: Response) => {
             courseName: courses.name,
             number: packages.number,
             price: packages.price,
+            hasAnswers: packages.hasAnswers,
+            answersPrice: packages.answersPrice,
             duration: packages.duration,
         })
         .from(packages)
@@ -186,10 +204,11 @@ export const updatePackage = async (req: Request, res: Response) => {
         courseId,
         number,
         price,
-        duration
+        duration,
+        hasAnswers,
+        answersPrice
     } = req.body;
 
-    // تأكد من وجود الـ Package
     const [existing] = await db
         .select({ id: packages.id })
         .from(packages)
@@ -200,7 +219,7 @@ export const updatePackage = async (req: Request, res: Response) => {
     }
 
     await db.update(packages)
-        .set({
+        .set({ 
             name,
             type,
             categoryId,
@@ -208,6 +227,8 @@ export const updatePackage = async (req: Request, res: Response) => {
             number: Number(number),
             price: String(price),
             duration: Number(duration),
+            hasAnswers: type === "exam" ? Boolean(hasAnswers) : false,
+            answersPrice: type === "exam" ? String(answersPrice) : "0",
             updatedAt: new Date()
         })
         .where(eq(packages.id, id));
@@ -218,7 +239,6 @@ export const updatePackage = async (req: Request, res: Response) => {
 export const deletePackage = async (req: Request, res: Response) => {
     const { id } = req.params;
 
-    // تأكد من وجود الـ Package
     const [existing] = await db
         .select({ id: packages.id })
         .from(packages)
