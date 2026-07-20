@@ -10,11 +10,7 @@ import { createPaymobCheckoutSession } from "../../utils/paymob";
 
 const getAuthenticatedStudentId = (req: Request) => {
     const studentId = req.user?.id;
-
-    if (!studentId) {
-        throw new UnauthorizedError('Student not logged in');
-    }
-
+    if (!studentId) throw new UnauthorizedError('Student not logged in');
     return studentId;
 };
 
@@ -28,36 +24,23 @@ const getStudentForPackagePayment = async (studentId: string) => {
         parentphone: Student.parentphone,
     }).from(Student).where(eq(Student.id, studentId)).limit(1);
 
-    if (!student) {
-        throw new NotFound("Student not found");
-    }
-
+    if (!student) throw new NotFound("Student not found");
     return student;
 };
 
 const getLinkedParentId = async (parentPhone: string | null) => {
-    if (!parentPhone) {
-        return null;
-    }
-
-    const [parent] = await db.select({
-        id: parents.id,
-    }).from(parents).where(eq(parents.phoneNumber, parentPhone)).limit(1);
-
+    if (!parentPhone) return null;
+    const [parent] = await db.select({ id: parents.id }).from(parents).where(eq(parents.phoneNumber, parentPhone)).limit(1);
     return parent?.id ?? null;
 };
 
 export const creditPackageBalance = async (studentId: string, packageId: string, database: Pick<typeof db, 'select' | 'update'> = db) => {
-
     const [existingPackage] = await database.select({
         type: packages.type,
         number: packages.number,
     }).from(packages).where(eq(packages.id, packageId)).limit(1);
 
-    if (!existingPackage) {
-        throw new NotFound("Package not found");
-    }
-
+    if (!existingPackage) throw new NotFound("Package not found");
     if (existingPackage.number <= 0) {
         throw new BadRequest("Package must include at least one number to be added to student's account");
     }
@@ -84,8 +67,7 @@ export const creditPackageBalance = async (studentId: string, packageId: string,
 };
 
 export const requestPackageBuy = async (req: Request, res: Response) => {
-
-    const { packageId, paymentMethodId, receiptImg } = req.body;
+    const { packageId, paymentMethodId, receiptImg, buyAnswersAddon } = req.body;
     const studentId = getAuthenticatedStudentId(req);
 
     if (!packageId || !paymentMethodId || !receiptImg) {
@@ -97,12 +79,12 @@ export const requestPackageBuy = async (req: Request, res: Response) => {
         name: packages.name,
         price: packages.price,
         type: packages.type,
-        number: packages.number
+        number: packages.number,
+        hasAnswers: packages.hasAnswers,
+        answersPrice: packages.answersPrice,
     }).from(packages).where(eq(packages.id, packageId)).limit(1);
 
-    if (!existingPackage) {
-        throw new NotFound("Package not found");
-    }
+    if (!existingPackage) throw new NotFound("Package not found");
 
     const [existingPaymentMethod] = await db.select({
         id: paymentMethod.id,
@@ -111,14 +93,8 @@ export const requestPackageBuy = async (req: Request, res: Response) => {
         type: paymentMethod.type,
     }).from(paymentMethod).where(eq(paymentMethod.id, paymentMethodId)).limit(1);
 
-    if (!existingPaymentMethod) {
-        throw new NotFound("Payment method not found");
-    }
-
-    if (!existingPaymentMethod.isActive) {
-        throw new BadRequest("Payment method is not active");
-    }
-
+    if (!existingPaymentMethod) throw new NotFound("Payment method not found");
+    if (!existingPaymentMethod.isActive) throw new BadRequest("Payment method is not active");
     if (existingPaymentMethod.type !== "Manual") {
         throw new BadRequest("Use the automatic recharge endpoint for automatic payment methods");
     }
@@ -132,20 +108,22 @@ export const requestPackageBuy = async (req: Request, res: Response) => {
         parentphone: Student.parentphone,
     }).from(Student).where(eq(Student.id, studentId)).limit(1);
 
-    if (!existingStudent) {
-        throw new NotFound("Student not found");
-    }
+    if (!existingStudent) throw new NotFound("Student not found");
+    if (!existingStudent.parentphone) throw new BadRequest("Student does not have a parent phone number");
 
-    if (!existingStudent.parentphone) {
-        throw new BadRequest("Student does not have a parent phone number");
-    }
+    const [existingParent] = await db.select({ id: parents.id }).from(parents).where(eq(parents.phoneNumber, existingStudent.parentphone)).limit(1);
+    if (!existingParent) throw new NotFound("Parent not found");
 
-    const [existingParent] = await db.select({
-        id: parents.id,
-    }).from(parents).where(eq(parents.phoneNumber, existingStudent.parentphone)).limit(1);
-    
-    if (!existingParent) {
-        throw new NotFound("Parent not found");
+    let finalAmount = Number(existingPackage.price);
+    let answersIncluded = false;
+
+    if (existingPackage.type === "exam") {
+        if (existingPackage.hasAnswers) {
+            answersIncluded = true;
+        } else if (buyAnswersAddon === true) {
+            answersIncluded = true;
+            finalAmount += Number(existingPackage.answersPrice || 0);
+        }
     }
 
     const savedReceiptImg = await validateAndSaveLogo(req, receiptImg, 'payment_receipts');
@@ -155,19 +133,19 @@ export const requestPackageBuy = async (req: Request, res: Response) => {
         parentId: existingParent.id,
         purpose: "purchase",
         paymentMethodId: paymentMethodId,
-        amount: Number(existingPackage.price),
+        amount: finalAmount,
         receiptImg: savedReceiptImg,
         source: "student",
         packageId: packageId,
+        includedAnswers: answersIncluded,
+        isDeleted: false
     });
 
-    return SuccessResponse(res, {
-        message: 'Package buy request created successfully',
-    }, 201);
+    return SuccessResponse(res, { message: 'Package buy request created successfully' }, 201);
 };
 
 export const initiateAutomaticPackageBuy = async (req: Request, res: Response) => {
-    const { packageId, paymentMethodId } = req.body;
+    const { packageId, paymentMethodId, buyAnswersAddon } = req.body;
     const studentId = getAuthenticatedStudentId(req);
 
     if (!packageId || !paymentMethodId) {
@@ -178,16 +156,27 @@ export const initiateAutomaticPackageBuy = async (req: Request, res: Response) =
         id: packages.id,
         name: packages.name,
         price: packages.price,
+        type: packages.type,
+        hasAnswers: packages.hasAnswers,
+        answersPrice: packages.answersPrice
     }).from(packages).where(eq(packages.id, packageId)).limit(1);
 
-    if (!existingPackage) {
-        throw new NotFound('Package not found');
+    if (!existingPackage) throw new NotFound('Package not found');
+
+    let finalAmount = Number(existingPackage.price);
+    let answersIncluded = false;
+
+    if (existingPackage.type === "exam") {
+        if (existingPackage.hasAnswers) {
+            answersIncluded = true;
+        } else if (buyAnswersAddon === true) {
+            answersIncluded = true;
+            finalAmount += Number(existingPackage.answersPrice || 0);
+        }
     }
 
-    const packagePrice = Number(existingPackage.price);
-
-    if (!Number.isFinite(packagePrice) || packagePrice <= 0) {
-        throw new BadRequest('Package price is invalid');
+    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
+        throw new BadRequest('Package price calculated is invalid');
     }
 
     const [existingPaymentMethod] = await db.select({
@@ -197,21 +186,10 @@ export const initiateAutomaticPackageBuy = async (req: Request, res: Response) =
         type: paymentMethod.type,
     }).from(paymentMethod).where(eq(paymentMethod.id, paymentMethodId)).limit(1);
 
-    if (!existingPaymentMethod) {
-        throw new NotFound('Payment method not found');
-    }
-
-    if (!existingPaymentMethod.isActive) {
-        throw new BadRequest('Payment method is not active');
-    }
-
-    if (existingPaymentMethod.type !== 'Automatic') {
-        throw new BadRequest('Selected payment method is not an automatic payment method');
-    }
-
-    if (existingPaymentMethod.name.toLowerCase() !== 'paymob') {
-        throw new BadRequest('Automatic payments are currently available only through Paymob');
-    }
+    if (!existingPaymentMethod) throw new NotFound('Payment method not found');
+    if (!existingPaymentMethod.isActive) throw new BadRequest('Payment method is not active');
+    if (existingPaymentMethod.type !== 'Automatic') throw new BadRequest('Selected payment method is not an automatic payment method');
+    if (existingPaymentMethod.name.toLowerCase() !== 'paymob') throw new BadRequest('Automatic payments are currently available only through Paymob');
 
     const student = await getStudentForPackagePayment(studentId);
     const parentId = await getLinkedParentId(student.parentphone);
@@ -219,18 +197,20 @@ export const initiateAutomaticPackageBuy = async (req: Request, res: Response) =
 
     await db.insert(payment).values({
         id: paymentId,
-        amount: packagePrice,
+        amount: finalAmount,
         paymentMethodId,
         studentId,
         parentId,
         source: 'student',
         purpose: 'purchase',
         packageId,
+        includedAnswers: answersIncluded,
+        isDeleted: false
     });
 
     try {
         const checkoutSession = await createPaymobCheckoutSession({
-            amountCents: Math.round(packagePrice * 100),
+            amountCents: Math.round(finalAmount * 100),
             merchantOrderId: paymentId,
             student,
         });
@@ -272,6 +252,7 @@ export const getPackageBuyHistory = async (req: Request, res: Response) => {
     const whereCondition = and(
         eq(payment.studentId, studentId),
         eq(payment.purpose, 'purchase'),
+        eq(payment.isDeleted, false),
         isNotNull(payment.packageId),
         searchCondition,
     );
@@ -291,6 +272,7 @@ export const getPackageBuyHistory = async (req: Request, res: Response) => {
             id: payment.id,
             amount: payment.amount,
             status: payment.status,
+            includedAnswers: payment.includedAnswers,
             createdAt: payment.createdAt,
             receiptImg: payment.receiptImg,
             source: payment.source,
@@ -319,12 +301,7 @@ export const getPackageBuyHistory = async (req: Request, res: Response) => {
     return SuccessResponse(res, {
         message: 'Package buy history retrieved successfully',
         history: packageBuyHistory,
-        pagination: {
-            total,
-            page,
-            limit,
-            totalPages,
-        },
+        pagination: { total, page, limit, totalPages },
     });
 };
 
