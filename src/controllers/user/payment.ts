@@ -283,6 +283,10 @@ export const getPackageBuyHistory = async (req: Request, res: Response) => {
                 type: packages.type,
                 number: packages.number,
                 price: packages.price,
+                duration:packages.duration,
+                hasAnswers:packages.hasAnswers,
+                answersPrice:packages.answersPrice,
+
             },
             paymentMethod: {
                 id: paymentMethod.id,
