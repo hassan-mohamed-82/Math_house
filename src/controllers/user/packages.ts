@@ -23,6 +23,8 @@ export const getPackages = async (req: Request, res: Response) => {
             id: packages.courseId,
             name: courses.name,
         },
+        hasAnswers: packages.hasAnswers,
+        answersPrice: packages.answersPrice,
     }).from(packages)
     .leftJoin(category, eq(packages.categoryId, category.id))
     .leftJoin(courses, eq(packages.courseId, courses.id));
