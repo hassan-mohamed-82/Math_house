@@ -2,6 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const auth_1 = require("../../controllers/admin/auth");
+const authenticated_1 = require("../../middlewares/authenticated");
+const authorized_1 = require("../../middlewares/authorized");
 const router = (0, express_1.Router)();
 router.post("/login", auth_1.login);
+router.post("/impersonate/:studentId", authenticated_1.authenticated, (0, authorized_1.authorizeRoles)("superadmin", "admin"), auth_1.impersonateStudent);
+router.post("/switch-back", authenticated_1.authenticated, auth_1.switchBack);
 exports.default = router;

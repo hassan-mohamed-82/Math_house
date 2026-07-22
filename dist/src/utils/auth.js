@@ -41,12 +41,13 @@ require("dotenv/config");
 // ⚙️ CONFIGURATION
 // ═══════════════════════════════════════════════════════════════
 const JWT_SECRET = process.env.JWT_SECRET;
-// Token expiration times
 const TOKEN_EXPIRY = {
+    superadmin: '7d',
     admin: '7d',
     teacher: '14d',
     student: '30d',
     parent: '30d',
+    driver: '7d',
 };
 const generateToken = (data) => {
     const payload = {

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getLessonsByChapterId = exports.getLessonById = void 0;
+exports.getPurchasedLessons = exports.getLessonsByChapterId = exports.getLessonById = void 0;
 const connection_1 = require("../../models/connection");
 const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
@@ -108,10 +108,16 @@ const getLessonsByChapterId = async (req, res) => {
         .from(schema_1.enrolledItems)
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.enrolledItems.status, "active"), (0, drizzle_orm_1.inArray)(schema_1.enrolledItems.lessonId, lessonIds)));
     const enrolledLessonIds = new Set(lessonEnrollments.map(e => e.lessonId).filter((id) => !!id));
-    // 5. Format results with isLocked status
+    // Fetch prices for all lessons
+    const lessonsPrices = await connection_1.db
+        .select()
+        .from(schema_1.prices)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.prices.targetType, "lesson"), (0, drizzle_orm_1.inArray)(schema_1.prices.targetId, lessonIds)));
+    // 5. Format results with isLocked status and prices
     const lessonsWithLockStatus = allLessons.map(row => ({
         ...row,
-        isLocked: !hasParentAccess && !enrolledLessonIds.has(row.lesson.id)
+        isLocked: !hasParentAccess && !enrolledLessonIds.has(row.lesson.id),
+        prices: lessonsPrices.filter(p => p.targetId === row.lesson.id)
     }));
     return (0, response_1.SuccessResponse)(res, {
         message: "Lessons fetched successfully",
@@ -119,3 +125,55 @@ const getLessonsByChapterId = async (req, res) => {
     }, 200);
 };
 exports.getLessonsByChapterId = getLessonsByChapterId;
+// 3. Get purchased lessons
+const getPurchasedLessons = async (req, res) => {
+    const studentId = req.user.id;
+    const purchasedLessons = await connection_1.db
+        .select({
+        lesson: schema_1.lessons,
+        chapter: schema_1.chapters,
+        course: schema_1.courses,
+        enrollmentId: schema_1.enrolledItems.id,
+        expiresAt: schema_1.enrolledItems.expiresAt,
+        status: schema_1.enrolledItems.status,
+        createdAt: schema_1.enrolledItems.createdAt,
+    })
+        .from(schema_1.lessons)
+        // نربط الشابتر والكورس لجلب أسمائهم وفحص شروط الوراثة
+        .leftJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
+        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.lessons.courseId, schema_1.courses.id))
+        // 2. الـ innerJoin الذكي مع جدول الاشتراكات بـ 3 شروط (OR)
+        .innerJoin(schema_1.enrolledItems, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.studentId, studentId), (0, drizzle_orm_1.inArray)(schema_1.enrolledItems.status, ["active", "expired"]), (0, drizzle_orm_1.or)(
+    // الحالة الأولى: شراء الدرس عينه بذاته
+    (0, drizzle_orm_1.eq)(schema_1.enrolledItems.lessonId, schema_1.lessons.id), 
+    // الحالة الثانية: شراء الشابتر كامل (الدرس ينتمي لهذا الشابتر، وحقل الدرس في الفاتورة فارغ)
+    (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.chapterId, schema_1.lessons.chapterId), (0, drizzle_orm_1.isNull)(schema_1.enrolledItems.lessonId)), 
+    // الحالة الثالثة: شراء الكورس كامل (الدرس ينتمي لهذا الكورس، وحقول الشابتر والدرس في الفاتورة فارغة)
+    (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.courseId, schema_1.lessons.courseId), (0, drizzle_orm_1.isNull)(schema_1.enrolledItems.chapterId), (0, drizzle_orm_1.isNull)(schema_1.enrolledItems.lessonId)))))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.enrolledItems.createdAt));
+    const now = new Date();
+    // 3. حماية لمنع تكرار الدروس في حال وجود اشتراك كورس واشتراك درس منفصل في نفس الوقت
+    const seenLessonIds = new Set();
+    const formattedLessons = [];
+    for (const p of purchasedLessons) {
+        if (seenLessonIds.has(p.lesson.id))
+            continue;
+        seenLessonIds.add(p.lesson.id);
+        const isExpired = p.expiresAt && p.expiresAt < now;
+        formattedLessons.push({
+            ...p.lesson,
+            chapterName: p.chapter?.name ?? null,
+            courseName: p.course?.name ?? null,
+            enrollmentId: p.enrollmentId,
+            expiresAt: p.expiresAt,
+            status: isExpired ? "expired" : p.status,
+            purchasedAt: p.createdAt
+        });
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Purchased lessons retrieved successfully",
+        count: formattedLessons.length,
+        lessons: formattedLessons
+    }, 200);
+};
+exports.getPurchasedLessons = getPurchasedLessons;

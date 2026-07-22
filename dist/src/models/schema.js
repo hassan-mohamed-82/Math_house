@@ -45,6 +45,8 @@ __exportStar(require("./schema/admin/paymentMethod"), exports);
 __exportStar(require("./schema/admin/payment"), exports);
 __exportStar(require("./schema/admin/examAttempts"), exports);
 __exportStar(require("./schema/admin/studentAnswers"), exports);
+__exportStar(require("./schema/admin/quizAttempts"), exports);
+__exportStar(require("./schema/admin/studentQuizAnswers"), exports);
 __exportStar(require("./schema/user/Wallet"), exports);
 __exportStar(require("./schema/user/StudentDiagnosticExam"), exports);
 __exportStar(require("./schema/user/studentDiagnosticAnswers"), exports);

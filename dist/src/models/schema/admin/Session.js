@@ -18,7 +18,7 @@ exports.sessions = (0, mysql_core_1.mysqlTable)("sessions", {
     endDate: (0, mysql_core_1.date)("end_date"), // used when scheduleType = "repeat"
     timeFrom: (0, mysql_core_1.time)("time_from").notNull(),
     timeTo: (0, mysql_core_1.time)("time_to").notNull(),
-    teacherId: (0, mysql_core_1.char)("teacher_id", { length: 255 }).notNull().references(() => teacher_1.teachers.id),
+    teacherId: (0, mysql_core_1.char)("teacher_id", { length: 255 }).notNull().references(() => teacher_1.teachers.id, { onDelete: "cascade" }),
     session_link: (0, mysql_core_1.varchar)("session_link", { length: 500 }),
     material_link: (0, mysql_core_1.varchar)("material_link", { length: 500 }),
     teacher_material_link: (0, mysql_core_1.varchar)("teacher_material_link", { length: 500 }),
@@ -29,23 +29,23 @@ exports.sessions = (0, mysql_core_1.mysqlTable)("sessions", {
 /** Junction table – one session can be linked to multiple groups */
 exports.sessionGroups = (0, mysql_core_1.mysqlTable)("session_groups", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
-    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id),
-    groupId: (0, mysql_core_1.char)("group_id", { length: 36 }).notNull().references(() => Groups_1.groups.id),
+    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id, { onDelete: "cascade" }),
+    groupId: (0, mysql_core_1.char)("group_id", { length: 36 }).notNull().references(() => Groups_1.groups.id, { onDelete: "cascade" }),
 });
 exports.sessionUsers = (0, mysql_core_1.mysqlTable)("session_users", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
-    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id),
-    studentId: (0, mysql_core_1.char)("student_id", { length: 36 }).notNull().references(() => Student_1.Student.id),
+    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id, { onDelete: "cascade" }),
+    studentId: (0, mysql_core_1.char)("student_id", { length: 36 }).notNull().references(() => Student_1.Student.id, { onDelete: "cascade" }),
 });
 exports.sessionLessons = (0, mysql_core_1.mysqlTable)("session_academic_info", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
-    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id),
-    lessonId: (0, mysql_core_1.char)("lesson_id", { length: 36 }).notNull().references(() => lessons_1.lessons.id),
+    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id, { onDelete: "cascade" }),
+    lessonId: (0, mysql_core_1.char)("lesson_id", { length: 36 }).notNull().references(() => lessons_1.lessons.id, { onDelete: "cascade" }),
 });
 exports.sessionRatings = (0, mysql_core_1.mysqlTable)("session_ratings", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
-    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id),
-    studentId: (0, mysql_core_1.char)("student_id", { length: 36 }).notNull().references(() => Student_1.Student.id),
+    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id, { onDelete: "cascade" }),
+    studentId: (0, mysql_core_1.char)("student_id", { length: 36 }).notNull().references(() => Student_1.Student.id, { onDelete: "cascade" }),
     rating: (0, mysql_core_1.int)("rating").notNull(), // 1-10
     comment: (0, mysql_core_1.text)("comment"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
@@ -53,11 +53,12 @@ exports.sessionRatings = (0, mysql_core_1.mysqlTable)("session_ratings", {
 });
 exports.sessionAttendance = (0, mysql_core_1.mysqlTable)("session_attendance", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
-    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id),
-    studentId: (0, mysql_core_1.char)("student_id", { length: 36 }).notNull().references(() => Student_1.Student.id),
+    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id, { onDelete: "cascade" }),
+    studentId: (0, mysql_core_1.char)("student_id", { length: 36 }).notNull().references(() => Student_1.Student.id, { onDelete: "cascade" }),
     status: (0, mysql_core_1.mysqlEnum)("status", ["present", "absent"]).notNull().default("absent"),
     attendedAt: (0, mysql_core_1.timestamp)("attended_at"),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
 }, (table) => [
     (0, mysql_core_1.uniqueIndex)("session_student_unique").on(table.sessionId, table.studentId),
+    (0, mysql_core_1.index)("session_attendance_student_status_idx").on(table.studentId, table.status)
 ]);

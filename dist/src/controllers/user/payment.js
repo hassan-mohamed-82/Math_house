@@ -11,9 +11,8 @@ const handleImages_1 = require("../../utils/handleImages");
 const paymob_1 = require("../../utils/paymob");
 const getAuthenticatedStudentId = (req) => {
     const studentId = req.user?.id;
-    if (!studentId) {
+    if (!studentId)
         throw new Errors_1.UnauthorizedError('Student not logged in');
-    }
     return studentId;
 };
 const getStudentForPackagePayment = async (studentId) => {
@@ -25,18 +24,14 @@ const getStudentForPackagePayment = async (studentId) => {
         phone: schema_1.Student.phone,
         parentphone: schema_1.Student.parentphone,
     }).from(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, studentId)).limit(1);
-    if (!student) {
+    if (!student)
         throw new Errors_1.NotFound("Student not found");
-    }
     return student;
 };
 const getLinkedParentId = async (parentPhone) => {
-    if (!parentPhone) {
+    if (!parentPhone)
         return null;
-    }
-    const [parent] = await connection_1.db.select({
-        id: schema_1.parents.id,
-    }).from(schema_1.parents).where((0, drizzle_orm_1.eq)(schema_1.parents.phoneNumber, parentPhone)).limit(1);
+    const [parent] = await connection_1.db.select({ id: schema_1.parents.id }).from(schema_1.parents).where((0, drizzle_orm_1.eq)(schema_1.parents.phoneNumber, parentPhone)).limit(1);
     return parent?.id ?? null;
 };
 const creditPackageBalance = async (studentId, packageId, database = connection_1.db) => {
@@ -44,9 +39,8 @@ const creditPackageBalance = async (studentId, packageId, database = connection_
         type: schema_1.packages.type,
         number: schema_1.packages.number,
     }).from(schema_1.packages).where((0, drizzle_orm_1.eq)(schema_1.packages.id, packageId)).limit(1);
-    if (!existingPackage) {
+    if (!existingPackage)
         throw new Errors_1.NotFound("Package not found");
-    }
     if (existingPackage.number <= 0) {
         throw new Errors_1.BadRequest("Package must include at least one number to be added to student's account");
     }
@@ -72,7 +66,7 @@ const creditPackageBalance = async (studentId, packageId, database = connection_
 };
 exports.creditPackageBalance = creditPackageBalance;
 const requestPackageBuy = async (req, res) => {
-    const { packageId, paymentMethodId, receiptImg } = req.body;
+    const { packageId, paymentMethodId, receiptImg, buyAnswersAddon } = req.body;
     const studentId = getAuthenticatedStudentId(req);
     if (!packageId || !paymentMethodId || !receiptImg) {
         throw new Errors_1.BadRequest("Package ID, Payment Method ID, and receipt image are required");
@@ -82,23 +76,22 @@ const requestPackageBuy = async (req, res) => {
         name: schema_1.packages.name,
         price: schema_1.packages.price,
         type: schema_1.packages.type,
-        number: schema_1.packages.number
+        number: schema_1.packages.number,
+        hasAnswers: schema_1.packages.hasAnswers,
+        answersPrice: schema_1.packages.answersPrice,
     }).from(schema_1.packages).where((0, drizzle_orm_1.eq)(schema_1.packages.id, packageId)).limit(1);
-    if (!existingPackage) {
+    if (!existingPackage)
         throw new Errors_1.NotFound("Package not found");
-    }
     const [existingPaymentMethod] = await connection_1.db.select({
         id: schema_1.paymentMethod.id,
         name: schema_1.paymentMethod.name,
         isActive: schema_1.paymentMethod.isActive,
         type: schema_1.paymentMethod.type,
     }).from(schema_1.paymentMethod).where((0, drizzle_orm_1.eq)(schema_1.paymentMethod.id, paymentMethodId)).limit(1);
-    if (!existingPaymentMethod) {
+    if (!existingPaymentMethod)
         throw new Errors_1.NotFound("Payment method not found");
-    }
-    if (!existingPaymentMethod.isActive) {
+    if (!existingPaymentMethod.isActive)
         throw new Errors_1.BadRequest("Payment method is not active");
-    }
     if (existingPaymentMethod.type !== "Manual") {
         throw new Errors_1.BadRequest("Use the automatic recharge endpoint for automatic payment methods");
     }
@@ -110,17 +103,23 @@ const requestPackageBuy = async (req, res) => {
         phone: schema_1.Student.phone,
         parentphone: schema_1.Student.parentphone,
     }).from(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, studentId)).limit(1);
-    if (!existingStudent) {
+    if (!existingStudent)
         throw new Errors_1.NotFound("Student not found");
-    }
-    if (!existingStudent.parentphone) {
+    if (!existingStudent.parentphone)
         throw new Errors_1.BadRequest("Student does not have a parent phone number");
-    }
-    const [existingParent] = await connection_1.db.select({
-        id: schema_1.parents.id,
-    }).from(schema_1.parents).where((0, drizzle_orm_1.eq)(schema_1.parents.phoneNumber, existingStudent.parentphone)).limit(1);
-    if (!existingParent) {
+    const [existingParent] = await connection_1.db.select({ id: schema_1.parents.id }).from(schema_1.parents).where((0, drizzle_orm_1.eq)(schema_1.parents.phoneNumber, existingStudent.parentphone)).limit(1);
+    if (!existingParent)
         throw new Errors_1.NotFound("Parent not found");
+    let finalAmount = Number(existingPackage.price);
+    let answersIncluded = false;
+    if (existingPackage.type === "exam") {
+        if (existingPackage.hasAnswers) {
+            answersIncluded = true;
+        }
+        else if (buyAnswersAddon === true) {
+            answersIncluded = true;
+            finalAmount += Number(existingPackage.answersPrice || 0);
+        }
     }
     const savedReceiptImg = await (0, handleImages_1.validateAndSaveLogo)(req, receiptImg, 'payment_receipts');
     await connection_1.db.insert(schema_1.payment).values({
@@ -128,18 +127,18 @@ const requestPackageBuy = async (req, res) => {
         parentId: existingParent.id,
         purpose: "purchase",
         paymentMethodId: paymentMethodId,
-        amount: Number(existingPackage.price),
+        amount: finalAmount,
         receiptImg: savedReceiptImg,
         source: "student",
         packageId: packageId,
+        includedAnswers: answersIncluded,
+        isDeleted: false
     });
-    return (0, response_1.SuccessResponse)(res, {
-        message: 'Package buy request created successfully',
-    }, 201);
+    return (0, response_1.SuccessResponse)(res, { message: 'Package buy request created successfully' }, 201);
 };
 exports.requestPackageBuy = requestPackageBuy;
 const initiateAutomaticPackageBuy = async (req, res) => {
-    const { packageId, paymentMethodId } = req.body;
+    const { packageId, paymentMethodId, buyAnswersAddon } = req.body;
     const studentId = getAuthenticatedStudentId(req);
     if (!packageId || !paymentMethodId) {
         throw new Errors_1.BadRequest('Package ID and payment method ID are required');
@@ -148,13 +147,25 @@ const initiateAutomaticPackageBuy = async (req, res) => {
         id: schema_1.packages.id,
         name: schema_1.packages.name,
         price: schema_1.packages.price,
+        type: schema_1.packages.type,
+        hasAnswers: schema_1.packages.hasAnswers,
+        answersPrice: schema_1.packages.answersPrice
     }).from(schema_1.packages).where((0, drizzle_orm_1.eq)(schema_1.packages.id, packageId)).limit(1);
-    if (!existingPackage) {
+    if (!existingPackage)
         throw new Errors_1.NotFound('Package not found');
+    let finalAmount = Number(existingPackage.price);
+    let answersIncluded = false;
+    if (existingPackage.type === "exam") {
+        if (existingPackage.hasAnswers) {
+            answersIncluded = true;
+        }
+        else if (buyAnswersAddon === true) {
+            answersIncluded = true;
+            finalAmount += Number(existingPackage.answersPrice || 0);
+        }
     }
-    const packagePrice = Number(existingPackage.price);
-    if (!Number.isFinite(packagePrice) || packagePrice <= 0) {
-        throw new Errors_1.BadRequest('Package price is invalid');
+    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
+        throw new Errors_1.BadRequest('Package price calculated is invalid');
     }
     const [existingPaymentMethod] = await connection_1.db.select({
         id: schema_1.paymentMethod.id,
@@ -162,34 +173,32 @@ const initiateAutomaticPackageBuy = async (req, res) => {
         isActive: schema_1.paymentMethod.isActive,
         type: schema_1.paymentMethod.type,
     }).from(schema_1.paymentMethod).where((0, drizzle_orm_1.eq)(schema_1.paymentMethod.id, paymentMethodId)).limit(1);
-    if (!existingPaymentMethod) {
+    if (!existingPaymentMethod)
         throw new Errors_1.NotFound('Payment method not found');
-    }
-    if (!existingPaymentMethod.isActive) {
+    if (!existingPaymentMethod.isActive)
         throw new Errors_1.BadRequest('Payment method is not active');
-    }
-    if (existingPaymentMethod.type !== 'Automatic') {
+    if (existingPaymentMethod.type !== 'Automatic')
         throw new Errors_1.BadRequest('Selected payment method is not an automatic payment method');
-    }
-    if (existingPaymentMethod.name.toLowerCase() !== 'paymob') {
+    if (existingPaymentMethod.name.toLowerCase() !== 'paymob')
         throw new Errors_1.BadRequest('Automatic payments are currently available only through Paymob');
-    }
     const student = await getStudentForPackagePayment(studentId);
     const parentId = await getLinkedParentId(student.parentphone);
     const paymentId = (0, crypto_1.randomUUID)();
     await connection_1.db.insert(schema_1.payment).values({
         id: paymentId,
-        amount: packagePrice,
+        amount: finalAmount,
         paymentMethodId,
         studentId,
         parentId,
         source: 'student',
         purpose: 'purchase',
         packageId,
+        includedAnswers: answersIncluded,
+        isDeleted: false
     });
     try {
         const checkoutSession = await (0, paymob_1.createPaymobCheckoutSession)({
-            amountCents: Math.round(packagePrice * 100),
+            amountCents: Math.round(finalAmount * 100),
             merchantOrderId: paymentId,
             student,
         });
@@ -219,7 +228,7 @@ const getPackageBuyHistory = async (req, res) => {
     const searchCondition = search
         ? (0, drizzle_orm_1.or)((0, drizzle_orm_1.like)(schema_1.payment.status, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.packages.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.packages.type, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.paymentMethod.name, `%${search}%`), (0, drizzle_orm_1.like)(schema_1.paymentMethod.type, `%${search}%`), (0, drizzle_orm_1.sql) `cast(${schema_1.payment.amount} as char) like ${`%${search}%`}`)
         : undefined;
-    const whereCondition = (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.payment.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.payment.purpose, 'purchase'), searchCondition);
+    const whereCondition = (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.payment.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.payment.purpose, 'purchase'), (0, drizzle_orm_1.eq)(schema_1.payment.isDeleted, false), (0, drizzle_orm_1.isNotNull)(schema_1.payment.packageId), searchCondition);
     const [totalPackageBuyHistory] = await connection_1.db
         .select({ count: (0, drizzle_orm_1.count)() })
         .from(schema_1.payment)
@@ -233,15 +242,20 @@ const getPackageBuyHistory = async (req, res) => {
         id: schema_1.payment.id,
         amount: schema_1.payment.amount,
         status: schema_1.payment.status,
+        includedAnswers: schema_1.payment.includedAnswers,
         createdAt: schema_1.payment.createdAt,
         receiptImg: schema_1.payment.receiptImg,
         source: schema_1.payment.source,
+        reason: schema_1.payment.reason,
         package: {
             id: schema_1.packages.id,
             name: schema_1.packages.name,
             type: schema_1.packages.type,
             number: schema_1.packages.number,
             price: schema_1.packages.price,
+            duration: schema_1.packages.duration,
+            hasAnswers: schema_1.packages.hasAnswers,
+            answersPrice: schema_1.packages.answersPrice,
         },
         paymentMethod: {
             id: schema_1.paymentMethod.id,
@@ -259,12 +273,7 @@ const getPackageBuyHistory = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, {
         message: 'Package buy history retrieved successfully',
         history: packageBuyHistory,
-        pagination: {
-            total,
-            page,
-            limit,
-            totalPages,
-        },
+        pagination: { total, page, limit, totalPages },
     });
 };
 exports.getPackageBuyHistory = getPackageBuyHistory;

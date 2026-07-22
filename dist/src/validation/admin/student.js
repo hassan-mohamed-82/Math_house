@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.categoryIdSchema = exports.gradeSchema = exports.idParamsSchema = exports.idSchema = exports.updateStudentSchema = exports.studentSchema = void 0;
+exports.increaseLessonsDurationSchema = exports.categoryIdSchema = exports.gradeSchema = exports.idParamsSchema = exports.idSchema = exports.updateStudentSchema = exports.studentSchema = void 0;
 const zod_1 = require("zod");
 exports.studentSchema = zod_1.z.object({
     firstname: zod_1.z.string().min(2, "firstname must be at least 2 characters").max(255),
@@ -41,3 +41,7 @@ exports.idParamsSchema = zod_1.z.object({
 });
 exports.gradeSchema = zod_1.z.string().uuid("grade id is not valid");
 exports.categoryIdSchema = zod_1.z.string().uuid("معرف الفئة غير صالح");
+exports.increaseLessonsDurationSchema = zod_1.z.object({
+    lessonIds: zod_1.z.array(zod_1.z.string().uuid("معرف الدرس غير صالح")),
+    days: zod_1.z.number().int().positive("عدد الأيام يجب أن يكون رقماً موجباً"),
+});

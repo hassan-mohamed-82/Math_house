@@ -1,77 +1,52 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSession = exports.updateSession = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.selectGroups = exports.selectTeachers = exports.selectStudents = exports.selectLesson = exports.selectChapter = exports.selectCourse = exports.selectSubCategory = exports.selectCategory = void 0;
+exports.getStudentsCourseAttendance = exports.deleteSession = exports.updateSession = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.selectGroups = exports.selectTeachers = exports.selectStudents = exports.selectLesson = exports.selectChapter = exports.selectCourse = exports.selectSubCategory = exports.selectCategory = void 0;
 const crypto_1 = require("crypto");
 const connection_1 = require("../../models/connection");
 const Session_1 = require("../../models/schema/admin/Session");
 const Groups_1 = require("../../models/schema/admin/Groups");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
+const mysql_core_1 = require("drizzle-orm/mysql-core");
 const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
 // Selections
 const selectCategory = async (req, res) => {
-    const allCategories = await connection_1.db.select({
-        id: schema_1.category.id,
-        name: schema_1.category.name,
-        parentCategoryId: schema_1.category.parentCategoryId,
-    }).from(schema_1.category);
-    const categoryMap = new Map();
-    const parentIds = new Set();
-    allCategories.forEach(cat => {
-        categoryMap.set(cat.id, cat);
-        if (cat.parentCategoryId) {
-            parentIds.add(cat.parentCategoryId);
-        }
-    });
-    const leafCategories = allCategories.filter(cat => !parentIds.has(cat.id));
-    const formattedCategories = leafCategories.map(leaf => {
-        let current = leaf;
-        const ancestors = [];
-        while (current) {
-            ancestors.unshift(current.name);
-            if (current.parentCategoryId && categoryMap.has(current.parentCategoryId)) {
-                current = categoryMap.get(current.parentCategoryId);
-            }
-            else {
-                break;
-            }
-        }
-        return {
-            id: leaf.id,
-            name: ancestors.join(" > "),
-            root: ancestors[0] || leaf.name
-        };
-    });
-    const groupedCategories = formattedCategories.reduce((acc, curr) => {
-        const { root, ...rest } = curr;
-        if (!acc[root]) {
-            acc[root] = [];
-        }
-        acc[root].push(rest);
-        return acc;
-    }, {});
-    const result = Object.keys(groupedCategories).map(key => ({
-        root: key,
-        children: groupedCategories[key]
-    }));
-    return (0, response_1.SuccessResponse)(res, { categories: result });
+    const parentCategories = await connection_1.db
+        .select({ id: schema_1.category.id, name: schema_1.category.name })
+        .from(schema_1.category)
+        .where((0, drizzle_orm_1.sql) `${schema_1.category.parentCategoryId} IS NULL`);
+    return (0, response_1.SuccessResponse)(res, { categories: parentCategories });
 };
 exports.selectCategory = selectCategory;
 const selectSubCategory = async (req, res) => {
-    const { categoryId } = req.params;
-    const parentCat = await connection_1.db
-        .select({ id: schema_1.category.id })
-        .from(schema_1.category)
-        .where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId))
-        .limit(1);
-    if (parentCat.length === 0)
-        throw new BadRequest_1.BadRequest("Category not found");
+    const { categoryId } = req.query;
+    if (categoryId) {
+        const parentCat = await connection_1.db
+            .select({ id: schema_1.category.id })
+            .from(schema_1.category)
+            .where((0, drizzle_orm_1.eq)(schema_1.category.id, categoryId))
+            .limit(1);
+        if (parentCat.length === 0)
+            throw new BadRequest_1.BadRequest("Category not found");
+    }
+    const parentCategory = schema_1.category.$inferSelect;
+    const parentAlias = connection_1.db.$with("parent").as(connection_1.db.select({ id: schema_1.category.id, name: schema_1.category.name }).from(schema_1.category));
     const subCategories = await connection_1.db
-        .select({ id: schema_1.category.id, name: schema_1.category.name })
+        .select({
+        id: schema_1.category.id,
+        name: schema_1.category.name,
+        parentCategory: {
+            id: (0, drizzle_orm_1.sql) `parent.id`.as("parentId"),
+            name: (0, drizzle_orm_1.sql) `parent.name`.as("parentName"),
+        },
+    })
         .from(schema_1.category)
-        .where((0, drizzle_orm_1.eq)(schema_1.category.parentCategoryId, categoryId));
+        .leftJoin((0, drizzle_orm_1.sql) `${schema_1.category} as parent`, (0, drizzle_orm_1.sql) `${schema_1.category.parentCategoryId} = parent.id`)
+        .where(categoryId
+        ? (0, drizzle_orm_1.eq)(schema_1.category.parentCategoryId, categoryId)
+        : (0, drizzle_orm_1.sql) `${schema_1.category.parentCategoryId} IS NOT NULL`);
     return (0, response_1.SuccessResponse)(res, { subCategories });
 };
 exports.selectSubCategory = selectSubCategory;
@@ -482,6 +457,7 @@ const getSessionById = async (req, res) => {
         .innerJoin(Groups_1.groups, (0, drizzle_orm_1.eq)(Session_1.sessionGroups.groupId, Groups_1.groups.id))
         .where((0, drizzle_orm_1.eq)(Session_1.sessionGroups.sessionId, id));
     // Fetch linked lessons with full academic hierarchy
+    const parentCategory = (0, mysql_core_1.alias)(schema_1.category, 'parentCategory');
     const sessionLessonsData = await connection_1.db.select({
         id: schema_1.lessons.id,
         name: schema_1.lessons.name,
@@ -493,9 +469,13 @@ const getSessionById = async (req, res) => {
             id: schema_1.courses.id,
             name: schema_1.courses.name,
         },
-        category: {
+        subcategory: {
             id: schema_1.category.id,
             name: schema_1.category.name,
+        },
+        category: {
+            id: parentCategory.id,
+            name: parentCategory.name,
         },
     })
         .from(schema_1.sessionLessons)
@@ -503,6 +483,7 @@ const getSessionById = async (req, res) => {
         .innerJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
         .innerJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, schema_1.courses.id))
         .innerJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, schema_1.category.id))
+        .leftJoin(parentCategory, (0, drizzle_orm_1.eq)(schema_1.category.parentCategoryId, parentCategory.id))
         .where((0, drizzle_orm_1.eq)(schema_1.sessionLessons.sessionId, id));
     // Fetch all students enrolled in this session
     const sessionStudentsData = await connection_1.db.select({
@@ -799,3 +780,79 @@ const deleteSession = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: `Successfully deleted ${sessionIdsToDelete.length} session(s)` }, 200);
 };
 exports.deleteSession = deleteSession;
+const getStudentsCourseAttendance = async (req, res) => {
+    const { studentIds, courseId } = req.body;
+    if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        throw new BadRequest_1.BadRequest("studentIds array is required");
+    }
+    if (!courseId) {
+        throw new BadRequest_1.BadRequest("courseId is required");
+    }
+    // Query: get all present attendance records with lesson/chapter info
+    const attendanceRecords = await connection_1.db
+        .select({
+        studentId: schema_1.Student.id,
+        studentFirstName: schema_1.Student.firstname,
+        studentLastName: schema_1.Student.lastname,
+        chapterId: schema_1.chapters.id,
+        chapterName: schema_1.chapters.name,
+        lessonId: schema_1.lessons.id,
+        lessonName: schema_1.lessons.name,
+    })
+        .from(schema_1.sessionAttendance)
+        .innerJoin(schema_1.Student, (0, drizzle_orm_1.eq)(schema_1.sessionAttendance.studentId, schema_1.Student.id))
+        .innerJoin(Session_1.sessions, (0, drizzle_orm_1.eq)(schema_1.sessionAttendance.sessionId, Session_1.sessions.id))
+        .innerJoin(schema_1.sessionLessons, (0, drizzle_orm_1.eq)(schema_1.sessionLessons.sessionId, Session_1.sessions.id))
+        .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.sessionLessons.lessonId, schema_1.lessons.id))
+        .innerJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
+        .innerJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, schema_1.courses.id))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.sessionAttendance.studentId, studentIds), (0, drizzle_orm_1.eq)(schema_1.sessionAttendance.status, "present"), (0, drizzle_orm_1.eq)(schema_1.courses.id, courseId)));
+    // Build nested structure: student → chapters → lessons
+    const studentAttendanceById = new Map();
+    for (const record of attendanceRecords) {
+        // Initialize student entry if not exists
+        if (!studentAttendanceById.has(record.studentId)) {
+            studentAttendanceById.set(record.studentId, {
+                studentId: record.studentId,
+                studentName: `${record.studentFirstName} ${record.studentLastName}`,
+                chaptersById: new Map(),
+            });
+        }
+        const studentAttendance = studentAttendanceById.get(record.studentId);
+        // Initialize chapter entry if not exists
+        if (!studentAttendance.chaptersById.has(record.chapterId)) {
+            studentAttendance.chaptersById.set(record.chapterId, {
+                id: record.chapterId,
+                name: record.chapterName,
+                lessons: [],
+            });
+        }
+        const chapterAttendance = studentAttendance.chaptersById.get(record.chapterId);
+        // Add lesson only if not already present (deduplicate)
+        const isLessonAlreadyAdded = chapterAttendance.lessons.some((lesson) => lesson.id === record.lessonId);
+        if (!isLessonAlreadyAdded) {
+            chapterAttendance.lessons.push({
+                id: record.lessonId,
+                name: record.lessonName,
+            });
+        }
+    }
+    // Build final response preserving input student order
+    const studentsWithAttendance = studentIds.map((studentId) => {
+        const attendanceData = studentAttendanceById.get(studentId);
+        if (!attendanceData) {
+            return {
+                studentId,
+                studentName: null,
+                chapters: [],
+            };
+        }
+        return {
+            studentId: attendanceData.studentId,
+            studentName: attendanceData.studentName,
+            chapters: Array.from(attendanceData.chaptersById.values()),
+        };
+    });
+    return (0, response_1.SuccessResponse)(res, { students: studentsWithAttendance }, 200);
+};
+exports.getStudentsCourseAttendance = getStudentsCourseAttendance;

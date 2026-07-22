@@ -8,6 +8,7 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const NotFound_1 = require("../../Errors/NotFound");
 const uuid_1 = require("uuid");
+const calculators_1 = require("../../constants/calculators");
 // Helper to calculate dynamic scores
 const calculateDynamicScores = (exam, rawScoreData) => {
     // 1. Calculate specific total score from RawScore rule
@@ -24,9 +25,19 @@ const calculateDynamicScores = (exam, rawScoreData) => {
     };
 };
 const createDiagnosticExam = async (req, res) => {
-    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
+    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds, calculators } = req.body;
     if (!title || !duration || !rawScoreId || !numberOfQuestions || !passScore) {
         throw new BadRequest_1.BadRequest("Title, Duration, Raw Score ID, Number of Questions, and Pass Score are required");
+    }
+    // Validate calculators if provided
+    const validatedCalculators = [];
+    if (calculators && Array.isArray(calculators)) {
+        for (const calc of calculators) {
+            if (!calculators_1.CALCULATOR_TYPES.includes(calc)) {
+                throw new BadRequest_1.BadRequest(`Invalid calculator type: "${calc}". Allowed values: ${calculators_1.CALCULATOR_TYPES.join(", ")}`);
+            }
+            validatedCalculators.push(calc);
+        }
     }
     const existingRawScore = await connection_1.db.select().from(schema_1.rawScore).where((0, drizzle_orm_1.eq)(schema_1.rawScore.id, rawScoreId)).limit(1);
     if (!existingRawScore[0]) {
@@ -48,6 +59,7 @@ const createDiagnosticExam = async (req, res) => {
         rawScoreId,
         numberOfQuestions,
         isActive: isActive !== undefined ? isActive : true,
+        calculators: validatedCalculators,
     });
     // Calculate grade per question for default score
     const calculatedTotalScore = existingRawScore[0].score - (existingRawScore[0].is_giftingScore ? existingRawScore[0].giftingScore : 0);
@@ -92,6 +104,7 @@ const getAllDiagnosticExams = async (req, res) => {
         passScore: schema_1.diagnosticExam.passScore,
         numberOfQuestions: schema_1.diagnosticExam.numberOfQuestions,
         isActive: schema_1.diagnosticExam.isActive,
+        calculators: schema_1.diagnosticExam.calculators,
         createdAt: schema_1.diagnosticExam.createdAt,
         rawScore: {
             id: schema_1.rawScore.id,
@@ -140,6 +153,7 @@ const getDiagnosticExamById = async (req, res) => {
         passScore: schema_1.diagnosticExam.passScore,
         numberOfQuestions: schema_1.diagnosticExam.numberOfQuestions,
         isActive: schema_1.diagnosticExam.isActive,
+        calculators: schema_1.diagnosticExam.calculators,
         createdAt: schema_1.diagnosticExam.createdAt,
         rawScore: {
             id: schema_1.rawScore.id,
@@ -188,7 +202,7 @@ const getDiagnosticExamById = async (req, res) => {
 exports.getDiagnosticExamById = getDiagnosticExamById;
 const updateDiagnosticExam = async (req, res) => {
     const { id } = req.params;
-    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds } = req.body;
+    const { title, description, duration, rawScoreId, courseId, numberOfQuestions, passScore, isActive, questionIds, calculators } = req.body;
     const existingExam = await connection_1.db.select().from(schema_1.diagnosticExam).where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.id, id)).limit(1);
     if (!existingExam[0]) {
         throw new NotFound_1.NotFound("Diagnostic Exam not found");
@@ -205,6 +219,19 @@ const updateDiagnosticExam = async (req, res) => {
         }
         rawScoreData = existingRawScore[0];
     }
+    // Validate calculators if provided
+    let validatedCalculators = undefined;
+    if (calculators !== undefined) {
+        if (!Array.isArray(calculators))
+            throw new BadRequest_1.BadRequest("calculators must be an array");
+        validatedCalculators = [];
+        for (const calc of calculators) {
+            if (!calculators_1.CALCULATOR_TYPES.includes(calc)) {
+                throw new BadRequest_1.BadRequest(`Invalid calculator type: "${calc}". Allowed values: ${calculators_1.CALCULATOR_TYPES.join(", ")}`);
+            }
+            validatedCalculators.push(calc);
+        }
+    }
     await connection_1.db.update(schema_1.diagnosticExam).set({
         title: title !== undefined ? title : existingExam[0].title,
         description: description !== undefined ? description : existingExam[0].description,
@@ -217,6 +244,7 @@ const updateDiagnosticExam = async (req, res) => {
         courseId: courseId !== undefined ? courseId : existingExam[0].courseId,
         numberOfQuestions: numberOfQuestions !== undefined ? numberOfQuestions : existingExam[0].numberOfQuestions,
         isActive: isActive !== undefined ? isActive : existingExam[0].isActive,
+        ...(validatedCalculators !== undefined ? { calculators: validatedCalculators } : {}),
     }).where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.id, id));
     // Handle Questions Update
     if (questionIds && Array.isArray(questionIds)) {
@@ -276,6 +304,7 @@ const getSelection = async (req, res) => {
         message: "Selection options fetched successfully",
         data: {
             rawScores: rawScoresData,
+            calculatorTypes: calculators_1.CALCULATOR_TYPES,
         }
     }, 200);
 };
@@ -292,6 +321,7 @@ const getAllDiagnosticExamsbyCourseId = async (req, res) => {
         passScore: schema_1.diagnosticExam.passScore,
         numberOfQuestions: schema_1.diagnosticExam.numberOfQuestions,
         isActive: schema_1.diagnosticExam.isActive,
+        calculators: schema_1.diagnosticExam.calculators,
         createdAt: schema_1.diagnosticExam.createdAt,
         rawScore: {
             id: schema_1.rawScore.id,
@@ -311,6 +341,7 @@ const getAllDiagnosticExamsbyCourseId = async (req, res) => {
     })
         .from(schema_1.diagnosticExam)
         .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.rawScoreId, schema_1.rawScore.id))
+        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, schema_1.courses.id))
         .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.semesters.courseId))
         .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, schema_1.category.id))
         .where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, courseId))

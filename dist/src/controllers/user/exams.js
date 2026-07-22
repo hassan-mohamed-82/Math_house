@@ -1,19 +1,4 @@
 "use strict";
-// import { Request, Response } from "express";
-// import { db } from "../../models/connection";
-// import { Exams, ExamSections, SectionQuestions } from "../../models/schema/admin/exams";
-// import { examAttempts } from "../../models/schema/admin/examAttempts";
-// import { studentAnswers } from "../../models/schema/admin/studentAnswers";
-// import { Student } from "../../models/schema/admin/Student";
-// import { courses } from "../../models/schema/admin/courses";
-// import { category } from "../../models/schema/admin/category";
-// import { Sections } from "../../models/schema/admin/sections";
-// import { questions, questionOptions } from "../../models/schema/admin/questions";
-// import { examCodes } from "../../models/schema/admin/examCodes";
-// import { eq, and, inArray, sql } from "drizzle-orm";
-// import { SuccessResponse } from "../../utils/response";
-// import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
-// import { randomUUID } from "crypto";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.showQuestionAnswer = exports.submitExam = exports.startExam = exports.getExamById = exports.getExams = void 0;
 const connection_1 = require("../../models/connection");
@@ -30,6 +15,7 @@ const drizzle_orm_1 = require("drizzle-orm");
 const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const crypto_1 = require("crypto");
+const checkGridInAnswer_1 = require("../../utils/checkGridInAnswer");
 const getStudentId = (req) => {
     if (!req.user?.id)
         throw new Errors_1.UnauthorizedError("Not authenticated");
@@ -45,6 +31,9 @@ const getExams = async (req, res) => {
         .where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
     if (!student)
         throw new Errors_1.NotFound("Student not found");
+    if (student.examBalance <= 0) {
+        throw new Errors_1.BadRequest("You do not have balance, please try to purchase an exam package.");
+    }
     // 2. Build Category Hierarchy (Upwards & Downwards)
     const categoryIds = [];
     // -- Upwards: Get current category + all ancestors (Parents)
@@ -72,15 +61,26 @@ const getExams = async (req, res) => {
     });
     // 3. Get courses that belong to any of these categories
     const studentCourses = await connection_1.db
-        .select({ id: courses_1.courses.id })
+        .select({
+        id: courses_1.courses.id,
+        name: courses_1.courses.name,
+        categoryId: courses_1.courses.categoryId,
+        description: courses_1.courses.description,
+        image: courses_1.courses.image,
+        preRequisition: courses_1.courses.preRequisition,
+        whatYouGain: courses_1.courses.whatYouGain,
+        isHaveSemester: courses_1.courses.isHaveSemester,
+        createdAt: courses_1.courses.createdAt,
+        updatedAt: courses_1.courses.updatedAt,
+    })
         .from(courses_1.courses)
         .where((0, drizzle_orm_1.inArray)(courses_1.courses.categoryId, categoryIds));
     const courseIds = studentCourses.map(c => c.id);
-    // If no courses found, return early with empty exams
+    // If no courses found, return early with empty courses
     if (courseIds.length === 0) {
         return (0, response_1.SuccessResponse)(res, {
             examBalance: student.examBalance,
-            exams: [],
+            courses: [],
             debugInfo: { checkedCategories: categoryIds } // Optional for debugging
         });
     }
@@ -96,8 +96,10 @@ const getExams = async (req, res) => {
         examType: exams_1.Exams.examType,
         year: exams_1.Exams.year,
         month: exams_1.Exams.Month,
+        courseId: exams_1.Exams.courseId,
         courseName: courses_1.courses.name,
         codeName: examCodes_1.examCodes.code,
+        calculators: exams_1.Exams.calculators,
         createdAt: exams_1.Exams.createdAt,
     })
         .from(exams_1.Exams)
@@ -117,7 +119,8 @@ const getExams = async (req, res) => {
             isPassed: examAttempts_1.examAttempts.isPassed,
         })
             .from(examAttempts_1.examAttempts)
-            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.studentId, studentId), (0, drizzle_orm_1.inArray)(examAttempts_1.examAttempts.examId, examIds)));
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.studentId, studentId), (0, drizzle_orm_1.inArray)(examAttempts_1.examAttempts.examId, examIds)))
+            .orderBy(examAttempts_1.examAttempts.startedAt);
         for (const attempt of attempts) {
             attemptsMap.set(attempt.examId, {
                 status: attempt.status,
@@ -131,9 +134,23 @@ const getExams = async (req, res) => {
         ...exam,
         attempt: attemptsMap.get(exam.id) ?? null,
     }));
+    // Group exams by courseId
+    const examsByCourse = new Map();
+    for (const exam of examsWithStatus) {
+        if (exam.courseId) {
+            const list = examsByCourse.get(exam.courseId) ?? [];
+            list.push(exam);
+            examsByCourse.set(exam.courseId, list);
+        }
+    }
+    // Nest exams inside their corresponding courses
+    const coursesWithExams = studentCourses.map(course => ({
+        ...course,
+        exams: examsByCourse.get(course.id) ?? [],
+    }));
     return (0, response_1.SuccessResponse)(res, {
         examBalance: student.examBalance,
-        exams: examsWithStatus
+        courses: coursesWithExams
     });
 };
 exports.getExams = getExams;
@@ -141,13 +158,16 @@ exports.getExams = getExams;
 const getExamById = async (req, res) => {
     const studentId = getStudentId(req);
     const { examId } = req.params;
-    // 1. Get student's category
+    // 1. Get student's category and balance
     const [student] = await connection_1.db
-        .select({ categoryId: Student_1.Student.category })
+        .select({ categoryId: Student_1.Student.category, examBalance: Student_1.Student.exambalance })
         .from(Student_1.Student)
         .where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
     if (!student)
         throw new Errors_1.NotFound("Student not found");
+    if (student.examBalance <= 0) {
+        throw new Errors_1.BadRequest("You do not have balance, please try to purchase an exam package.");
+    }
     // 2. Fetch exam with course info
     const [exam] = await connection_1.db
         .select({
@@ -165,6 +185,7 @@ const getExamById = async (req, res) => {
         courseName: courses_1.courses.name,
         courseCategoryId: courses_1.courses.categoryId,
         codeName: examCodes_1.examCodes.code,
+        calculators: exams_1.Exams.calculators,
     })
         .from(exams_1.Exams)
         .leftJoin(courses_1.courses, (0, drizzle_orm_1.eq)(exams_1.Exams.courseId, courses_1.courses.id))
@@ -269,7 +290,8 @@ const getExamById = async (req, res) => {
         isPassed: examAttempts_1.examAttempts.isPassed,
     })
         .from(examAttempts_1.examAttempts)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.studentId, studentId), (0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.examId, examId)));
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.studentId, studentId), (0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.examId, examId)))
+        .orderBy((0, drizzle_orm_1.desc)(examAttempts_1.examAttempts.startedAt));
     return (0, response_1.SuccessResponse)(res, {
         exam: {
             ...exam,
@@ -344,17 +366,17 @@ const startExam = async (req, res) => {
             },
         });
     }
-    // 5. Check if already completed
-    const [completedAttempt] = await connection_1.db
+    // 5. Check if already passed
+    const [passedAttempt] = await connection_1.db
         .select({ id: examAttempts_1.examAttempts.id })
         .from(examAttempts_1.examAttempts)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.studentId, studentId), (0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.examId, examId), (0, drizzle_orm_1.inArray)(examAttempts_1.examAttempts.status, ["completed", "timed_out"])));
-    if (completedAttempt) {
-        throw new Errors_1.BadRequest("You have already completed this exam");
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.studentId, studentId), (0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.examId, examId), (0, drizzle_orm_1.inArray)(examAttempts_1.examAttempts.status, ["completed", "timed_out"]), (0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.isPassed, true)));
+    if (passedAttempt) {
+        throw new Errors_1.BadRequest("You have already passed this exam. You cannot take it again.");
     }
     // Check balance only for new attempts
     if (student.examBalance <= 0)
-        throw new Errors_1.BadRequest("Insufficient exam balance");
+        throw new Errors_1.BadRequest("You do not have balance, please try to purchase an exam package.");
     // 6. Create attempt and deduct balance in a transaction
     const attemptId = (0, crypto_1.randomUUID)();
     const startTime = new Date();
@@ -398,7 +420,9 @@ const submitExam = async (req, res) => {
         if (!info)
             return null;
         const correct = correctMap.get(ans.questionId);
-        const isCorrect = info.type === "MCQ" ? ans.selectedOptionId === correct?.id : ans.gridInAnswer?.trim().toLowerCase() === correct?.answer.trim().toLowerCase();
+        //TODO: for now we will use exact match or mathematical approximation
+        //const isCorrect = info.type === "MCQ" ? ans.selectedOptionId === correct?.id : ans.gridInAnswer?.trim().toLowerCase() === correct?.answer.trim().toLowerCase();
+        const isCorrect = info.type === "MCQ" ? ans.selectedOptionId === correct?.id : (ans.gridInAnswer && correct?.answer ? (0, checkGridInAnswer_1.isEquivalentGridInAnswer)(ans.gridInAnswer, correct.answer) : false);
         if (isCorrect)
             totalAchievedScore += info.score;
         return { id: (0, crypto_1.randomUUID)(), attemptId: attempt.id, questionId: ans.questionId, isCorrect, score: isCorrect ? info.score : 0, selectedOptionId: ans.selectedOptionId, gridInAnswer: ans.gridInAnswer };
@@ -451,13 +475,27 @@ const showQuestionAnswer = async (req, res) => {
         .select({
         pdf: questions_1.questionAnswers.pdf,
         video: questions_1.questionAnswers.video,
+        image: questions_1.questionAnswers.image,
+        text: questions_1.questionAnswers.text,
     })
         .from(questions_1.questionAnswers)
         .where((0, drizzle_orm_1.eq)(questions_1.questionAnswers.questionId, questionId));
+    // 4. جلب إجابة الطالب (إن وجدت)
+    const [latestStudentAnswer] = await connection_1.db
+        .select({
+        selectedOptionId: studentAnswers_1.studentAnswers.selectedOptionId,
+        gridInAnswer: studentAnswers_1.studentAnswers.gridInAnswer,
+    })
+        .from(studentAnswers_1.studentAnswers)
+        .innerJoin(examAttempts_1.examAttempts, (0, drizzle_orm_1.eq)(studentAnswers_1.studentAnswers.attemptId, examAttempts_1.examAttempts.id))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(studentAnswers_1.studentAnswers.questionId, questionId), (0, drizzle_orm_1.eq)(examAttempts_1.examAttempts.studentId, studentId)))
+        .orderBy((0, drizzle_orm_1.desc)(studentAnswers_1.studentAnswers.createdAt))
+        .limit(1);
     (0, response_1.SuccessResponse)(res, {
         message: "Answer and explanations revealed",
         result: {
             correctOptions,
+            studentAnswer: latestStudentAnswer ?? req.body.studentAnswer ?? null,
             explanation: media ?? null // سيعيد null إذا لم يكن هناك فيديو أو PDF
         },
     });

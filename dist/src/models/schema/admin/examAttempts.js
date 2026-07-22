@@ -8,8 +8,8 @@ const exams_1 = require("./exams");
 const uuid_1 = require("uuid");
 exports.examAttempts = (0, mysql_core_1.mysqlTable)("exam_attempts", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().$defaultFn(() => (0, uuid_1.v4)()),
-    studentId: (0, mysql_core_1.char)("student_id", { length: 36 }).notNull().references(() => Student_1.Student.id),
-    examId: (0, mysql_core_1.char)("exam_id", { length: 255 }).notNull().references(() => exams_1.Exams.id),
+    studentId: (0, mysql_core_1.char)("student_id", { length: 36 }).notNull().references(() => Student_1.Student.id, { onDelete: "cascade" }),
+    examId: (0, mysql_core_1.char)("exam_id", { length: 255 }).notNull().references(() => exams_1.Exams.id, { onDelete: "cascade" }),
     startedAt: (0, mysql_core_1.datetime)("started_at").notNull().default((0, drizzle_orm_1.sql) `(now())`),
     endedAt: (0, mysql_core_1.datetime)("ended_at"),
     score: (0, mysql_core_1.int)("score"),

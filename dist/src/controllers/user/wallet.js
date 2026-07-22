@@ -330,6 +330,7 @@ const getWalletTransactions = async (req, res) => {
         paymentId: schema_1.walletTransaction.paymentId,
         paymentStatus: schema_1.payment.status,
         paymentReceiptImg: schema_1.payment.receiptImg,
+        paymentReason: schema_1.payment.reason,
     })
         .from(schema_1.walletTransaction)
         .innerJoin(schema_1.wallet, (0, drizzle_orm_1.eq)(schema_1.walletTransaction.walletId, schema_1.wallet.id))

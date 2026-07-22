@@ -46,34 +46,45 @@ const getCoursesByCategory = async (req, res) => {
 exports.getCoursesByCategory = getCoursesByCategory;
 const selectionPackages = async (req, res) => {
     const { courseId } = req.query;
-    let query = connection_1.db.select({
+    let conditions = [];
+    if (courseId) {
+        conditions.push((0, drizzle_orm_1.eq)(Package_1.packages.courseId, courseId));
+    }
+    const packagesList = await connection_1.db.select({
         id: Package_1.packages.id,
         name: Package_1.packages.name,
         type: Package_1.packages.type,
         price: Package_1.packages.price,
+        hasAnswers: Package_1.packages.hasAnswers,
+        answersPrice: Package_1.packages.answersPrice,
         categoryId: Package_1.packages.categoryId,
         courseId: Package_1.packages.courseId,
-    }).from(Package_1.packages);
-    if (courseId) {
-        query = query.where((0, drizzle_orm_1.eq)(Package_1.packages.courseId, courseId));
-    }
-    const packagesList = await query;
+    })
+        .from(Package_1.packages)
+        .where(conditions.length > 0 ? (0, drizzle_orm_1.and)(...conditions) : undefined);
     (0, response_1.SuccessResponse)(res, packagesList.map(p => ({
         value: p.id,
-        label: `${p.name} - ${p.price}$`,
+        label: `${p.name} - Base: ${p.price}$ ${p.type === 'exam' ? `(Add-on Answers: +${p.answersPrice}$)` : ''}`,
         type: p.type,
         categoryId: p.categoryId,
         courseId: p.courseId,
         price: p.price,
+        ...(p.type === 'exam' ? {
+            hasAnswers: p.hasAnswers,
+            answersPrice: p.answersPrice
+        } : {})
     })));
 };
 exports.selectionPackages = selectionPackages;
 // ===================== PACKAGES CRUD =====================
 const createPackage = async (req, res) => {
-    const { name, type, categoryId, courseId, number, price, duration } = req.body;
+    const { name, type, categoryId, courseId, number, price, duration, hasAnswers = false, answersPrice = "0" } = req.body;
     if (!name || !type || !categoryId || !courseId || !number || !price || !duration) {
         throw new BadRequest_1.BadRequest("All fields are required");
     }
+    // الـ Business Logic للتسعير: لو النوع ليس امتحاناً، يجب تصفير حقول الإجابات تلقائياً لحماية اللوجيك
+    const finalHasAnswers = type === "exam" ? Boolean(hasAnswers) : false;
+    const finalAnswersPrice = type === "exam" ? String(answersPrice) : "0";
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(Package_1.packages).values({
         id,
@@ -83,9 +94,11 @@ const createPackage = async (req, res) => {
         courseId,
         number: Number(number),
         price: String(price),
-        duration: Number(duration)
+        duration: Number(duration),
+        hasAnswers: finalHasAnswers,
+        answersPrice: finalAnswersPrice
     });
-    (0, response_1.SuccessResponse)(res, { id }, 201);
+    (0, response_1.SuccessResponse)(res, { id, message: "Package with custom price-flow created successfully" }, 201);
 };
 exports.createPackage = createPackage;
 const getAllPackages = async (req, res) => {
@@ -112,6 +125,8 @@ const getAllPackages = async (req, res) => {
         courseName: courses_1.courses.name,
         number: Package_1.packages.number,
         price: Package_1.packages.price,
+        hasAnswers: Package_1.packages.hasAnswers,
+        answersPrice: Package_1.packages.answersPrice,
         duration: Package_1.packages.duration,
     })
         .from(Package_1.packages)
@@ -136,6 +151,8 @@ const getPackageById = async (req, res) => {
         courseName: courses_1.courses.name,
         number: Package_1.packages.number,
         price: Package_1.packages.price,
+        hasAnswers: Package_1.packages.hasAnswers,
+        answersPrice: Package_1.packages.answersPrice,
         duration: Package_1.packages.duration,
     })
         .from(Package_1.packages)
@@ -150,8 +167,7 @@ const getPackageById = async (req, res) => {
 exports.getPackageById = getPackageById;
 const updatePackage = async (req, res) => {
     const { id } = req.params;
-    const { name, type, categoryId, courseId, number, price, duration } = req.body;
-    // تأكد من وجود الـ Package
+    const { name, type, categoryId, courseId, number, price, duration, hasAnswers, answersPrice } = req.body;
     const [existing] = await connection_1.db
         .select({ id: Package_1.packages.id })
         .from(Package_1.packages)
@@ -168,6 +184,8 @@ const updatePackage = async (req, res) => {
         number: Number(number),
         price: String(price),
         duration: Number(duration),
+        hasAnswers: type === "exam" ? Boolean(hasAnswers) : false,
+        answersPrice: type === "exam" ? String(answersPrice) : "0",
         updatedAt: new Date()
     })
         .where((0, drizzle_orm_1.eq)(Package_1.packages.id, id));
@@ -176,7 +194,6 @@ const updatePackage = async (req, res) => {
 exports.updatePackage = updatePackage;
 const deletePackage = async (req, res) => {
     const { id } = req.params;
-    // تأكد من وجود الـ Package
     const [existing] = await connection_1.db
         .select({ id: Package_1.packages.id })
         .from(Package_1.packages)

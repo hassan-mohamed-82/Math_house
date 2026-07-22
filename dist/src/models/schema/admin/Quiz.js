@@ -18,17 +18,17 @@ exports.quizzes = (0, mysql_core_1.mysqlTable)("quizzes", {
     passScore: (0, mysql_core_1.int)("pass_score").default(50),
     quizOrder: (0, mysql_core_1.int)("quiz_order").default(0),
     isActive: (0, mysql_core_1.boolean)("is_active").default(false),
-    categoryId: (0, mysql_core_1.char)("category_id", { length: 255 }).references(() => category_1.category.id),
-    courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).references(() => courses_1.courses.id),
-    chapterId: (0, mysql_core_1.char)("chapter_id", { length: 255 }).references(() => chapters_1.chapters.id),
-    lessonId: (0, mysql_core_1.char)("lesson_id", { length: 255 }).references(() => lessons_1.lessons.id),
+    categoryId: (0, mysql_core_1.char)("category_id", { length: 255 }).references(() => category_1.category.id, { onDelete: "cascade" }),
+    courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).references(() => courses_1.courses.id, { onDelete: "cascade" }),
+    chapterId: (0, mysql_core_1.char)("chapter_id", { length: 255 }).references(() => chapters_1.chapters.id, { onDelete: "cascade" }),
+    lessonId: (0, mysql_core_1.char)("lesson_id", { length: 255 }).references(() => lessons_1.lessons.id, { onDelete: "cascade" }),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });
 exports.quizQuestions = (0, mysql_core_1.mysqlTable)("quiz_questions", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
-    quizId: (0, mysql_core_1.char)("quiz_id", { length: 255 }).notNull().references(() => exports.quizzes.id),
-    questionId: (0, mysql_core_1.char)("question_id", { length: 255 }).notNull().references(() => questions_1.questions.id),
+    quizId: (0, mysql_core_1.char)("quiz_id", { length: 255 }).notNull().references(() => exports.quizzes.id, { onDelete: "cascade" }),
+    questionId: (0, mysql_core_1.char)("question_id", { length: 255 }).notNull().references(() => questions_1.questions.id, { onDelete: "cascade" }),
     questionOrder: (0, mysql_core_1.int)("question_order").default(0),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
 });

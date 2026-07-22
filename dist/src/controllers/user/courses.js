@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getCourseById = exports.getAllCourses = void 0;
+exports.getPurchasedCourses = exports.getCourseById = exports.getAllCourses = void 0;
 const courses_1 = require("../../models/schema/admin/courses");
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
@@ -103,3 +103,43 @@ const getCourseById = async (req, res) => {
     }, 200);
 };
 exports.getCourseById = getCourseById;
+// 3. Get purchased courses
+const getPurchasedCourses = async (req, res) => {
+    const studentId = req.user.id;
+    const purchasedCourses = await connection_1.db
+        .select({
+        course: courses_1.courses,
+        enrollmentId: schema_1.enrolledItems.id,
+        expiresAt: schema_1.enrolledItems.expiresAt,
+        status: schema_1.enrolledItems.status,
+        createdAt: schema_1.enrolledItems.createdAt,
+    })
+        .from(schema_1.enrolledItems)
+        .innerJoin(courses_1.courses, (0, drizzle_orm_1.eq)(schema_1.enrolledItems.courseId, courses_1.courses.id))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.studentId, studentId), (0, drizzle_orm_1.inArray)(schema_1.enrolledItems.status, ["active", "expired"]), 
+    // 🚀 صمام الأمان: نضمن أن السجل للكورس الكامل وليس لشراء شابتر أو درس فرعي
+    (0, drizzle_orm_1.isNull)(schema_1.enrolledItems.chapterId), (0, drizzle_orm_1.isNull)(schema_1.enrolledItems.lessonId)))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.enrolledItems.createdAt));
+    // حماية إضافية لمنع تكرار الكورس في الـ Response لو تم تفعيل اشتراكه مرتين بالخطأ
+    const seenCourseIds = new Set();
+    const formattedCourses = [];
+    for (const p of purchasedCourses) {
+        if (!p.course || seenCourseIds.has(p.course.id))
+            continue;
+        seenCourseIds.add(p.course.id);
+        const isExpired = p.expiresAt && p.expiresAt < new Date();
+        formattedCourses.push({
+            ...p.course,
+            enrollmentId: p.enrollmentId,
+            expiresAt: p.expiresAt,
+            status: isExpired ? "this is expired" : p.status,
+            purchasedAt: p.createdAt
+        });
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Purchased courses retrieved successfully",
+        count: formattedCourses.length,
+        courses: formattedCourses
+    }, 200);
+};
+exports.getPurchasedCourses = getPurchasedCourses;

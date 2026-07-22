@@ -4,10 +4,13 @@ exports.getDiagnosticAttemptRecommendations = exports.getDiagnosticAttemptReview
 const response_1 = require("../../utils/response");
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
+const Student_1 = require("../../models/schema/admin/Student");
+const category_1 = require("../../models/schema/admin/category");
+const Errors_1 = require("../../Errors");
 const drizzle_orm_1 = require("drizzle-orm");
 const crypto_1 = require("crypto");
-const Errors_1 = require("../../Errors");
-// -----------------------------------------
+const Errors_2 = require("../../Errors");
+const checkGridInAnswer_1 = require("../../utils/checkGridInAnswer");
 const startDiagnosticExam = async (studentId, examId) => {
     const [exam] = await connection_1.db
         .select({ duration: schema_1.diagnosticExam.duration })
@@ -15,6 +18,16 @@ const startDiagnosticExam = async (studentId, examId) => {
         .where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.id, examId));
     if (!exam) {
         throw new Error("Diagnostic exam not found");
+    }
+    const [existingAttempt] = await connection_1.db
+        .select()
+        .from(schema_1.diagnosticExamAttempt)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.diagnosticExamAttempt.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.diagnosticExamAttempt.diagnosticExamId, examId)));
+    if (existingAttempt) {
+        if (existingAttempt.isCompleted) {
+            throw new Errors_2.BadRequest("This exam attempt has already been submitted");
+        }
+        return { message: "Exam already in progress", attemptId: existingAttempt.id, endTime: existingAttempt.endedAt };
     }
     const now = new Date();
     const endTime = new Date(now.getTime() + exam.duration * 60 * 1000);
@@ -108,9 +121,11 @@ const submitDiagnosticExam = async (studentId, attemptId, answers) => {
                     .select({ answer: schema_1.questionOptions.answer })
                     .from(schema_1.questionOptions)
                     .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.questionOptions.questionId, examQuestion.questionId), (0, drizzle_orm_1.eq)(schema_1.questionOptions.isCorrect, true)));
-                // Allow if text matches any valid correct grid-in answer (case-insensitive trim)
-                const normalizedSubmit = studentGridInAnswer.trim().toLowerCase();
-                isCorrect = correctOptions.some(opt => opt.answer.trim().toLowerCase() === normalizedSubmit);
+                //TODO: for now we will use exact match or mathematical approximation
+                //const normalizedSubmit = studentGridInAnswer.trim().toLowerCase();
+                //isCorrect = correctOptions.some(opt => opt.answer.trim().toLowerCase() === normalizedSubmit);
+                // Allow if text matches any valid correct grid-in answer
+                isCorrect = correctOptions.some(opt => (0, checkGridInAnswer_1.isEquivalentGridInAnswer)(studentGridInAnswer, opt.answer));
             }
         }
         // If no submittedAnswer is found, isCorrect remains false 
@@ -139,6 +154,54 @@ const submitDiagnosticExam = async (studentId, attemptId, answers) => {
 exports.submitDiagnosticExam = submitDiagnosticExam;
 // ------------------------------
 const getDiagnosticExams = async (req, res) => {
+    const studentId = req.user?.id;
+    if (!studentId)
+        throw new Errors_2.BadRequest("Not authenticated");
+    // 1. Get student's category
+    const [student] = await connection_1.db
+        .select({ categoryId: Student_1.Student.category })
+        .from(Student_1.Student)
+        .where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
+    if (!student)
+        throw new Errors_1.NotFound("Student not found");
+    // 2. Build category hierarchy: current + all ancestors (upward)
+    const categoryIds = [];
+    let currentId = student.categoryId;
+    while (currentId) {
+        if (!categoryIds.includes(currentId))
+            categoryIds.push(currentId);
+        const [cat] = await connection_1.db
+            .select({ parentCategoryId: category_1.category.parentCategoryId })
+            .from(category_1.category)
+            .where((0, drizzle_orm_1.eq)(category_1.category.id, currentId));
+        currentId = cat?.parentCategoryId ?? null;
+    }
+    // Also include direct children (sub-categories / grades)
+    const children = await connection_1.db
+        .select({ id: category_1.category.id })
+        .from(category_1.category)
+        .where((0, drizzle_orm_1.eq)(category_1.category.parentCategoryId, student.categoryId));
+    children.forEach(child => {
+        if (!categoryIds.includes(child.id))
+            categoryIds.push(child.id);
+    });
+    // 3. Fetch courses that belong to the student's category hierarchy
+    const studentCourses = await connection_1.db.select({
+        id: schema_1.courses.id,
+        name: schema_1.courses.name,
+        description: schema_1.courses.description,
+        image: schema_1.courses.image,
+        preRequisition: schema_1.courses.preRequisition,
+        whatYouGain: schema_1.courses.whatYouGain,
+        isHaveSemester: schema_1.courses.isHaveSemester,
+        createdAt: schema_1.courses.createdAt,
+        updatedAt: schema_1.courses.updatedAt,
+    }).from(schema_1.courses).where((0, drizzle_orm_1.inArray)(schema_1.courses.categoryId, categoryIds));
+    if (studentCourses.length === 0) {
+        return (0, response_1.SuccessResponse)(res, { message: "Diagnostic Exam retrieved successfully", data: [] });
+    }
+    // 4. Fetch all diagnostic exams for these courses
+    const courseIds = studentCourses.map(c => c.id);
     const diagnosticExams = await connection_1.db.select({
         id: schema_1.diagnosticExam.id,
         name: schema_1.diagnosticExam.title,
@@ -150,14 +213,23 @@ const getDiagnosticExams = async (req, res) => {
         numberOfQuestions: schema_1.diagnosticExam.numberOfQuestions,
         isActive: schema_1.diagnosticExam.isActive,
         courseId: schema_1.diagnosticExam.courseId,
-        course: {
-            Id: schema_1.courses.id,
-            name: schema_1.courses.name,
-            description: schema_1.courses.description,
+        calculators: schema_1.diagnosticExam.calculators,
+    }).from(schema_1.diagnosticExam).where((0, drizzle_orm_1.inArray)(schema_1.diagnosticExam.courseId, courseIds));
+    // 5. Group diagnostic exams by courseId
+    const examsByCourse = new Map();
+    for (const exam of diagnosticExams) {
+        if (exam.courseId) {
+            const list = examsByCourse.get(exam.courseId) ?? [];
+            list.push(exam);
+            examsByCourse.set(exam.courseId, list);
         }
-    }).from(schema_1.diagnosticExam)
-        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, schema_1.courses.id));
-    return (0, response_1.SuccessResponse)(res, { message: "Diagnostic Exam retrieved successfully", data: diagnosticExams });
+    }
+    // 6. Nest diagnostic exams inside their corresponding courses
+    const coursesWithExams = studentCourses.map(course => ({
+        ...course,
+        diagnosticExams: examsByCourse.get(course.id) ?? [],
+    }));
+    return (0, response_1.SuccessResponse)(res, { message: "Diagnostic Exam retrieved successfully", data: coursesWithExams });
 };
 exports.getDiagnosticExams = getDiagnosticExams;
 const getDiagnosticExamById = async (req, res) => {
@@ -173,6 +245,7 @@ const getDiagnosticExamById = async (req, res) => {
         numberOfQuestions: schema_1.diagnosticExam.numberOfQuestions,
         isActive: schema_1.diagnosticExam.isActive,
         courseId: schema_1.diagnosticExam.courseId,
+        calculators: schema_1.diagnosticExam.calculators,
         course: {
             Id: schema_1.courses.id,
             name: schema_1.courses.name,
@@ -239,7 +312,7 @@ exports.getDiagnosticExamQuestions = getDiagnosticExamQuestions;
 const startDiagnosticExamReq = async (req, res) => {
     const studentId = req.user?.id;
     if (!studentId)
-        throw new Errors_1.BadRequest("Not authenticated");
+        throw new Errors_2.BadRequest("Not authenticated");
     const { examId } = req.params;
     const result = await (0, exports.startDiagnosticExam)(studentId, examId);
     return (0, response_1.SuccessResponse)(res, result, 200);
@@ -248,25 +321,25 @@ exports.startDiagnosticExamReq = startDiagnosticExamReq;
 const submitDiagnosticExamReq = async (req, res) => {
     const studentId = req.user?.id;
     if (!studentId)
-        throw new Errors_1.BadRequest("Not authenticated");
+        throw new Errors_2.BadRequest("Not authenticated");
     const { attemptId } = req.params;
     const { answers } = req.body;
     if (!answers || !Array.isArray(answers)) {
-        throw new Errors_1.BadRequest("Answers array is required");
+        throw new Errors_2.BadRequest("Answers array is required");
     }
     try {
         await (0, exports.submitDiagnosticExam)(studentId, attemptId, answers);
         return (0, response_1.SuccessResponse)(res, { message: "Diagnostic Exam Submitted successfully." }, 200);
     }
     catch (error) {
-        throw new Errors_1.BadRequest(error.message);
+        throw new Errors_2.BadRequest(error.message);
     }
 };
 exports.submitDiagnosticExamReq = submitDiagnosticExamReq;
 const getStudentAttempts = async (req, res) => {
     const studentId = req.user?.id;
     if (!studentId)
-        throw new Errors_1.BadRequest("Not authenticated");
+        throw new Errors_2.BadRequest("Not authenticated");
     const attempts = await connection_1.db
         .select({
         id: schema_1.diagnosticExamAttempt.id,
@@ -305,6 +378,11 @@ const getDiagnosticAttemptReview = async (req, res) => {
         correctOptionAnswer: schema_1.questionOptions.answer,
         explanationPdf: schema_1.questionAnswers.pdf,
         explanationVideo: schema_1.questionAnswers.video,
+        explanationText: schema_1.questionAnswers.text,
+        explanationImage: schema_1.questionAnswers.image,
+        lessonName: schema_1.lessons.name,
+        chapterName: schema_1.chapters.name,
+        courseName: schema_1.courses.name,
     })
         .from(schema_1.studentDiagnosticAnswers)
         .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.studentDiagnosticAnswers.questionId, schema_1.questions.id))
@@ -312,7 +390,10 @@ const getDiagnosticAttemptReview = async (req, res) => {
     // شيلنا شرط (isCorrect, false) عشان يجيب كله
     )
         .leftJoin(schema_1.questionOptions, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.questionOptions.questionId, schema_1.studentDiagnosticAnswers.questionId), (0, drizzle_orm_1.eq)(schema_1.questionOptions.isCorrect, true)))
-        .leftJoin(schema_1.questionAnswers, (0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, schema_1.studentDiagnosticAnswers.questionId));
+        .leftJoin(schema_1.questionAnswers, (0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, schema_1.studentDiagnosticAnswers.questionId))
+        .leftJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.questions.lessonId, schema_1.lessons.id))
+        .leftJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
+        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.lessons.courseId, schema_1.courses.id));
     const uniqueAnswersMap = new Map();
     for (const ans of allAnswers) {
         if (!uniqueAnswersMap.has(ans.questionId)) {
@@ -327,7 +408,14 @@ const getDiagnosticAttemptReview = async (req, res) => {
                 correctAnswers: [],
                 explanationContent: {
                     pdf: ans.explanationPdf,
-                    video: ans.explanationVideo
+                    video: ans.explanationVideo,
+                    image: ans.explanationImage,
+                    text: ans.explanationText,
+                },
+                recommendationToRecap: ans.isCorrect ? null : {
+                    lessonName: ans.lessonName,
+                    chapterName: ans.chapterName,
+                    courseName: ans.courseName,
                 }
             });
         }

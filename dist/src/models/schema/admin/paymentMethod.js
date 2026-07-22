@@ -16,8 +16,8 @@ exports.paymentMethod = (0, mysql_core_1.mysqlTable)("paymentMethod", {
 });
 exports.paymentMethodCurrency = (0, mysql_core_1.mysqlTable)("paymentMethodCurrency", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
-    paymentMethodId: (0, mysql_core_1.char)("paymentMethodId", { length: 36 }).references(() => exports.paymentMethod.id).notNull(),
-    currencyId: (0, mysql_core_1.char)("currencyId", { length: 36 }).references(() => currency_1.Currency.id).notNull(),
+    paymentMethodId: (0, mysql_core_1.char)("paymentMethodId", { length: 36 }).references(() => exports.paymentMethod.id, { onDelete: "cascade" }).notNull(),
+    currencyId: (0, mysql_core_1.char)("currencyId", { length: 36 }).references(() => currency_1.Currency.id, { onDelete: "cascade" }).notNull(),
     createdAt: (0, mysql_core_1.timestamp)("createdAt").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updatedAt").defaultNow().onUpdateNow(),
 });

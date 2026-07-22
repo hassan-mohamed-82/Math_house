@@ -7,6 +7,20 @@ const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const schema_1 = require("../../models/schema");
 const accessControl_1 = require("../../utils/accessControl");
+const services_1 = require("../../drive/services/services");
+// ─── helper: resolve video for a single idea ────────────────────────────────
+// Never expose bunnyGuid to the client; generate a short-lived signed URL instead.
+const resolveVideo = (idea) => {
+    const { bunnyGuid, video, ...rest } = idea;
+    let videoPayload = null;
+    if (bunnyGuid) {
+        videoPayload = { type: "bunny", streamUrl: (0, services_1.generateSecureStreamUrl)(bunnyGuid) };
+    }
+    else if (video) {
+        videoPayload = { type: "external", url: video };
+    }
+    return { ...rest, video: videoPayload };
+};
 const getIdeasByLessonId = async (req, res) => {
     const { lessonId } = req.params;
     const studentId = req.user.id;
@@ -31,12 +45,13 @@ const getIdeasByLessonId = async (req, res) => {
     if (!hasAccess) {
         throw new Errors_1.BadRequest("You do not have access to this lesson's content. Please purchase the lesson, chapter, or course.");
     }
-    // 3. Fetch ideas
-    const ideas = await connection_1.db
+    // 3. Fetch ideas and resolve video securely
+    const rawIdeas = await connection_1.db
         .select()
         .from(schema_1.lessonIdeas)
         .where((0, drizzle_orm_1.eq)(schema_1.lessonIdeas.lessonId, lessonId))
         .orderBy((0, drizzle_orm_1.asc)(schema_1.lessonIdeas.ideaOrder));
+    const ideas = rawIdeas.map(resolveVideo);
     // 4. Fetch quizzes for this lesson
     const lessonQuizzes = await connection_1.db
         .select({
@@ -88,7 +103,7 @@ const getIdeaById = async (req, res) => {
     }
     return (0, response_1.SuccessResponse)(res, {
         message: "Idea fetched successfully",
-        idea: ideaData.idea
+        idea: resolveVideo(ideaData.idea)
     }, 200);
 };
 exports.getIdeaById = getIdeaById;

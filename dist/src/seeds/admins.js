@@ -8,6 +8,7 @@ const connection_1 = require("../models/connection");
 const schema_1 = require("../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const bcrypt_1 = __importDefault(require("bcrypt"));
+const uuid_1 = require("uuid");
 async function seedAdmins(roleId) {
     const hashedPassword = await bcrypt_1.default.hash("password123", 10);
     const seedAdminsData = [
@@ -31,13 +32,15 @@ async function seedAdmins(roleId) {
             continue;
         }
         await connection_1.db.insert(schema_1.admins).values({
+            id: (0, uuid_1.v4)(),
             name: adminData.name,
             email: adminData.email,
             password: hashedPassword,
             phoneNumber: adminData.phoneNumber,
-            roleId,
+            roleId: adminData.type === "super_admin" ? null : roleId,
             type: adminData.type,
-            status: "active"
+            status: "active",
+            permissions: []
         });
         console.log(`${adminData.type} account created successfully`);
     }

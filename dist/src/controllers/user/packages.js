@@ -23,6 +23,8 @@ const getPackages = async (req, res) => {
             id: schema_1.packages.courseId,
             name: schema_1.courses.name,
         },
+        hasAnswers: schema_1.packages.hasAnswers,
+        answersPrice: schema_1.packages.answersPrice,
     }).from(schema_1.packages)
         .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.packages.categoryId, schema_1.category.id))
         .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.packages.courseId, schema_1.courses.id));

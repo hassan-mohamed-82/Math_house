@@ -6,7 +6,7 @@ const schema_1 = require("../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 /**
  * Checks if a student has access to an item.
- * An item can be accessed if the student has an active enrollment in:
+ * An item can be accessed if the student has an active, non-expired enrollment in:
  * - The item itself (Course, Chapter, or Lesson)
  * - Any of its parent items.
  */
@@ -20,10 +20,13 @@ const checkAccess = async (studentId, ids) => {
         conditions.push((0, drizzle_orm_1.eq)(schema_1.enrolledItems.lessonId, ids.lessonId));
     if (conditions.length === 0)
         return false;
+    const now = new Date();
     const enrollment = await connection_1.db
         .select()
         .from(schema_1.enrolledItems)
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.enrolledItems.status, "active"), (0, drizzle_orm_1.or)(...conditions)))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.enrolledItems.status, "active"), (0, drizzle_orm_1.or)(...conditions), 
+    // Allow access if expiresAt is NULL (no expiry) OR if it hasn't passed yet
+    (0, drizzle_orm_1.or)((0, drizzle_orm_1.isNull)(schema_1.enrolledItems.expiresAt), (0, drizzle_orm_1.gt)(schema_1.enrolledItems.expiresAt, now))))
         .limit(1);
     return enrollment.length > 0;
 };

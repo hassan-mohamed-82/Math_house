@@ -5,6 +5,7 @@ const chapters_1 = require("../../controllers/user/chapters");
 const catchAsync_1 = require("../../utils/catchAsync");
 const router = (0, express_1.Router)();
 router.get("/", (0, catchAsync_1.catchAsync)(chapters_1.getAllChapters));
+router.get("/purchased", (0, catchAsync_1.catchAsync)(chapters_1.getPurchasedChapters));
 router.get("/course/:courseId", (0, catchAsync_1.catchAsync)(chapters_1.getAllChaptersByCourseId));
 router.get("/:id", (0, catchAsync_1.catchAsync)(chapters_1.getChapterById));
 exports.default = router;

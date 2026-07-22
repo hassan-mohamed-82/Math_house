@@ -8,8 +8,8 @@ exports.grade = (0, mysql_core_1.mysqlTable)("grade", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().notNull().$defaultFn(() => (0, uuid_1.v4)()),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
     nameAr: (0, mysql_core_1.varchar)("name_ar", { length: 255 }).notNull(),
-    categoryId: (0, mysql_core_1.char)("category_id", { length: 36 }).notNull().references(() => category_1.category.id),
-    parentCategoryId: (0, mysql_core_1.char)("parent_category_id", { length: 36 }).references(() => category_1.category.id),
+    categoryId: (0, mysql_core_1.char)("category_id", { length: 36 }).notNull().references(() => category_1.category.id, { onDelete: "cascade" }),
+    parentCategoryId: (0, mysql_core_1.char)("parent_category_id", { length: 36 }).references(() => category_1.category.id, { onDelete: "cascade" }),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 }, (table) => ({

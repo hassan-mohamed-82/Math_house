@@ -7,8 +7,8 @@ const category_1 = require("./category");
 exports.courses = (0, mysql_core_1.mysqlTable)("courses", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
-    categoryId: (0, mysql_core_1.char)("category_id", { length: 255 }).notNull().references(() => category_1.category.id),
-    // semesterId: char("semester_id", { length: 255 }).references(() => semesters.id),
+    categoryId: (0, mysql_core_1.char)("category_id", { length: 255 }).notNull().references(() => category_1.category.id, { onDelete: "cascade" }),
+    // semesterId: char("semester_id", { length: 255 }).references(() => semesters.id, { onDelete: "cascade" }),
     description: (0, mysql_core_1.varchar)("description", { length: 255 }),
     image: (0, mysql_core_1.varchar)("image", { length: 255 }),
     preRequisition: (0, mysql_core_1.varchar)("pre_requisition", { length: 255 }),

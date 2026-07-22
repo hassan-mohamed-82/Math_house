@@ -80,20 +80,16 @@ exports.searchStudents = searchStudents;
 // ===================== GROUPS CRUD =====================
 // إنشاء Group جديد
 const createGroup = async (req, res) => {
-    const { name, teacherId, days, timeFrom, timeTo, studentIds, isActive = true } = req.body;
+    const { name, studentIds, isActive = true } = req.body;
     // Validation
-    if (!name || !teacherId || !days || !timeFrom || !timeTo) {
-        throw new BadRequest_1.BadRequest("Missing required fields");
+    if (!name) {
+        throw new BadRequest_1.BadRequest("name is required");
     }
     const groupId = (0, crypto_1.randomUUID)();
     // إنشاء الـ Group
     await connection_1.db.insert(Groups_1.groups).values({
         id: groupId,
         name,
-        teacherId,
-        days: days, // ["Sun", "Mon", etc.]
-        timeFrom,
-        timeTo,
         isActive
     });
     // إضافة الـ Students للـ Group
@@ -115,16 +111,10 @@ const getAllGroups = async (req, res) => {
         .select({
         id: Groups_1.groups.id,
         name: Groups_1.groups.name,
-        teacherId: Groups_1.groups.teacherId,
-        teacherName: teacher_1.teachers.name,
-        days: Groups_1.groups.days,
-        timeFrom: Groups_1.groups.timeFrom,
-        timeTo: Groups_1.groups.timeTo,
         isActive: Groups_1.groups.isActive,
         createdAt: Groups_1.groups.createdAt,
     })
         .from(Groups_1.groups)
-        .leftJoin(teacher_1.teachers, (0, drizzle_orm_1.eq)(Groups_1.groups.teacherId, teacher_1.teachers.id))
         .limit(Number(limit))
         .offset(offset);
     // جلب الـ Students لكل Group ومراعاة نوع الـ days
@@ -139,7 +129,6 @@ const getAllGroups = async (req, res) => {
             .where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.groupId, group.id));
         return {
             ...group,
-            days: typeof group.days === "string" ? JSON.parse(group.days) : group.days,
             students
         };
     }));
@@ -153,15 +142,9 @@ const getGroupById = async (req, res) => {
         .select({
         id: Groups_1.groups.id,
         name: Groups_1.groups.name,
-        teacherId: Groups_1.groups.teacherId,
-        teacherName: teacher_1.teachers.name,
-        days: Groups_1.groups.days,
-        timeFrom: Groups_1.groups.timeFrom,
-        timeTo: Groups_1.groups.timeTo,
         isActive: Groups_1.groups.isActive,
     })
         .from(Groups_1.groups)
-        .leftJoin(teacher_1.teachers, (0, drizzle_orm_1.eq)(Groups_1.groups.teacherId, teacher_1.teachers.id))
         .where((0, drizzle_orm_1.eq)(Groups_1.groups.id, id));
     if (!group) {
         throw new Errors_1.NotFound("Group not found");
@@ -178,7 +161,6 @@ const getGroupById = async (req, res) => {
         .where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.groupId, id));
     (0, response_1.SuccessResponse)(res, {
         ...group,
-        days: typeof group.days === "string" ? JSON.parse(group.days) : group.days,
         students
     });
 };
@@ -186,15 +168,11 @@ exports.getGroupById = getGroupById;
 // تحديث Group
 const updateGroup = async (req, res) => {
     const { id } = req.params;
-    const { name, teacherId, days, timeFrom, timeTo, studentIds, isActive } = req.body;
+    const { name, studentIds, isActive } = req.body;
     // تحديث الـ Group
     await connection_1.db.update(Groups_1.groups)
         .set({
         name,
-        teacherId,
-        days,
-        timeFrom,
-        timeTo,
         isActive,
         updatedAt: new Date()
     })

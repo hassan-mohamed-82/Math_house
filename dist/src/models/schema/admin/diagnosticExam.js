@@ -13,17 +13,19 @@ exports.diagnosticExam = (0, mysql_core_1.mysqlTable)("diagnostic_exam", {
     duration: (0, mysql_core_1.int)("duration").notNull(), // Duration in minutes
     totalScore: (0, mysql_core_1.int)("total_score").notNull(),
     passScore: (0, mysql_core_1.int)("pass_score").notNull(),
-    rawScoreId: (0, mysql_core_1.char)("raw_score_id", { length: 255 }).notNull().references(() => rawScore_1.rawScore.id),
+    rawScoreId: (0, mysql_core_1.char)("raw_score_id", { length: 255 }).notNull().references(() => rawScore_1.rawScore.id, { onDelete: "cascade" }),
     numberOfQuestions: (0, mysql_core_1.int)("number_of_questions").notNull(),
     isActive: (0, mysql_core_1.boolean)("is_active").notNull().default(true),
-    courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).notNull().references(() => courses_1.courses.id),
+    courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).notNull().references(() => courses_1.courses.id, { onDelete: "cascade" }),
+    // Calculators allowed for this exam (subset of CALCULATOR_TYPES)
+    calculators: (0, mysql_core_1.json)("calculators").$type().default([]),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });
 exports.diagnosticExamQuestions = (0, mysql_core_1.mysqlTable)("diagnostic_exam_questions", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     diagnosticExamId: (0, mysql_core_1.char)("diagnostic_exam_id", { length: 255 }).notNull(),
-    questionId: (0, mysql_core_1.char)("question_id", { length: 255 }).notNull().references(() => questions_1.questions.id),
+    questionId: (0, mysql_core_1.char)("question_id", { length: 255 }).notNull().references(() => questions_1.questions.id, { onDelete: "cascade" }),
     score: (0, mysql_core_1.int)("score").notNull().default(0),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),

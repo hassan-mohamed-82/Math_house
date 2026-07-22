@@ -8,6 +8,10 @@ const authorizeRoles = (...roles) => {
         if (!req.user) {
             throw new Errors_1.UnauthorizedError("Not authenticated");
         }
+        // superadmin can access any route
+        if (req.user.role === "superadmin") {
+            return next();
+        }
         if (!roles.includes(req.user.role)) {
             throw new Errors_1.UnauthorizedError("You don't have permission to access this resource");
         }

@@ -30,13 +30,20 @@ const login = async (req, res) => {
     if (admin.status !== "active") {
         throw new Errors_1.UnauthorizedError("Admin is inactive");
     }
-    if (admin.type !== "super_admin") {
-        throw new Errors_1.UnauthorizedError("Only super admins can access Drive");
+    let role = null;
+    if (admin.roleId) {
+        const [roleRow] = await connection_1.db.select().from(schema_1.roles).where((0, drizzle_orm_1.eq)(schema_1.roles.id, admin.roleId));
+        role = roleRow;
+    }
+    const isSuperAdmin = admin.type === "super_admin";
+    const isDriver = role && role.name === "driver";
+    if (!isSuperAdmin && !isDriver) {
+        throw new Errors_1.UnauthorizedError("Only super admins or drivers can access Drive");
     }
     const token = (0, jwt_1.generateAdminToken)({
         id: admin.id,
         name: admin.name,
-        role: "admin",
+        role: (isSuperAdmin ? "superadmin" : "driver"),
     });
     return (0, response_1.SuccessResponse)(res, {
         message: "Drive login successful",

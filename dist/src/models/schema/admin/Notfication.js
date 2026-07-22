@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.notificationTeachers = exports.notificationStudents = exports.notificationParents = exports.notifications = void 0;
-// models/schema/admin/notifications.ts
 const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
 exports.notifications = (0, mysql_core_1.mysqlTable)("notifications", {
@@ -17,7 +16,7 @@ exports.notifications = (0, mysql_core_1.mysqlTable)("notifications", {
 // جدول لربط الـ Notifications بالـ Parents
 exports.notificationParents = (0, mysql_core_1.mysqlTable)("notification_parents", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
-    notificationId: (0, mysql_core_1.char)("notification_id", { length: 36 }).notNull().references(() => exports.notifications.id),
+    notificationId: (0, mysql_core_1.char)("notification_id", { length: 36 }).notNull().references(() => exports.notifications.id, { onDelete: "cascade" }),
     parentId: (0, mysql_core_1.char)("parent_id", { length: 36 }).notNull(),
     isRead: (0, mysql_core_1.boolean)("is_read").default(false),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
@@ -25,7 +24,7 @@ exports.notificationParents = (0, mysql_core_1.mysqlTable)("notification_parents
 // جدول لربط الـ Notifications بالـ Students
 exports.notificationStudents = (0, mysql_core_1.mysqlTable)("notification_students", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
-    notificationId: (0, mysql_core_1.char)("notification_id", { length: 36 }).notNull().references(() => exports.notifications.id),
+    notificationId: (0, mysql_core_1.char)("notification_id", { length: 36 }).notNull().references(() => exports.notifications.id, { onDelete: "cascade" }),
     studentId: (0, mysql_core_1.char)("student_id", { length: 36 }).notNull(),
     isRead: (0, mysql_core_1.boolean)("is_read").default(false),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
@@ -33,7 +32,7 @@ exports.notificationStudents = (0, mysql_core_1.mysqlTable)("notification_studen
 // جدول لربط الـ Notifications بالـ Teachers
 exports.notificationTeachers = (0, mysql_core_1.mysqlTable)("notification_teachers", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
-    notificationId: (0, mysql_core_1.char)("notification_id", { length: 36 }).notNull().references(() => exports.notifications.id),
+    notificationId: (0, mysql_core_1.char)("notification_id", { length: 36 }).notNull().references(() => exports.notifications.id, { onDelete: "cascade" }),
     teacherId: (0, mysql_core_1.char)("teacher_id", { length: 36 }).notNull(),
     isRead: (0, mysql_core_1.boolean)("is_read").default(false),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),

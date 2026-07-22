@@ -8,19 +8,11 @@ const response_1 = require("../../utils/response");
 const NotFound_1 = require("../../Errors/NotFound");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const constant_1 = require("../../types/constant");
-const uuid_1 = require("uuid");
-// Generate ID للـ Action
-const generateActionId = () => {
-    return (0, uuid_1.v4)().replace(/-/g, "").substring(0, 24);
-};
-// إضافة IDs للـ Actions
-const addIdsToPermissions = (permissions) => {
+// Strip to clean shape: { module, actions: ["View", "Add", ...] }
+const normalizePermissions = (permissions) => {
     return permissions.map((perm) => ({
         module: perm.module,
-        actions: perm.actions.map((act) => ({
-            id: act.id || generateActionId(),
-            action: act.action,
-        })),
+        actions: perm.actions,
     }));
 };
 // Helper function to parse permissions
@@ -51,41 +43,22 @@ const formatRole = (role) => ({
     createdAt: role.createdAt,
     updatedAt: role.updatedAt,
 });
-function formatLabel(str) {
-    return str
-        .split("_")
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(" ");
-}
-// Get Admin Modules with Actions
+// ── Get Admin Modules with Actions (schema for frontend permission builder) ──
 const getAdminPermissions = async (req, res) => {
-    try {
-        const permissions = constant_1.MODULES.map((module) => ({
-            module,
-            label: formatLabel(module),
-            actions: constant_1.ACTION_NAMES.map((action) => ({
-                key: action.toLowerCase(),
-                label: action,
-                permission: `${module}.${action.toLowerCase()}`,
-            })),
-        }));
-        return res.status(200).json({
-            success: true,
-            data: {
-                modules: [...constant_1.MODULES],
-                actions: [...constant_1.ACTION_NAMES],
-                permissions,
-            },
-        });
-    }
-    catch (error) {
-        console.error("Get admin permissions error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Failed to get permissions",
-            error: error.message,
-        });
-    }
+    const permissions = constant_1.MODULES.map((module) => ({
+        module,
+        label: (0, constant_1.formatModuleLabel)(module),
+        actions: constant_1.ACTION_NAMES.map((action) => ({
+            key: action.toLowerCase(),
+            label: action,
+            permission: `${module}.${action.toLowerCase()}`,
+        })),
+    }));
+    return (0, response_1.SuccessResponse)(res, {
+        modules: [...constant_1.MODULES],
+        actions: [...constant_1.ACTION_NAMES],
+        permissions,
+    }, 200);
 };
 exports.getAdminPermissions = getAdminPermissions;
 // ✅ Get All Roles
@@ -109,6 +82,36 @@ const getRoleById = async (req, res) => {
     (0, response_1.SuccessResponse)(res, { role: formatRole(role[0]) }, 200);
 };
 exports.getRoleById = getRoleById;
+// Validation helper to ensure module and action names exist in constraints
+const validatePermissions = (permissions) => {
+    if (!permissions)
+        return;
+    if (!Array.isArray(permissions)) {
+        throw new BadRequest_1.BadRequest("Permissions must be an array");
+    }
+    for (const perm of permissions) {
+        if (!perm || typeof perm !== "object") {
+            throw new BadRequest_1.BadRequest("Each permission item must be an object");
+        }
+        if (!perm.module) {
+            throw new BadRequest_1.BadRequest("Each permission item must specify a module");
+        }
+        if (!constant_1.MODULES.includes(perm.module)) {
+            throw new BadRequest_1.BadRequest(`Module "${perm.module}" is invalid. Must be one of the defined module constants.`);
+        }
+        if (!Array.isArray(perm.actions)) {
+            throw new BadRequest_1.BadRequest(`Actions for module "${perm.module}" must be an array`);
+        }
+        for (const act of perm.actions) {
+            if (typeof act !== "string") {
+                throw new BadRequest_1.BadRequest(`Each action in module "${perm.module}" must be a string (e.g. "View", "Add")`);
+            }
+            if (!constant_1.ACTION_NAMES.includes(act)) {
+                throw new BadRequest_1.BadRequest(`Action "${act}" in module "${perm.module}" is invalid. Must be one of: ${constant_1.ACTION_NAMES.join(", ")}`);
+            }
+        }
+    }
+};
 // ✅ Create Role
 const createRole = async (req, res) => {
     const { name, permissions } = req.body;
@@ -123,11 +126,12 @@ const createRole = async (req, res) => {
     if (existingRole[0]) {
         throw new BadRequest_1.BadRequest("Role with this name already exists");
     }
-    const permissionsWithIds = addIdsToPermissions(permissions || []);
+    validatePermissions(permissions);
+    const normalized = normalizePermissions(permissions || []);
     // ✅ ابعت array على طول - Drizzle هيتعامل معاه
     await connection_1.db.insert(schema_1.roles).values({
         name,
-        permissions: permissionsWithIds,
+        permissions: normalized,
     });
     // جيب الـ role اللي اتعمل
     const createdRole = await connection_1.db
@@ -163,9 +167,10 @@ const updateRole = async (req, res) => {
             throw new BadRequest_1.BadRequest("Role with this name already exists");
         }
     }
+    validatePermissions(permissions);
     const currentPermissions = parsePermissions(existingRole[0].permissions);
     const updatedPermissions = permissions
-        ? addIdsToPermissions(permissions)
+        ? normalizePermissions(permissions)
         : currentPermissions;
     // ✅ ابعت array على طول
     await connection_1.db
@@ -226,18 +231,20 @@ const toggleRoleStatus = async (req, res) => {
     }, 200);
 };
 exports.toggleRoleStatus = toggleRoleStatus;
-// ✅ Get Available Permissions
+// ✅ Get Available Permissions — full catalogue with human-readable labels
 const getAvailablePermissions = async (req, res) => {
     const permissions = constant_1.MODULES.map((module) => ({
         module,
+        label: (0, constant_1.formatModuleLabel)(module),
         actions: constant_1.ACTION_NAMES.map((action) => ({
-            id: generateActionId(),
             action,
+            label: action,
+            permission: `${module}.${action.toLowerCase()}`,
         })),
     }));
     (0, response_1.SuccessResponse)(res, {
-        modules: constant_1.MODULES,
-        actions: constant_1.ACTION_NAMES,
+        modules: [...constant_1.MODULES],
+        actions: [...constant_1.ACTION_NAMES],
         permissions,
     }, 200);
 };

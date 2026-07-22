@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.handleImageUpdate = exports.deleteImage = exports.validateAndSaveLogo = void 0;
+exports.handleImageUpdate = exports.deleteImage = exports.validateAndSavePdf = exports.validateAndSaveLogo = void 0;
 exports.saveBase64Image = saveBase64Image;
 const path_1 = __importDefault(require("path"));
 const promises_1 = __importDefault(require("fs/promises"));
@@ -47,6 +47,19 @@ const validateAndSaveLogo = async (req, logo, folder) => {
     }
 };
 exports.validateAndSaveLogo = validateAndSaveLogo;
+const validateAndSavePdf = async (req, file, folder) => {
+    if (!file.match(/^data:application\/pdf;base64,/)) {
+        throw new BadRequest_1.BadRequest("Invalid file format. Must be a base64 encoded PDF");
+    }
+    try {
+        const savedUrl = await saveBase64Image(file, req, folder);
+        return savedUrl;
+    }
+    catch (error) {
+        throw new BadRequest_1.BadRequest(`Failed to save pdf: ${error.message}`);
+    }
+};
+exports.validateAndSavePdf = validateAndSavePdf;
 const deleteImage = async (image) => {
     if (image.includes("data:image") || image.length > 2000) {
         console.warn("Skipping deletion of likely base64 data in image field");

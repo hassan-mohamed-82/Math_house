@@ -1,7 +1,12 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteVideo = exports.getLessonVideo = exports.handleBunnyWebhook = exports.deleteFolder = exports.createFolder = exports.getDriveContents = exports.initializeVideoUpload = void 0;
+exports.deleteDriveFile = exports.getLessonVideo = exports.handleBunnyWebhook = exports.deleteFolder = exports.createFolder = exports.getDriveContents = exports.uploadDriveFile = exports.initializeVideoUpload = void 0;
 const drizzle_orm_1 = require("drizzle-orm");
+const path_1 = __importDefault(require("path"));
+const promises_1 = __importDefault(require("fs/promises"));
 const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
 const response_1 = require("../../utils/response");
@@ -11,9 +16,9 @@ const services_1 = require("../services/services");
 const initializeVideoUpload = async (req, res) => {
     try {
         const { videoTitle, folderId } = req.body;
-        if (!videoTitle || typeof videoTitle !== 'string' || !videoTitle.trim()) {
-            throw new BadRequest_1.BadRequest('Video title is required');
-        }
+        // if (!videoTitle || typeof videoTitle !== 'string' || !videoTitle.trim()) {
+        //     throw new BadRequest('Video title is required');
+        // }
         if (folderId) {
             const [existingFolder] = await connection_1.db.select()
                 .from(schema_1.driveFolders)
@@ -22,8 +27,19 @@ const initializeVideoUpload = async (req, res) => {
                 throw new Errors_1.NotFound('Folder not found');
             }
         }
-        // 1. Create the placeholder in Bunny to get the GUID (Video ID)
-        const trimmedVideoTitle = videoTitle.trim();
+        // Auto-extract filename from TUS Upload-Metadata header if videoTitle not provided
+        const tusMetadata = req.headers['upload-metadata'];
+        let extractedFileName;
+        if (tusMetadata && typeof tusMetadata === 'string') {
+            const filenamePart = tusMetadata.split(',').find(part => part.trim().startsWith('filename'));
+            if (filenamePart) {
+                const encoded = filenamePart.trim().split(' ')[1];
+                if (encoded) {
+                    extractedFileName = Buffer.from(encoded, 'base64').toString('utf-8');
+                }
+            }
+        }
+        const trimmedVideoTitle = videoTitle ? videoTitle.trim() : (extractedFileName ? extractedFileName.trim() : 'Untitled Video');
         const videoId = await (0, services_1.createBunnyVideoEntry)(trimmedVideoTitle);
         // 2. Generate the secure TUS signature for the browser
         const uploadCredentials = (0, services_1.generateTusUploadCredentials)(videoId);
@@ -50,6 +66,64 @@ const initializeVideoUpload = async (req, res) => {
     }
 };
 exports.initializeVideoUpload = initializeVideoUpload;
+const uploadDriveFile = async (req, res) => {
+    try {
+        const file = req.file;
+        const { folderId, title } = req.body;
+        if (!file) {
+            throw new BadRequest_1.BadRequest('File is required');
+        }
+        if (folderId) {
+            const [existingFolder] = await connection_1.db.select()
+                .from(schema_1.driveFolders)
+                .where((0, drizzle_orm_1.eq)(schema_1.driveFolders.id, folderId));
+            if (!existingFolder) {
+                throw new Errors_1.NotFound('Folder not found');
+            }
+        }
+        const ext = path_1.default.extname(file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
+        const fileName = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+        const rootDir = path_1.default.resolve(__dirname, "../../../");
+        const uploadsDir = path_1.default.join(rootDir, "uploads", "drive");
+        await promises_1.default.mkdir(uploadsDir, { recursive: true });
+        await promises_1.default.writeFile(path_1.default.join(uploadsDir, fileName), file.buffer);
+        const protocol = req.get("x-forwarded-proto") || req.protocol || "https";
+        const sourceUrl = `${protocol}://${req.get("host")}/uploads/drive/${fileName}`;
+        let type = 'other';
+        if (ext.match(/\.(jpg|jpeg|png|gif|webp)$/)) {
+            type = 'image';
+        }
+        else if (ext === '.pdf') {
+            type = 'pdf';
+        }
+        else if (ext.match(/\.(doc|docx|txt)$/)) {
+            type = 'document';
+        }
+        await connection_1.db.insert(schema_1.driveAssets).values({
+            title: title ? title : file.originalname,
+            type: type,
+            status: 'ready',
+            folderId: folderId || null,
+            sourceUrl: sourceUrl,
+        });
+        const [createdAsset] = await connection_1.db.select()
+            .from(schema_1.driveAssets)
+            .where((0, drizzle_orm_1.eq)(schema_1.driveAssets.sourceUrl, sourceUrl))
+            .orderBy((0, drizzle_orm_1.desc)(schema_1.driveAssets.createdAt));
+        return (0, response_1.SuccessResponse)(res, {
+            message: 'File uploaded successfully',
+            file: createdAsset,
+        }, 201);
+    }
+    catch (error) {
+        if (error instanceof BadRequest_1.BadRequest || error instanceof Errors_1.NotFound) {
+            return res.status(error.statusCode).json({ success: false, message: error.message });
+        }
+        console.error('[Drive Controller] Error uploading file:', error);
+        return res.status(500).json({ success: false, message: 'Internal Server Error' });
+    }
+};
+exports.uploadDriveFile = uploadDriveFile;
 const getDriveContents = async (req, res) => {
     try {
         const folderId = typeof req.params.folderId === 'string' && req.params.folderId.trim()
@@ -181,12 +255,26 @@ const deleteFolderTree = async (folderId) => {
         id: schema_1.driveAssets.id,
         type: schema_1.driveAssets.type,
         bunnyGuid: schema_1.driveAssets.bunnyGuid,
+        sourceUrl: schema_1.driveAssets.sourceUrl,
     })
         .from(schema_1.driveAssets)
         .where((0, drizzle_orm_1.eq)(schema_1.driveAssets.folderId, folderId));
     for (const file of files) {
         if (file.type === 'video' && file.bunnyGuid) {
             await (0, services_1.deleteBunnyVideo)(file.bunnyGuid);
+        }
+        else if (file.sourceUrl) {
+            try {
+                const relativePath = "uploads/" + file.sourceUrl.split("/uploads/")[1];
+                const rootDir = path_1.default.resolve(__dirname, "../../../");
+                const filePath = path_1.default.join(rootDir, relativePath);
+                await promises_1.default.unlink(filePath);
+            }
+            catch (err) {
+                if (err.code !== 'ENOENT') {
+                    console.error("Failed to delete local file:", err);
+                }
+            }
         }
     }
     if (files.length > 0) {
@@ -366,41 +454,50 @@ const getLessonVideo = async (req, res) => {
     }
 };
 exports.getLessonVideo = getLessonVideo;
-const deleteVideo = async (req, res) => {
+const deleteDriveFile = async (req, res) => {
     try {
-        const { videoId } = req.params;
-        if (!videoId || typeof videoId !== 'string' || !videoId.trim()) {
-            throw new BadRequest_1.BadRequest('Video ID is required');
+        const { fileId } = req.params;
+        if (!fileId || typeof fileId !== 'string' || !fileId.trim()) {
+            throw new BadRequest_1.BadRequest('File ID is required');
         }
-        const normalizedVideoId = videoId.trim();
-        const [videoAsset] = await connection_1.db
+        const normalizedFileId = fileId.trim();
+        const [asset] = await connection_1.db
             .select({
             id: schema_1.driveAssets.id,
             title: schema_1.driveAssets.title,
             type: schema_1.driveAssets.type,
             bunnyGuid: schema_1.driveAssets.bunnyGuid,
+            sourceUrl: schema_1.driveAssets.sourceUrl,
         })
             .from(schema_1.driveAssets)
-            .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.driveAssets.id, normalizedVideoId), (0, drizzle_orm_1.eq)(schema_1.driveAssets.bunnyGuid, normalizedVideoId)));
-        if (!videoAsset) {
-            throw new Errors_1.NotFound('Video not found');
+            .where((0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.driveAssets.id, normalizedFileId), (0, drizzle_orm_1.eq)(schema_1.driveAssets.bunnyGuid, normalizedFileId)));
+        if (!asset) {
+            throw new Errors_1.NotFound('File not found');
         }
-        if (videoAsset.type !== 'video') {
-            throw new BadRequest_1.BadRequest('Requested asset is not a video');
+        if (asset.type === 'video' && asset.bunnyGuid) {
+            await (0, services_1.deleteBunnyVideo)(asset.bunnyGuid);
         }
-        // 2. Delete the actual file from Bunny.net storage to save costs
-        if (videoAsset.bunnyGuid) {
-            await (0, services_1.deleteBunnyVideo)(videoAsset.bunnyGuid);
+        else if (asset.sourceUrl) {
+            try {
+                const relativePath = "uploads/" + asset.sourceUrl.split("/uploads/")[1];
+                const rootDir = path_1.default.resolve(__dirname, "../../../");
+                const filePath = path_1.default.join(rootDir, relativePath);
+                await promises_1.default.unlink(filePath);
+            }
+            catch (err) {
+                if (err.code !== 'ENOENT') {
+                    console.error("Failed to delete local file:", err);
+                }
+            }
         }
-        // 3. Delete the record from your database
         await connection_1.db
             .delete(schema_1.driveAssets)
-            .where((0, drizzle_orm_1.eq)(schema_1.driveAssets.id, videoAsset.id));
+            .where((0, drizzle_orm_1.eq)(schema_1.driveAssets.id, asset.id));
         return (0, response_1.SuccessResponse)(res, {
-            message: 'Video permanently deleted from Drive and Storage',
-            video: {
-                id: videoAsset.id,
-                title: videoAsset.title,
+            message: 'File permanently deleted from Drive and Storage',
+            file: {
+                id: asset.id,
+                title: asset.title,
             },
         }, 200);
     }
@@ -408,8 +505,8 @@ const deleteVideo = async (req, res) => {
         if (error instanceof BadRequest_1.BadRequest || error instanceof Errors_1.NotFound) {
             return res.status(error.statusCode).json({ success: false, message: error.message });
         }
-        console.error("[Drive Controller] Error deleting video:", error);
+        console.error("[Drive Controller] Error deleting file:", error);
         return res.status(500).json({ success: false, message: "Internal Server Error" });
     }
 };
-exports.deleteVideo = deleteVideo;
+exports.deleteDriveFile = deleteDriveFile;

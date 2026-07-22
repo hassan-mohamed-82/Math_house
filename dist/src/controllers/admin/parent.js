@@ -92,7 +92,7 @@ const getParentById = async (req, res) => {
 exports.getParentById = getParentById;
 const updateParent = async (req, res) => {
     const { id } = req.params;
-    const { name, email, phoneNumber, status, oldPassword, newPassword } = req.body;
+    const { name, email, phoneNumber, status, oldPassword, newPassword, studentIds } = req.body;
     const existingParent = await connection_1.db
         .select()
         .from(schema_1.parents)
@@ -100,13 +100,40 @@ const updateParent = async (req, res) => {
     if (existingParent.length === 0) {
         throw new NotFound_1.NotFound("parent not found");
     }
+    const currentParentPhone = existingParent[0].phoneNumber;
     if (email && email !== existingParent[0].email) {
         const emailExists = await connection_1.db
             .select()
             .from(schema_1.parents)
             .where((0, drizzle_orm_1.eq)(schema_1.parents.email, email));
         if (emailExists.length > 0) {
-            throw new BadRequest_1.BadRequest("email is already exists");
+            throw new BadRequest_1.BadRequest("email already exists");
+        }
+    }
+    let uniqueStudentIds = [];
+    if (studentIds && Array.isArray(studentIds)) {
+        uniqueStudentIds = [...new Set(studentIds)];
+        if (uniqueStudentIds.length > 0) {
+            // جلب الطلاب المطلوبين للتأكد من وجودهم ومن حالات ربطهم الحالية
+            const studentsInDb = await connection_1.db
+                .select({
+                id: schema_2.Student.id,
+                parentphone: schema_2.Student.parentphone
+            })
+                .from(schema_2.Student)
+                .where((0, drizzle_orm_1.inArray)(schema_2.Student.id, uniqueStudentIds));
+            // أ. التأكد من أن جميع الـ IDs المرسلة صحيحة وموجودة بالقاعدة
+            if (studentsInDb.length !== uniqueStudentIds.length) {
+                throw new BadRequest_1.BadRequest("One or more students not found");
+            }
+            // ب. الـ Validation الصارم: التأكد أن الطالب ليس ملكاً لأحد آخر
+            for (const student of studentsInDb) {
+                if (student.parentphone &&
+                    student.parentphone.trim() !== "" &&
+                    student.parentphone !== currentParentPhone) {
+                    throw new BadRequest_1.BadRequest(`Student with ID ${student.id} is already linked to another parent`);
+                }
+            }
         }
     }
     const updateData = {
@@ -134,7 +161,21 @@ const updateParent = async (req, res) => {
         .update(schema_1.parents)
         .set(updateData)
         .where((0, drizzle_orm_1.eq)(schema_1.parents.id, id));
-    return (0, response_1.SuccessResponse)(res, { message: "update parent success" });
+    // نستخدم الـ phoneNumber الجديد إذا أُرسل، وإلا نعتمد الهاتف القديم لعملية الربط
+    const finalParentPhone = phoneNumber || currentParentPhone;
+    // أولاً: تصفير وفك ارتباط الطلاب القدامى التابعين لولي الأمر هذا (لإتاحة التحديث الكامل بالـ Array الجديدة)
+    await connection_1.db
+        .update(schema_2.Student)
+        .set({ parentphone: null })
+        .where((0, drizzle_orm_1.eq)(schema_2.Student.parentphone, currentParentPhone));
+    // ثانياً: ربط مجموعة الطلاب الجديدة بولي الأمر دفعة واحدة بـ Query واحدة سريعة
+    if (uniqueStudentIds.length > 0) {
+        await connection_1.db
+            .update(schema_2.Student)
+            .set({ parentphone: finalParentPhone })
+            .where((0, drizzle_orm_1.inArray)(schema_2.Student.id, uniqueStudentIds));
+    }
+    return (0, response_1.SuccessResponse)(res, { message: "update parent and student links success" });
 };
 exports.updateParent = updateParent;
 const deleteParent = async (req, res) => {

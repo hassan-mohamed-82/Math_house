@@ -8,7 +8,7 @@ const courses_1 = require("./courses");
 exports.semesters = (0, mysql_core_1.mysqlTable)("semesters", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
-    courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).notNull().references(() => courses_1.courses.id),
+    courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).notNull().references(() => courses_1.courses.id, { onDelete: "cascade" }),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

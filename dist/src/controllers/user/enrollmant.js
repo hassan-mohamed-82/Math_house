@@ -10,10 +10,15 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const handleImages_1 = require("../../utils/handleImages");
 // ─── helpers ────────────────────────────────────────────────────────────────
-/** Add `durationDays` to now and return the resulting Date. */
-function calcExpiresAt(durationDays) {
-    const d = new Date();
-    d.setDate(d.getDate() + durationDays);
+/** Add `durationDays` to now and return the resulting Date.
+ *  Forces the value to a real number to avoid MySQL returning
+ *  int columns as strings, which would cause string concatenation
+ *  in setDate() instead of numeric addition.
+ */
+function calcExpiresAt(durationDays, from = new Date()) {
+    const days = Math.floor(Number(durationDays) || 0);
+    const d = new Date(from);
+    d.setDate(d.getDate() + days);
     return d;
 }
 // ─── 1. Enroll / Purchase Item ───────────────────────────────────────────────
@@ -203,17 +208,138 @@ const enrollInCourse = async (req, res) => {
 };
 exports.enrollInCourse = enrollInCourse;
 // ─── 2. My Purchases ─────────────────────────────────────────────────────────
+// export const getMyPurchases = async (req: Request, res: Response) => {
+//     const studentId = req.user.id;
+//     const { status, paymentStatus } = req.query;
+//     const courseOfSemester = aliasedTable(courses, "course_of_semester");
+//     const courseOfChapter  = aliasedTable(courses, "course_of_chapter");
+//     const chapterOfLesson  = aliasedTable(chapters, "chapter_of_lesson");
+//     let query = db
+//         .select({
+//             enrollmentId: enrolledItems.id,
+//             status:       enrolledItems.status,
+//             createdAt:    enrolledItems.createdAt,
+//             expiresAt:    enrolledItems.expiresAt,
+//             pricePlan: {
+//                 id:            prices.id,
+//                 label:         prices.durationLabel,
+//                 durationDays:  prices.durationDays,
+//                 priceEgp:      prices.totalPriceEgp,
+//                 priceUsd:      prices.totalPriceUsd,
+//             },
+//             course: {
+//                 id:    courses.id,
+//                 name:  courses.name,
+//                 image: courses.image,
+//             },
+//             semester: {
+//                 id:         semesters.id,
+//                 name:       semesters.name,
+//                 courseName: courseOfSemester.name,
+//             },
+//             chapter: {
+//                 id:         chapters.id,
+//                 name:       chapters.name,
+//                 courseName: courseOfChapter.name,
+//             },
+//             lesson: {
+//                 id:          lessons.id,
+//                 name:        lessons.name,
+//                 chapterName: chapterOfLesson.name,
+//             },
+//             paymentDetails: {
+//                 id:      payment.id,
+//                 amount:  payment.amount,
+//                 status:  payment.status,
+//                 method:  paymentMethod.name,
+//                 receipt: payment.receiptImg,
+//             },
+//         })
+//         .from(enrolledItems)
+//         .leftJoin(prices,           eq(enrolledItems.priceId,    prices.id))
+//         .leftJoin(courses,          eq(enrolledItems.courseId,   courses.id))
+//         .leftJoin(semesters,        eq(enrolledItems.semesterId, semesters.id))
+//         .leftJoin(courseOfSemester, eq(semesters.courseId,       courseOfSemester.id))
+//         .leftJoin(chapters,         eq(enrolledItems.chapterId,  chapters.id))
+//         .leftJoin(courseOfChapter,  eq(chapters.courseId,        courseOfChapter.id))
+//         .leftJoin(lessons,          eq(enrolledItems.lessonId,   lessons.id))
+//         .leftJoin(chapterOfLesson,  eq(lessons.chapterId,        chapterOfLesson.id))
+//         .leftJoin(payment,          eq(enrolledItems.paymentId,  payment.id))
+//         .leftJoin(paymentMethod,    eq(payment.paymentMethodId,  paymentMethod.id))
+//         .where(eq(enrolledItems.studentId, studentId))
+//         .$dynamic();
+//     if (status) {
+//         query = query.where(eq(enrolledItems.status, status as any));
+//     }
+//     if (paymentStatus) {
+//         query = query.where(eq(payment.status, paymentStatus as any));
+//     }
+//     const purchases = await query.orderBy(sql`${enrolledItems.createdAt} DESC`);
+//     const formattedPurchases = purchases.map((item) => {
+//         let type: "course" | "semester" | "chapter" | "lesson" = "lesson";
+//         let details: any = item.lesson;
+//         if (item.course?.id) {
+//             type = "course";
+//             details = item.course;
+//         } else if (item.semester?.id) {
+//             type = "semester";
+//             details = item.semester;
+//         } else if (item.chapter?.id) {
+//             type = "chapter";
+//             details = item.chapter;
+//         }
+//         return {
+//             id:            item.enrollmentId,
+//             status:        item.status,
+//             paymentStatus: item.paymentDetails.status ?? null,
+//             date:          item.createdAt,
+//             expiresAt:     item.expiresAt,
+//             type,
+//             details,
+//             pricePlan: item.pricePlan?.id ? item.pricePlan : null,
+//             payment:   item.paymentDetails.amount ? {
+//                 id:      item.paymentDetails.id,
+//                 amount:  item.paymentDetails.amount,
+//                 status:  item.paymentDetails.status,
+//                 method:  item.paymentDetails.method,
+//                 receipt: item.paymentDetails.receipt,
+//             } : null,
+//         };
+//     });
+//     return SuccessResponse(
+//         res,
+//         {
+//             message:   "My Library retrieved successfully",
+//             count:     formattedPurchases.length,
+//             purchases: formattedPurchases,
+//         },
+//         200
+//     );
+// };
 const getMyPurchases = async (req, res) => {
     const studentId = req.user.id;
-    const { status } = req.query;
+    const { status, paymentStatus } = req.query;
     const courseOfSemester = (0, drizzle_orm_1.aliasedTable)(schema_1.courses, "course_of_semester");
     const courseOfChapter = (0, drizzle_orm_1.aliasedTable)(schema_1.courses, "course_of_chapter");
     const chapterOfLesson = (0, drizzle_orm_1.aliasedTable)(schema_1.chapters, "chapter_of_lesson");
-    let query = connection_1.db
+    // 1. الشروط الأساسية مبنية على جدول الـ payment مباشرة لضمان عدم سقوط الـ rejected
+    const conditions = [
+        (0, drizzle_orm_1.eq)(schema_1.payment.studentId, studentId),
+        (0, drizzle_orm_1.eq)(schema_1.payment.purpose, "purchase") // جلب المشتريات فقط وتجاهل شحن المحفظة
+    ];
+    // 2. فلاتر اختيارية من الـ Query
+    if (paymentStatus && typeof paymentStatus === "string" && paymentStatus.trim() !== "") {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.payment.status, paymentStatus));
+    }
+    if (status && typeof status === "string" && status.trim() !== "") {
+        conditions.push((0, drizzle_orm_1.eq)(schema_1.enrolledItems.status, status));
+    }
+    // 3. الاستعلام يبدأ من الـ payment لضمان ظهور الفاتورة المرفوضة
+    const purchases = await connection_1.db
         .select({
         enrollmentId: schema_1.enrolledItems.id,
         status: schema_1.enrolledItems.status,
-        createdAt: schema_1.enrolledItems.createdAt,
+        createdAt: schema_1.payment.createdAt,
         expiresAt: schema_1.enrolledItems.expiresAt,
         pricePlan: {
             id: prices_1.prices.id,
@@ -243,12 +369,17 @@ const getMyPurchases = async (req, res) => {
             chapterName: chapterOfLesson.name,
         },
         paymentDetails: {
+            id: schema_1.payment.id,
             amount: schema_1.payment.amount,
+            status: schema_1.payment.status, // pending, completed, rejected
             method: schema_1.paymentMethod.name,
             receipt: schema_1.payment.receiptImg,
+            purpose: schema_1.payment.purpose,
+            reason: schema_1.payment.reason,
         },
     })
-        .from(schema_1.enrolledItems)
+        .from(schema_1.payment) // 👈 الانطلاق من هنا يضمن ألا تختفي أي فاتورة مرفوضة
+        .leftJoin(schema_1.enrolledItems, (0, drizzle_orm_1.eq)(schema_1.enrolledItems.paymentId, schema_1.payment.id))
         .leftJoin(prices_1.prices, (0, drizzle_orm_1.eq)(schema_1.enrolledItems.priceId, prices_1.prices.id))
         .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.enrolledItems.courseId, schema_1.courses.id))
         .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.enrolledItems.semesterId, schema_1.semesters.id))
@@ -257,14 +388,9 @@ const getMyPurchases = async (req, res) => {
         .leftJoin(courseOfChapter, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, courseOfChapter.id))
         .leftJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.enrolledItems.lessonId, schema_1.lessons.id))
         .leftJoin(chapterOfLesson, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, chapterOfLesson.id))
-        .leftJoin(schema_1.payment, (0, drizzle_orm_1.eq)(schema_1.enrolledItems.paymentId, schema_1.payment.id))
         .leftJoin(schema_1.paymentMethod, (0, drizzle_orm_1.eq)(schema_1.payment.paymentMethodId, schema_1.paymentMethod.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.enrolledItems.studentId, studentId))
-        .$dynamic();
-    if (status) {
-        query = query.where((0, drizzle_orm_1.eq)(schema_1.enrolledItems.status, status));
-    }
-    const purchases = await query.orderBy((0, drizzle_orm_1.sql) `${schema_1.enrolledItems.createdAt} DESC`);
+        .where((0, drizzle_orm_1.and)(...conditions))
+        .orderBy((0, drizzle_orm_1.sql) `${schema_1.payment.createdAt} DESC`);
     const formattedPurchases = purchases.map((item) => {
         let type = "lesson";
         let details = item.lesson;
@@ -280,15 +406,24 @@ const getMyPurchases = async (req, res) => {
             type = "chapter";
             details = item.chapter;
         }
+        // إذا كانت الفاتورة مرفوضة ولم ينشأ لها سجل اشتراك، نضع تفاصيل تقريبية من الـ Price Plan أو نترك الـ details كما هي
         return {
-            id: item.enrollmentId,
-            status: item.status,
+            id: item.enrollmentId ?? `inv-${item.paymentDetails.id}`, // fallback id للفرونت إند
+            status: item.status ?? "pending",
+            paymentStatus: item.paymentDetails.status,
             date: item.createdAt,
-            expiresAt: item.expiresAt,
+            expiresAt: item.expiresAt ?? null,
             type,
-            details,
+            details: item.course?.id || item.semester?.id || item.chapter?.id || item.lesson?.id || null,
             pricePlan: item.pricePlan?.id ? item.pricePlan : null,
-            payment: item.paymentDetails.amount ? item.paymentDetails : null,
+            payment: {
+                id: item.paymentDetails.id,
+                amount: item.paymentDetails.amount,
+                status: item.paymentDetails.status,
+                method: item.paymentDetails.method,
+                receipt: item.paymentDetails.receipt,
+                reason: item.paymentDetails.reason,
+            },
         };
     });
     return (0, response_1.SuccessResponse)(res, {

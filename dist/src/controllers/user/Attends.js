@@ -150,6 +150,7 @@ const joinSession = async (req, res) => {
         .select({
         id: Session_1.sessions.id,
         sessionLink: Session_1.sessions.session_link,
+        sessionRelationalType: Session_1.sessions.sessionRelationalType,
     })
         .from(Session_1.sessions)
         .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, sessionId));
@@ -172,22 +173,59 @@ const joinSession = async (req, res) => {
         throw new Errors_1.NotFound("You are not enrolled in this session");
     }
     await connection_1.db.transaction(async (tx) => {
-        // Fetch existing inside transaction to prevent race conditions
+        // Check if student already has an attendance record for this session
         const [existing] = await tx
             .select({ id: schema_1.sessionAttendance.id, status: schema_1.sessionAttendance.status })
             .from(schema_1.sessionAttendance)
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.sessionAttendance.sessionId, sessionId), (0, drizzle_orm_1.eq)(schema_1.sessionAttendance.studentId, studentId)));
         if (existing && existing.status === "present") {
-            return; // Already marked present
+            return; // Already marked present, nothing to do
         }
-        // Fetch user inside transaction before deducting balance
-        const [student] = await tx
-            .select({ liveBalance: Student_1.Student.livebalance })
-            .from(Student_1.Student)
-            .where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
-        if (!student || student.liveBalance <= 0) {
-            throw new Errors_1.BadRequest("Insufficient live balance");
+        // ── Re-Explanation balance logic ──────────────────────────────────────
+        // For Re-Explanation sessions: only deduct balance if the student has
+        // NOT attended at least one of the session's lessons in a prior session.
+        // If ALL lessons were already covered in previous sessions → no deduction.
+        let shouldDeductBalance = true;
+        if (session.sessionRelationalType === "Re-Explanation") {
+            // 1. Get all lessons linked to this Re-Explanation session
+            const sessionLessonRows = await tx
+                .select({ lessonId: Session_1.sessionLessons.lessonId })
+                .from(Session_1.sessionLessons)
+                .where((0, drizzle_orm_1.eq)(Session_1.sessionLessons.sessionId, sessionId));
+            const lessonIdsInSession = sessionLessonRows.map(r => r.lessonId);
+            if (lessonIdsInSession.length > 0) {
+                // 2. Find which of those lessons the student has already attended
+                //    in OTHER sessions (not the current Re-Explanation session itself)
+                const previouslyAttendedRows = await tx
+                    .select({ lessonId: Session_1.sessionLessons.lessonId })
+                    .from(schema_1.sessionAttendance)
+                    .innerJoin(Session_1.sessionLessons, (0, drizzle_orm_1.eq)(schema_1.sessionAttendance.sessionId, Session_1.sessionLessons.sessionId))
+                    .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.sessionAttendance.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.sessionAttendance.status, "present"), 
+                // Only from OTHER sessions, not the current one
+                (0, drizzle_orm_1.sql) `${schema_1.sessionAttendance.sessionId} != ${sessionId}`, (0, drizzle_orm_1.inArray)(Session_1.sessionLessons.lessonId, lessonIdsInSession)));
+                const attendedLessonIdSet = new Set(previouslyAttendedRows.map(r => r.lessonId));
+                // 3. If ALL lessons in this session were previously attended → free re-entry
+                const allLessonsPreviouslyAttended = lessonIdsInSession.every(lessonId => attendedLessonIdSet.has(lessonId));
+                if (allLessonsPreviouslyAttended) {
+                    shouldDeductBalance = false;
+                }
+                // else: at least one lesson is new → deduct balance as normal
+            }
         }
+        // ── Balance check and deduction ───────────────────────────────────────
+        if (shouldDeductBalance) {
+            const [student] = await tx
+                .select({ liveBalance: Student_1.Student.livebalance })
+                .from(Student_1.Student)
+                .where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
+            if (!student || student.liveBalance <= 0) {
+                throw new Errors_1.BadRequest("Insufficient live balance");
+            }
+            await tx.update(Student_1.Student)
+                .set({ livebalance: (0, drizzle_orm_1.sql) `${Student_1.Student.livebalance} - 1` })
+                .where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
+        }
+        // ── Record attendance ─────────────────────────────────────────────────
         if (existing) {
             await tx.update(schema_1.sessionAttendance)
                 .set({ status: "present", attendedAt: new Date() })
@@ -202,10 +240,6 @@ const joinSession = async (req, res) => {
                 attendedAt: new Date(),
             });
         }
-        // Reduce balance
-        await tx.update(Student_1.Student)
-            .set({ livebalance: (0, drizzle_orm_1.sql) `${Student_1.Student.livebalance} - 1` })
-            .where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
     });
     return (0, response_1.SuccessResponse)(res, { sessionLink: session.sessionLink });
 };

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getChapterById = exports.getAllChaptersByCourseId = exports.getAllChapters = void 0;
+exports.getPurchasedChapters = exports.getChapterById = exports.getAllChaptersByCourseId = exports.getAllChapters = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const prices_1 = require("../../models/schema/admin/prices");
@@ -120,16 +120,22 @@ const getChapterById = async (req, res) => {
     });
     // Check individual lesson enrollments (in case they bought a lesson but not the chapter)
     let enrolledLessonIds = new Set();
+    let lessonPrices = [];
     if (chapterLessons.length > 0) {
         const lessonEnrollments = await connection_1.db
             .select({ lessonId: schema_1.enrolledItems.lessonId })
             .from(schema_1.enrolledItems)
             .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.studentId, req.user.id), (0, drizzle_orm_1.eq)(schema_1.enrolledItems.status, "active"), (0, drizzle_orm_1.inArray)(schema_1.enrolledItems.lessonId, chapterLessons.map(l => l.id))));
         enrolledLessonIds = new Set(lessonEnrollments.map(e => e.lessonId).filter((id) => !!id));
+        lessonPrices = await connection_1.db
+            .select()
+            .from(prices_1.prices)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(prices_1.prices.targetType, "lesson"), (0, drizzle_orm_1.inArray)(prices_1.prices.targetId, chapterLessons.map(l => l.id))));
     }
     const lessonsWithLockStatus = chapterLessons.map(lesson => ({
         ...lesson,
-        isLocked: !hasAccess && !enrolledLessonIds.has(lesson.id)
+        isLocked: !hasAccess && !enrolledLessonIds.has(lesson.id),
+        pricePlans: lessonPrices.filter(p => p.targetId === lesson.id)
     }));
     return (0, response_1.SuccessResponse)(res, {
         message: "Chapter details fetched",
@@ -145,3 +151,53 @@ const getChapterById = async (req, res) => {
     }, 200);
 };
 exports.getChapterById = getChapterById;
+// ─── 4. Get purchased chapters ──────────────────────────────────────────────
+const getPurchasedChapters = async (req, res) => {
+    const studentId = req.user.id;
+    // الاستعلام يبدأ من الـ chapters لضمان فحص علاقتها باشتراكات الكورسات أو اشتراكات الشباتر مباشرة
+    const purchasedChapters = await connection_1.db
+        .select({
+        chapter: schema_1.chapters,
+        course: schema_1.courses,
+        // نأخذ بيانات الاشتراك سواء جاءت من اشتراك الشابتر نفسه أو اشتراك الكورس الأب
+        enrollmentId: schema_1.enrolledItems.id,
+        expiresAt: schema_1.enrolledItems.expiresAt,
+        status: schema_1.enrolledItems.status,
+        createdAt: schema_1.enrolledItems.createdAt,
+    })
+        .from(schema_1.chapters)
+        // 1. نربط الكورس التابع له الشابتر لمعرفة تفاصيله والتحقق من اشتراكه
+        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, schema_1.courses.id))
+        // 2. نربط جدول الاشتراكات بشرط ذكي جداً:
+        .innerJoin(schema_1.enrolledItems, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.studentId, studentId), (0, drizzle_orm_1.inArray)(schema_1.enrolledItems.status, ["active", "expired"]), (0, drizzle_orm_1.or)(
+    // الحالة الأولى: الطالب اشترى الشابتر ده عينه بذاته
+    (0, drizzle_orm_1.eq)(schema_1.enrolledItems.chapterId, schema_1.chapters.id), 
+    // الحالة الثانية: الطالب اشترى الكورس الكامل اللي الشابتر ده جواه
+    (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.courseId, schema_1.chapters.courseId), (0, drizzle_orm_1.isNull)(schema_1.enrolledItems.chapterId), // للتأكد أنه سطر الكورس الكامل وليس شيئاً آخر
+    (0, drizzle_orm_1.isNull)(schema_1.enrolledItems.lessonId)))))
+        // ترتيب المشتريات من الأحدث للأقدم بناءً على تاريخ الاشتراك
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.enrolledItems.createdAt));
+    // لمنع التكرار في حال كان هناك اشتراك كورس واشتراك شابتر منفصل لنفس العنصر بالخطأ
+    const seenChapterIds = new Set();
+    const formattedChapters = [];
+    for (const p of purchasedChapters) {
+        if (seenChapterIds.has(p.chapter.id))
+            continue;
+        seenChapterIds.add(p.chapter.id);
+        const isExpired = p.expiresAt && p.expiresAt < new Date();
+        formattedChapters.push({
+            ...p.chapter,
+            courseName: p.course?.name ?? null,
+            enrollmentId: p.enrollmentId,
+            expiresAt: p.expiresAt,
+            status: isExpired ? "this is expired" : p.status,
+            purchasedAt: p.createdAt
+        });
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Purchased chapters retrieved successfully",
+        count: formattedChapters.length,
+        chapters: formattedChapters
+    }, 200);
+};
+exports.getPurchasedChapters = getPurchasedChapters;

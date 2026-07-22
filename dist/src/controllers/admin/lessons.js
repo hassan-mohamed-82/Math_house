@@ -1,4 +1,37 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.selectLessons = exports.selectChapters = exports.deleteLessonIdea = exports.updateLessonIdea = exports.swapIdeaOrder = exports.getIdeasByLessonId = exports.createLessonIdea = exports.getLessonsbyCourseId = exports.deleteLesson = exports.updateLesson = exports.swapLessonOrder = exports.getLessonsByChapterId = exports.getAllLessons = exports.getLessonById = exports.createLesson = void 0;
 const connection_1 = require("../../models/connection");
@@ -385,14 +418,37 @@ const getLessonsbyCourseId = async (req, res) => {
 exports.getLessonsbyCourseId = getLessonsbyCourseId;
 // Lesson Ideas
 const createLessonIdea = async (req, res) => {
-    const { lessonId, idea, pdf, video } = req.body;
+    const { lessonId, idea, pdf, video, bunnyGuid } = req.body;
     if (!lessonId || !idea) {
         throw new BadRequest_1.BadRequest("Lesson ID and Idea are required");
+    }
+    // Validate that video and bunnyGuid are not both provided
+    if (video && bunnyGuid) {
+        throw new BadRequest_1.BadRequest("Provide either an external video link OR a Drive bunnyGuid, not both");
     }
     // Validate lesson exists
     const [existingLesson] = await connection_1.db.select().from(schema_1.lessons).where((0, drizzle_orm_1.eq)(schema_1.lessons.id, lessonId));
     if (!existingLesson) {
         throw new Errors_1.NotFound("Lesson not found");
+    }
+    // Validate bunnyGuid exists in drive_assets if provided
+    if (bunnyGuid) {
+        const { driveAssets } = await Promise.resolve().then(() => __importStar(require("../../models/schema")));
+        const [asset] = await connection_1.db.select({ id: driveAssets.id, status: driveAssets.status })
+            .from(driveAssets)
+            .where((0, drizzle_orm_1.eq)(driveAssets.bunnyGuid, bunnyGuid));
+        if (!asset) {
+            throw new Errors_1.NotFound("Video not found in Drive. Please upload the video first.");
+        }
+        if (asset.status === "failed") {
+            throw new BadRequest_1.BadRequest("The selected video failed to process. Please re-upload it.");
+        }
+    }
+    // Handle PDF: base64 upload OR external link
+    let pdfUrl = pdf;
+    if (pdf && pdf.startsWith("data:application/pdf;base64,")) {
+        const { validateAndSavePdf } = await Promise.resolve().then(() => __importStar(require("../../utils/handleImages")));
+        pdfUrl = await validateAndSavePdf(req, pdf, "ideas");
     }
     // Auto-compute ideaOrder: MAX(ideaOrder) + 1 for this lesson
     const [maxOrderResult] = await connection_1.db.select({ maxOrder: (0, drizzle_orm_1.max)(schema_1.lessonIdeas.ideaOrder) }).from(schema_1.lessonIdeas).where((0, drizzle_orm_1.eq)(schema_1.lessonIdeas.lessonId, lessonId));
@@ -401,8 +457,9 @@ const createLessonIdea = async (req, res) => {
         lessonId,
         idea,
         ideaOrder: nextOrder,
-        pdf,
-        video,
+        pdf: pdfUrl,
+        video: video ?? null,
+        bunnyGuid: bunnyGuid ?? null,
     });
     return (0, response_1.SuccessResponse)(res, { message: "Lesson idea created successfully", ideaOrder: nextOrder }, 200);
 };
@@ -436,15 +493,47 @@ const swapIdeaOrder = async (req, res) => {
 exports.swapIdeaOrder = swapIdeaOrder;
 const updateLessonIdea = async (req, res) => {
     const { id } = req.params;
-    const { idea, pdf, video } = req.body;
+    const { idea, pdf, video, bunnyGuid } = req.body;
     const [existingIdea] = await connection_1.db.select().from(schema_1.lessonIdeas).where((0, drizzle_orm_1.eq)(schema_1.lessonIdeas.id, id));
     if (!existingIdea) {
         throw new Errors_1.NotFound("Lesson idea not found");
     }
+    // Validate that video and bunnyGuid are not both provided
+    if (video && bunnyGuid) {
+        throw new BadRequest_1.BadRequest("Provide either an external video link OR a Drive bunnyGuid, not both");
+    }
+    // Validate bunnyGuid exists in drive_assets if provided
+    if (bunnyGuid) {
+        const { driveAssets } = await Promise.resolve().then(() => __importStar(require("../../models/schema")));
+        const [asset] = await connection_1.db.select({ id: driveAssets.id, status: driveAssets.status })
+            .from(driveAssets)
+            .where((0, drizzle_orm_1.eq)(driveAssets.bunnyGuid, bunnyGuid));
+        if (!asset) {
+            throw new Errors_1.NotFound("Video not found in Drive. Please upload the video first.");
+        }
+        if (asset.status === "failed") {
+            throw new BadRequest_1.BadRequest("The selected video failed to process. Please re-upload it.");
+        }
+    }
+    // Handle PDF: base64 upload OR external link
+    let pdfUrl = pdf !== undefined ? pdf : existingIdea.pdf;
+    if (pdf && pdf.startsWith("data:application/pdf;base64,")) {
+        const { validateAndSavePdf, deleteImage } = await Promise.resolve().then(() => __importStar(require("../../utils/handleImages")));
+        pdfUrl = await validateAndSavePdf(req, pdf, "ideas");
+        // delete old pdf if it was a local upload
+        if (existingIdea.pdf && existingIdea.pdf.includes("/uploads/")) {
+            await deleteImage(existingIdea.pdf);
+        }
+    }
+    // Determine final video / bunnyGuid values
+    // Passing null explicitly clears the field; undefined keeps the existing value
+    const finalVideo = video !== undefined ? video : (bunnyGuid !== undefined ? null : existingIdea.video);
+    const finalBunnyGuid = bunnyGuid !== undefined ? bunnyGuid : (video !== undefined ? null : existingIdea.bunnyGuid);
     await connection_1.db.update(schema_1.lessonIdeas).set({
         idea: idea ?? existingIdea.idea,
-        pdf: pdf !== undefined ? pdf : existingIdea.pdf,
-        video: video !== undefined ? video : existingIdea.video,
+        pdf: pdfUrl,
+        video: finalVideo,
+        bunnyGuid: finalBunnyGuid,
     }).where((0, drizzle_orm_1.eq)(schema_1.lessonIdeas.id, id));
     return (0, response_1.SuccessResponse)(res, { message: "Lesson idea updated successfully" }, 200);
 };

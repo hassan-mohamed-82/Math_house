@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const reports_1 = require("../../controllers/admin/reports");
+const catchAsync_1 = require("../../utils/catchAsync");
+const requirePermission_1 = require("../../middlewares/requirePermission");
+const router = (0, express_1.Router)();
+router.get("/:studentId/quizzes", (0, requirePermission_1.requirePermission)("reports", "View"), (0, catchAsync_1.catchAsync)(reports_1.getStudentQuizReports));
+router.get("/:studentId/exams", (0, requirePermission_1.requirePermission)("reports", "View"), (0, catchAsync_1.catchAsync)(reports_1.getStudentExamReports));
+exports.default = router;

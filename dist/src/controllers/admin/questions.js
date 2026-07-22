@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getParallelQuestionsByOriginalId = exports.getParallelQuestionbyId = exports.getAllParallelQuestions = exports.deleteParallelQuestion = exports.updateParallelQuestion = exports.createParallelQuestion = exports.sendParallelQuestionGenerate = exports.getQuestionsbySectiondId = exports.getQuestionsbyCourseId = exports.getQuestionsbyLessonId = exports.deleteQuestion = exports.updateQuestion = exports.getQuestionbyId = exports.getAllQuestions = exports.createQuestion = exports.getTextfromImage = void 0;
+exports.selectDriveContents = exports.getParallelQuestionsByOriginalId = exports.getParallelQuestionbyId = exports.getAllParallelQuestions = exports.deleteParallelQuestion = exports.updateParallelQuestion = exports.createParallelQuestion = exports.sendParallelQuestionGenerate = exports.getQuestionsbySectiondId = exports.getQuestionsbyCourseId = exports.getQuestionsbyLessonId = exports.deleteQuestion = exports.updateQuestion = exports.getQuestionbyId = exports.getAllQuestions = exports.createQuestion = exports.getTextfromImage = void 0;
 const uuid_1 = require("uuid");
 const response_1 = require("../../utils/response");
 const ocr_service_1 = require("../../ai/services/ocr-service");
@@ -24,7 +24,7 @@ exports.getTextfromImage = getTextfromImage;
 // TODO: SAVE IMAGES TO THE DRIVE Rather than BASE64
 // Questions
 const createQuestion = async (req, res) => {
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo, answerImage, answerText } = req.body;
     if (!question
         || !answerType
         || !difficulty
@@ -77,11 +77,21 @@ const createQuestion = async (req, res) => {
             }));
             await tx.insert(schema_1.questionOptions).values(formattedOptions);
         }
-        if (answerPdf || answerVideo) {
+        let finalAnswerPdf = answerPdf;
+        if (answerPdf && !answerPdf.startsWith("http")) {
+            finalAnswerPdf = await (0, handleImages_1.validateAndSavePdf)(req, answerPdf, "questions");
+        }
+        let finalAnswerImage = answerImage;
+        if (answerImage && !answerImage.startsWith("http")) {
+            finalAnswerImage = await (0, handleImages_1.validateAndSaveLogo)(req, answerImage, "questions");
+        }
+        if (finalAnswerPdf || answerVideo || finalAnswerImage || answerText) {
             await tx.insert(schema_1.questionAnswers).values({
                 questionId: questionId,
-                pdf: answerPdf,
+                pdf: finalAnswerPdf,
                 video: answerVideo,
+                image: finalAnswerImage,
+                text: answerText,
             });
         }
     });
@@ -223,6 +233,8 @@ const getQuestionbyId = async (req, res) => {
         },
         pdf: schema_1.questionAnswers.pdf,
         video: schema_1.questionAnswers.video,
+        answerImage: schema_1.questionAnswers.image,
+        answerText: schema_1.questionAnswers.text,
     }).from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
         .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
@@ -243,7 +255,7 @@ const getQuestionbyId = async (req, res) => {
 exports.getQuestionbyId = getQuestionbyId;
 const updateQuestion = async (req, res) => {
     const { id } = req.params;
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo, answerImage, answerText } = req.body;
     if (!id) {
         throw new BadRequest_1.BadRequest("Question ID is required");
     }
@@ -309,14 +321,32 @@ const updateQuestion = async (req, res) => {
             }));
             await tx.insert(schema_1.questionOptions).values(formattedOptions);
         }
-        if (answerPdf !== undefined || answerVideo !== undefined) {
+        if (answerPdf !== undefined || answerVideo !== undefined || answerImage !== undefined || answerText !== undefined) {
             const existingAnswer = await tx.select().from(schema_1.questionAnswers).where((0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, id)).limit(1);
+            let finalAnswerPdf = answerPdf;
+            if (answerPdf !== undefined && answerPdf && !answerPdf.startsWith("http")) {
+                finalAnswerPdf = await (0, handleImages_1.validateAndSavePdf)(req, answerPdf, "questions");
+                if (existingAnswer[0] && existingAnswer[0].pdf && !existingAnswer[0].pdf.startsWith("http")) {
+                    await (0, handleImages_1.deleteImage)(existingAnswer[0].pdf);
+                }
+            }
+            let finalAnswerImage = answerImage;
+            if (answerImage !== undefined) {
+                finalAnswerImage = await (0, handleImages_1.handleImageUpdate)(req, existingAnswer[0]?.image, answerImage, "questions");
+            }
+            else {
+                finalAnswerImage = existingAnswer[0]?.image;
+            }
             if (existingAnswer[0]) {
                 const answerUpdateData = {};
                 if (answerPdf !== undefined)
-                    answerUpdateData.pdf = answerPdf;
+                    answerUpdateData.pdf = finalAnswerPdf;
                 if (answerVideo !== undefined)
                     answerUpdateData.video = answerVideo;
+                if (answerImage !== undefined)
+                    answerUpdateData.image = finalAnswerImage;
+                if (answerText !== undefined)
+                    answerUpdateData.text = answerText;
                 if (Object.keys(answerUpdateData).length > 0) {
                     await tx.update(schema_1.questionAnswers).set(answerUpdateData).where((0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, id));
                 }
@@ -324,8 +354,10 @@ const updateQuestion = async (req, res) => {
             else {
                 await tx.insert(schema_1.questionAnswers).values({
                     questionId: id,
-                    pdf: answerPdf || null, // Ensure at least one is null/undefined if not provided, though insert requires handling
+                    pdf: finalAnswerPdf || null,
                     video: answerVideo || null,
+                    image: finalAnswerImage || null,
+                    text: answerText || null,
                 });
             }
         }
@@ -871,3 +903,56 @@ const getParallelQuestionsByOriginalId = async (req, res) => {
     }, 200);
 };
 exports.getParallelQuestionsByOriginalId = getParallelQuestionsByOriginalId;
+const selectDriveContents = async (req, res) => {
+    const folderId = typeof req.query.folderId === 'string' && req.query.folderId.trim()
+        ? req.query.folderId.trim()
+        : undefined;
+    // Optional all flag to bypass folder restriction and fetch everything flattened
+    const fetchAll = req.query.all === 'true';
+    const folders = await connection_1.db
+        .select({
+        id: schema_1.driveFolders.id,
+        name: schema_1.driveFolders.name,
+        parentFolderId: schema_1.driveFolders.parentFolderId,
+    })
+        .from(schema_1.driveFolders)
+        .where(fetchAll ? undefined : (folderId ? (0, drizzle_orm_1.eq)(schema_1.driveFolders.parentFolderId, folderId) : (0, drizzle_orm_1.isNull)(schema_1.driveFolders.parentFolderId)))
+        .orderBy((0, drizzle_orm_1.asc)(schema_1.driveFolders.name));
+    const filesData = await connection_1.db
+        .select({
+        id: schema_1.driveAssets.id,
+        title: schema_1.driveAssets.title,
+        type: schema_1.driveAssets.type,
+        folderId: schema_1.driveAssets.folderId,
+        sourceUrl: schema_1.driveAssets.sourceUrl,
+        bunnyGuid: schema_1.driveAssets.bunnyGuid
+    })
+        .from(schema_1.driveAssets)
+        .where(fetchAll ? undefined : (folderId ? (0, drizzle_orm_1.eq)(schema_1.driveAssets.folderId, folderId) : (0, drizzle_orm_1.isNull)(schema_1.driveAssets.folderId)))
+        .orderBy((0, drizzle_orm_1.asc)(schema_1.driveAssets.title));
+    const files = filesData.map(file => {
+        let computedType = file.type;
+        const lowerTitle = file.title.toLowerCase();
+        if (lowerTitle.endsWith('.pdf')) {
+            computedType = 'pdf';
+        }
+        else if (lowerTitle.match(/\.(jpeg|jpg|png|gif|webp)$/)) {
+            computedType = 'image';
+        }
+        else if (lowerTitle.match(/\.(mp4|avi|mov|mkv)$/)) {
+            computedType = 'video';
+        }
+        return {
+            ...file,
+            computedType
+        };
+    });
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Drive contents fetched successfully",
+        data: {
+            folders,
+            files
+        }
+    }, 200);
+};
+exports.selectDriveContents = selectDriveContents;

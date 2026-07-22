@@ -22,6 +22,17 @@ const createAdmin = async (req, res) => {
     if (existingAdmin.length > 0) {
         throw new BadRequest_1.BadRequest("email is already exists");
     }
+    // Validate roleId if provided
+    if (roleId) {
+        const roleExists = await connection_1.db
+            .select({ id: schema_1.roles.id })
+            .from(schema_1.roles)
+            .where((0, drizzle_orm_1.eq)(schema_1.roles.id, roleId))
+            .limit(1);
+        if (!roleExists[0]) {
+            throw new BadRequest_1.BadRequest("Role not found");
+        }
+    }
     const hashedPassword = await bcrypt_1.default.hash(password, 10);
     const id = (0, uuid_1.v4)();
     await connection_1.db.insert(schema_1.admins).values({
@@ -101,6 +112,17 @@ const updateAdmin = async (req, res) => {
         .where((0, drizzle_orm_1.eq)(schema_1.admins.id, id));
     if (existingAdmin.length === 0) {
         throw new NotFound_1.NotFound("admin not found");
+    }
+    // Validate roleId if provided
+    if (roleId) {
+        const roleExists = await connection_1.db
+            .select({ id: schema_1.roles.id })
+            .from(schema_1.roles)
+            .where((0, drizzle_orm_1.eq)(schema_1.roles.id, roleId))
+            .limit(1);
+        if (!roleExists[0]) {
+            throw new BadRequest_1.BadRequest("Role not found");
+        }
     }
     const updateData = {
         updatedAt: new Date()

@@ -10,12 +10,12 @@ const chapters_1 = require("./chapters");
 exports.lessons = (0, mysql_core_1.mysqlTable)("lessons", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
-    categoryId: (0, mysql_core_1.char)("category_id", { length: 255 }).notNull().references(() => category_1.category.id),
-    courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).notNull().references(() => courses_1.courses.id),
-    chapterId: (0, mysql_core_1.char)("chapter_id", { length: 255 }).notNull().references(() => chapters_1.chapters.id),
+    categoryId: (0, mysql_core_1.char)("category_id", { length: 255 }).notNull().references(() => category_1.category.id, { onDelete: "cascade" }),
+    courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).notNull().references(() => courses_1.courses.id, { onDelete: "cascade" }),
+    chapterId: (0, mysql_core_1.char)("chapter_id", { length: 255 }).notNull().references(() => chapters_1.chapters.id, { onDelete: "cascade" }),
     description: (0, mysql_core_1.varchar)("description", { length: 255 }),
     image: (0, mysql_core_1.varchar)("image", { length: 255 }),
-    teacherId: (0, mysql_core_1.char)("teacher_id", { length: 255 }).notNull().references(() => teacher_1.teachers.id),
+    teacherId: (0, mysql_core_1.char)("teacher_id", { length: 255 }).notNull().references(() => teacher_1.teachers.id, { onDelete: "cascade" }),
     order: (0, mysql_core_1.int)("order").notNull(),
     preRequisition: (0, mysql_core_1.varchar)("pre_requisition", { length: 255 }),
     whatYouGain: (0, mysql_core_1.varchar)("what_you_gain", { length: 255 }),
@@ -25,10 +25,11 @@ exports.lessons = (0, mysql_core_1.mysqlTable)("lessons", {
 exports.lessonIdeas = (0, mysql_core_1.mysqlTable)("lesson_ideas", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     idea: (0, mysql_core_1.varchar)("idea", { length: 255 }).notNull(),
-    lessonId: (0, mysql_core_1.char)("lesson_id", { length: 255 }).notNull().references(() => exports.lessons.id),
+    lessonId: (0, mysql_core_1.char)("lesson_id", { length: 255 }).notNull().references(() => exports.lessons.id, { onDelete: "cascade" }),
     ideaOrder: (0, mysql_core_1.int)("idea_order").notNull(),
-    pdf: (0, mysql_core_1.varchar)("pdf", { length: 255 }),
-    video: (0, mysql_core_1.varchar)("video", { length: 255 }),
+    pdf: (0, mysql_core_1.varchar)("pdf", { length: 500 }), // local upload URL or external link
+    video: (0, mysql_core_1.varchar)("video", { length: 500 }), // external video link (e.g. YouTube)
+    bunnyGuid: (0, mysql_core_1.varchar)("bunny_guid", { length: 255 }), // Bunny.net GUID for secure streaming
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

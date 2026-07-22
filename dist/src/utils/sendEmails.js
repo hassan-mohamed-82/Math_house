@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendStudentVerificationEmail = exports.verifyEmailVerificationToken = exports.generateEmailVerificationToken = exports.PASSWORD_RESET_CODE_TTL_MINUTES = exports.sendPasswordResetEmail = exports.consumePasswordResetCode = exports.verifyPasswordResetCode = exports.savePasswordResetCode = void 0;
+exports.sendStudentVerificationEmail = exports.verifyEmailVerificationToken = exports.generateEmailVerificationToken = exports.PASSWORD_RESET_CODE_TTL_MINUTES = exports.sendPasswordResetEmail = exports.consumePasswordResetCode = exports.verifyPasswordResetCode = exports.savePasswordResetCode = exports.sendEmail = void 0;
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
@@ -68,6 +68,7 @@ const sendEmail = async ({ to, subject, html, }) => {
     }
     throw new Error("No email provider configured. Set RESEND_API_KEY or SMTP credentials.");
 };
+exports.sendEmail = sendEmail;
 const savePasswordResetCode = async (email, code, expiresAt) => {
     const codeHash = await bcrypt_1.default.hash(code, 10);
     const docId = getEmailDocumentId(email);
@@ -108,7 +109,7 @@ const sendPasswordResetEmail = async (email, name = "there") => {
     const code = generateNumericCode(PASSWORD_RESET_CODE_LENGTH);
     const expiresAt = new Date(Date.now() + PASSWORD_RESET_LIFETIME_MINUTES * 60 * 1000);
     await (0, exports.savePasswordResetCode)(email, code, expiresAt);
-    await sendEmail({
+    await (0, exports.sendEmail)({
         to: email,
         subject: "Password Reset Code",
         html: (0, emailTemplate_1.passwordResetTemplate)(name, code, `${PASSWORD_RESET_LIFETIME_MINUTES} minutes`),
@@ -143,7 +144,7 @@ const sendStudentVerificationEmail = async (params) => {
     const token = (0, exports.generateEmailVerificationToken)(params.studentId, params.email);
     const publicAppUrl = (process.env.PUBLIC_APP_URL || process.env.APP_URL || "http://localhost:3000").replace(/\/$/, "");
     const verificationUrl = `${publicAppUrl}/api/user/auth/verify-email?token=${encodeURIComponent(token)}`;
-    await sendEmail({
+    await (0, exports.sendEmail)({
         to: params.email,
         subject: "Verify your Maths House email",
         html: (0, emailTemplate_1.emailVerificationLinkTemplate)(params.name, verificationUrl, `${EMAIL_VERIFICATION_LIFETIME_HOURS} hour`),
