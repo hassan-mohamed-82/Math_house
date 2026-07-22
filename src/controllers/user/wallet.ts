@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { BadRequest, NotFound, UnauthorizedError } from '../../Errors';
 import { SuccessResponse } from '../../utils/response';
 import { db } from '../../models/connection';
-import { parents, payment, paymentMethod, Student, wallet, walletTransaction } from '../../models/schema';
+import { parents, payment, paymentMethod, Student, wallet, walletTransaction,enrolledItems } from '../../models/schema';
 import { and, count, desc, eq, like, or, sql } from 'drizzle-orm';
 import { validateAndSaveLogo } from '../../utils/handleImages';
 import { createPaymobCheckoutSession, extractPaymobCallbackPayload, verifyPaymobHmac } from '../../utils/paymob';
@@ -340,18 +340,37 @@ export const handlePaymobCallback = async (req: Request, res: Response) => {
 
         await creditWalletForPayment(existingPayment.id, existingPayment.studentId, existingPayment.amount);
     } else if (existingPayment.purpose === 'purchase') {
-        if (!existingPayment.packageId) {
-            throw new BadRequest('Associated package not found for this payment');
+        if (existingPayment.packageId) {
+            // ── Package (exam/question/live balance) purchase ──────────────────
+            await db.transaction(async (tx) => {
+                await tx
+                    .update(payment)
+                    .set({ status: 'completed' })
+                    .where(eq(payment.id, existingPayment.id));
+
+                await creditPackageBalance(existingPayment.studentId!, existingPayment.packageId!, tx);
+            });
+        } else {
+            // ── Course / Chapter / Lesson enrollment purchase ──────────────────
+            // Activate all pending enrolled items tied to this payment
+
+            await db.transaction(async (tx) => {
+                await tx
+                    .update(payment)
+                    .set({ status: 'completed' })
+                    .where(eq(payment.id, existingPayment.id));
+
+                await tx
+                    .update(enrolledItems)
+                    .set({ status: 'active' })
+                    .where(
+                        and(
+                            eq(enrolledItems.paymentId, existingPayment.id),
+                            eq(enrolledItems.status, 'pending')
+                        )
+                    );
+            });
         }
-
-        await db.transaction(async (tx) => {
-            await tx
-                .update(payment)
-                .set({ status: 'completed' })
-                .where(eq(payment.id, existingPayment.id));
-
-            await creditPackageBalance(existingPayment.studentId!, existingPayment.packageId!, tx);
-        });
     } else {
         throw new BadRequest('Unsupported payment purpose');
     }
