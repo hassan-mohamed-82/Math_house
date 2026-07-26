@@ -39,7 +39,8 @@ export const getTextfromImage = async (req: Request, res: Response) => {
 // TODO: SAVE IMAGES TO THE DRIVE Rather than BASE64
 // Questions
 export const createQuestion = async (req: Request, res: Response) => {
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo, answerImage, answerText } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answers } = req.body;
+    // answers = [{ answerPdf, answerVideo, answerImage, answerText }, ...]
 
     if (!question
         || !answerType
@@ -99,24 +100,29 @@ export const createQuestion = async (req: Request, res: Response) => {
             await tx.insert(questionOptions).values(formattedOptions);
         }
 
-        let finalAnswerPdf = answerPdf;
-        if (answerPdf && !answerPdf.startsWith("http")) {
-            finalAnswerPdf = await validateAndSavePdf(req, answerPdf, "questions");
-        }
+        // answers is now an array: [{ answerPdf, answerVideo, answerImage, answerText }]
+        if (Array.isArray(answers) && answers.length > 0) {
+            for (const ans of answers) {
+                const { answerPdf, answerVideo, answerImage, answerText } = ans;
 
-        let finalAnswerImage = answerImage;
-        if (answerImage && !answerImage.startsWith("http")) {
-            finalAnswerImage = await validateAndSaveLogo(req, answerImage, "questions");
-        }
+                let finalAnswerPdf = answerPdf || null;
+                if (finalAnswerPdf && !finalAnswerPdf.startsWith("http")) {
+                    finalAnswerPdf = await validateAndSavePdf(req, finalAnswerPdf, "questions");
+                }
 
-        if (finalAnswerPdf || answerVideo || finalAnswerImage || answerText) {
-            await tx.insert(questionAnswers).values({
-                questionId: questionId,
-                pdf: finalAnswerPdf,
-                video: answerVideo,
-                image: finalAnswerImage,
-                text: answerText,
-            });
+                let finalAnswerImage = answerImage || null;
+                if (finalAnswerImage && !finalAnswerImage.startsWith("http")) {
+                    finalAnswerImage = await validateAndSaveLogo(req, finalAnswerImage, "questions");
+                }
+
+                await tx.insert(questionAnswers).values({
+                    questionId: questionId,
+                    pdf: finalAnswerPdf,
+                    video: answerVideo || null,
+                    image: finalAnswerImage,
+                    text: answerText || null,
+                });
+            }
         }
     });
 
@@ -271,15 +277,10 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
             id: Sections.id,
             sectionName: Sections.sectionName,
         },
-        pdf: questionAnswers.pdf,
-        video: questionAnswers.video,
-        answerImage: questionAnswers.image,
-        answerText: questionAnswers.text,
     }).from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
         .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
         .innerJoin(Sections, eq(Sections.id, questions.sectionId))
-        .leftJoin(questionAnswers, eq(questionAnswers.questionId, questions.id))
         .where(eq(questions.id, id)).limit(1);
 
     if (!question[0]) {
@@ -293,12 +294,22 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
         order: questionOptions.order,
     }).from(questionOptions).where(eq(questionOptions.questionId, id));
 
-    return SuccessResponse(res, { message: "Question fetched successfully", data: { ...question[0], options } }, 200);
+    // Fetch all answer objects as an array
+    const answers = await db.select({
+        id: questionAnswers.id,
+        answerPdf: questionAnswers.pdf,
+        answerVideo: questionAnswers.video,
+        answerImage: questionAnswers.image,
+        answerText: questionAnswers.text,
+    }).from(questionAnswers).where(eq(questionAnswers.questionId, id));
+
+    return SuccessResponse(res, { message: "Question fetched successfully", data: { ...question[0], options, answers } }, 200);
 };
 
 export const updateQuestion = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo, answerImage, answerText } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answers } = req.body;
+    // answers = [{ answerPdf, answerVideo, answerImage, answerText }, ...] | undefined
     if (!id) {
         throw new BadRequest("Question ID is required");
     }
@@ -360,42 +371,39 @@ export const updateQuestion = async (req: Request, res: Response) => {
             await tx.insert(questionOptions).values(formattedOptions);
         }
 
-        if (answerPdf !== undefined || answerVideo !== undefined || answerImage !== undefined || answerText !== undefined) {
-            const existingAnswer = await tx.select().from(questionAnswers).where(eq(questionAnswers.questionId, id)).limit(1);
-
-            let finalAnswerPdf = answerPdf;
-            if (answerPdf !== undefined && answerPdf && !answerPdf.startsWith("http")) {
-                finalAnswerPdf = await validateAndSavePdf(req, answerPdf, "questions");
-                if (existingAnswer[0] && existingAnswer[0].pdf && !existingAnswer[0].pdf.startsWith("http")) {
-                    await deleteImage(existingAnswer[0].pdf);
-                }
+        // answers array: when provided, replace all existing answers
+        if (answers !== undefined) {
+            // Delete all existing answer rows for this question
+            const existingAnswers = await tx.select().from(questionAnswers).where(eq(questionAnswers.questionId, id));
+            for (const ea of existingAnswers) {
+                if (ea.pdf && !ea.pdf.startsWith("http")) await deleteImage(ea.pdf).catch(() => {});
+                if (ea.image && !ea.image.startsWith("http")) await deleteImage(ea.image).catch(() => {});
             }
+            await tx.delete(questionAnswers).where(eq(questionAnswers.questionId, id));
 
-            let finalAnswerImage = answerImage;
-            if (answerImage !== undefined) {
-                finalAnswerImage = await handleImageUpdate(req, existingAnswer[0]?.image, answerImage, "questions");
-            } else {
-                finalAnswerImage = existingAnswer[0]?.image;
-            }
+            // Insert the new answers array
+            if (Array.isArray(answers) && answers.length > 0) {
+                for (const ans of answers) {
+                    const { answerPdf, answerVideo, answerImage, answerText } = ans;
 
-            if (existingAnswer[0]) {
-                const answerUpdateData: any = {};
-                if (answerPdf !== undefined) answerUpdateData.pdf = finalAnswerPdf;
-                if (answerVideo !== undefined) answerUpdateData.video = answerVideo;
-                if (answerImage !== undefined) answerUpdateData.image = finalAnswerImage;
-                if (answerText !== undefined) answerUpdateData.text = answerText;
+                    let finalAnswerPdf = answerPdf || null;
+                    if (finalAnswerPdf && !finalAnswerPdf.startsWith("http")) {
+                        finalAnswerPdf = await validateAndSavePdf(req, finalAnswerPdf, "questions");
+                    }
 
-                if (Object.keys(answerUpdateData).length > 0) {
-                    await tx.update(questionAnswers).set(answerUpdateData).where(eq(questionAnswers.questionId, id));
+                    let finalAnswerImage = answerImage || null;
+                    if (finalAnswerImage && !finalAnswerImage.startsWith("http")) {
+                        finalAnswerImage = await validateAndSaveLogo(req, finalAnswerImage, "questions");
+                    }
+
+                    await tx.insert(questionAnswers).values({
+                        questionId: id,
+                        pdf: finalAnswerPdf,
+                        video: answerVideo || null,
+                        image: finalAnswerImage,
+                        text: answerText || null,
+                    });
                 }
-            } else {
-                await tx.insert(questionAnswers).values({
-                    questionId: id,
-                    pdf: finalAnswerPdf || null,
-                    video: answerVideo || null,
-                    image: finalAnswerImage || null,
-                    text: answerText || null,
-                });
             }
         }
     });

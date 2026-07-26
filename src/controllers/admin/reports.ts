@@ -350,6 +350,7 @@ export const getStudentQuizReports = async (req: Request, res: Response) => {
         allRightSolutions = await db
             .select({
                 questionId: questionAnswers.questionId,
+                id: questionAnswers.id,
                 pdf: questionAnswers.pdf,
                 video: questionAnswers.video,
                 image: questionAnswers.image,
@@ -358,7 +359,18 @@ export const getStudentQuizReports = async (req: Request, res: Response) => {
             .from(questionAnswers)
             .where(inArray(questionAnswers.questionId, mistakenQuestionIds));
     }
-    const rightSolutionsMap = new Map<string, any>(allRightSolutions.map(s => [s.questionId, s]));
+    // Group answers by questionId as an array
+    const rightSolutionsMap = new Map<string, any[]>();
+    for (const s of allRightSolutions) {
+        if (!rightSolutionsMap.has(s.questionId)) rightSolutionsMap.set(s.questionId, []);
+        rightSolutionsMap.get(s.questionId)!.push({
+            id: s.id,
+            answerPdf: s.pdf,
+            answerVideo: s.video,
+            answerImage: s.image,
+            answerText: s.text,
+        });
+    }
 
     // 8. Fetch missing lessons details from mistaken questions if they are not already in lessonsMap
     const mistakenQuestionLessonIds = Array.from(
@@ -380,7 +392,7 @@ export const getStudentQuizReports = async (req: Request, res: Response) => {
         const qOptions = optionsMap.get(m.questionId) || [];
         const correctOption = qOptions.find(o => o.isCorrect);
         const studentOption = qOptions.find(o => o.id === m.studentSelectedOptionId);
-        const rightSolution = rightSolutionsMap.get(m.questionId) || null;
+        const rightSolution = rightSolutionsMap.get(m.questionId) ?? [];
         const lessonDetail = m.lessonId ? lessonsMap.get(m.lessonId) || null : null;
 
         mistakesByAttemptMap.get(m.attemptId)!.push({
@@ -391,12 +403,7 @@ export const getStudentQuizReports = async (req: Request, res: Response) => {
             correctOption: correctOption ? correctOption.answer : null,
             studentOption: studentOption ? studentOption.answer : null,
             options: qOptions.map(({ questionId, isCorrect, ...rest }) => rest),
-            rightSolution: rightSolution ? {
-                pdf: rightSolution.pdf,
-                video: rightSolution.video,
-                image: rightSolution.image,
-                text: rightSolution.text
-            } : null,
+            answers: rightSolution, // array of [{ id, answerPdf, answerVideo, answerImage, answerText }]
             lesson: lessonDetail ? {
                 id: lessonDetail.id,
                 name: lessonDetail.name,
@@ -582,6 +589,7 @@ export const getStudentExamReports = async (req: Request, res: Response) => {
         allRightSolutions = await db
             .select({
                 questionId: questionAnswers.questionId,
+                id: questionAnswers.id,
                 pdf: questionAnswers.pdf,
                 video: questionAnswers.video,
                 image: questionAnswers.image,
@@ -590,7 +598,18 @@ export const getStudentExamReports = async (req: Request, res: Response) => {
             .from(questionAnswers)
             .where(inArray(questionAnswers.questionId, mistakenQuestionIds));
     }
-    const rightSolutionsMap = new Map<string, any>(allRightSolutions.map(s => [s.questionId, s]));
+    // Group answers by questionId as an array
+    const rightSolutionsMap = new Map<string, any[]>();
+    for (const s of allRightSolutions) {
+        if (!rightSolutionsMap.has(s.questionId)) rightSolutionsMap.set(s.questionId, []);
+        rightSolutionsMap.get(s.questionId)!.push({
+            id: s.id,
+            answerPdf: s.pdf,
+            answerVideo: s.video,
+            answerImage: s.image,
+            answerText: s.text,
+        });
+    }
 
     const mistakesByAttemptMap = new Map<string, any[]>();
     allMistakes.forEach(m => {
@@ -599,7 +618,7 @@ export const getStudentExamReports = async (req: Request, res: Response) => {
         const qOptions = optionsMap.get(m.questionId) || [];
         const correctOption = qOptions.find(o => o.isCorrect);
         const studentOption = qOptions.find(o => o.id === m.studentSelectedOptionId);
-        const rightSolution = rightSolutionsMap.get(m.questionId) || null;
+        const rightSolution = rightSolutionsMap.get(m.questionId) ?? [];
         const lessonDetail = m.lessonId ? lessonsMap.get(m.lessonId) || null : null;
         const attendedLesson = m.lessonId ? attendedLessonIds.has(m.lessonId) : false;
 
@@ -611,12 +630,7 @@ export const getStudentExamReports = async (req: Request, res: Response) => {
             correctOption: correctOption ? correctOption.answer : null,
             studentOption: studentOption ? studentOption.answer : null,
             options: qOptions.map(({ questionId, isCorrect, ...rest }) => rest),
-            rightSolution: rightSolution ? {
-                pdf: rightSolution.pdf,
-                video: rightSolution.video,
-                image: rightSolution.image,
-                text: rightSolution.text
-            } : null,
+            answers: rightSolution, // array of [{ id, answerPdf, answerVideo, answerImage, answerText }]
             lesson: lessonDetail ? {
                 id: lessonDetail.id,
                 name: lessonDetail.name,

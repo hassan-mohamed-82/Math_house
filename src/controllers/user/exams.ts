@@ -505,8 +505,20 @@ export const submitExam = async (req: Request, res: Response) => {
     if (wrongIds.length > 0) {
         const qs = await db.select().from(questions).where(inArray(questions.id, wrongIds));
         const opts = await db.select().from(questionOptions).where(inArray(questionOptions.questionId, wrongIds));
-        const media = await db.select().from(questionAnswers).where(inArray(questionAnswers.questionId, wrongIds));
-        mistakes = qs.map(q => ({ ...q, options: opts.filter(o => o.questionId === q.id), explanation: media.find(m => m.questionId === q.id) }));
+        const allMedia = await db.select().from(questionAnswers).where(inArray(questionAnswers.questionId, wrongIds));
+        // Group answers by questionId as an array
+        const mediaMap = new Map<string, any[]>();
+        for (const m of allMedia) {
+            if (!mediaMap.has(m.questionId)) mediaMap.set(m.questionId, []);
+            mediaMap.get(m.questionId)!.push({
+                id: m.id,
+                answerPdf: m.pdf,
+                answerVideo: m.video,
+                answerImage: m.image,
+                answerText: m.text,
+            });
+        }
+        mistakes = qs.map(q => ({ ...q, options: opts.filter(o => o.questionId === q.id), answers: mediaMap.get(q.id) ?? [] }));
     }
 
     return SuccessResponse(res, { result: { attemptId: attempt.id, score: totalAchievedScore, totalScore: exam.totalScore, passScore: exam.passScore, isPassed, status: finalStatus, mistakes } });
@@ -545,13 +557,14 @@ export const showQuestionAnswer = async (req: Request, res: Response) => {
             eq(questionOptions.isCorrect, true)
         ));
 
-    // 3. جلب الميديا (الفيديو والـ PDF) من جدول questionAnswers بناءً على الـ Schema
-    const [media] = await db
+    // 3. Fetch all answer objects as an array for this question
+    const answers = await db
         .select({
-            pdf: questionAnswers.pdf,
-            video: questionAnswers.video,
-            image: questionAnswers.image,
-            text: questionAnswers.text,
+            id: questionAnswers.id,
+            answerPdf: questionAnswers.pdf,
+            answerVideo: questionAnswers.video,
+            answerImage: questionAnswers.image,
+            answerText: questionAnswers.text,
         })
         .from(questionAnswers)
         .where(eq(questionAnswers.questionId, questionId));
@@ -576,7 +589,7 @@ export const showQuestionAnswer = async (req: Request, res: Response) => {
         result: {
             correctOptions,
             studentAnswer: latestStudentAnswer ?? req.body.studentAnswer ?? null,
-            explanation: media ?? null // سيعيد null إذا لم يكن هناك فيديو أو PDF
+            explanation : answers ?? [] // array of answer objects: [{ id, answerPdf, answerVideo, answerImage, answerText }]
         },
     });
 };

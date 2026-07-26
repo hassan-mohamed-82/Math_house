@@ -422,16 +422,12 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
             questionId: studentDiagnosticAnswers.questionId,
             studentAnswerId: studentDiagnosticAnswers.studentAnswerId,
             studentGridInAnswer: studentDiagnosticAnswers.studentGridInAnswer,
-            isCorrect: studentDiagnosticAnswers.isCorrect, // ضفنا دي عشان نعرف السؤال صح ولا غلط
+            isCorrect: studentDiagnosticAnswers.isCorrect,
             questionText: questions.question,
             questionImage: questions.image,
             answerType: questions.answerType,
             correctOptionId: questionOptions.id,
             correctOptionAnswer: questionOptions.answer,
-            explanationPdf: questionAnswers.pdf,
-            explanationVideo: questionAnswers.video,
-            explanationText: questionAnswers.text,
-            explanationImage: questionAnswers.image,
             lessonName: lessons.name,
             chapterName: chapters.name,
             courseName: courses.name,
@@ -440,7 +436,6 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
         .innerJoin(questions, eq(studentDiagnosticAnswers.questionId, questions.id))
         .where(
             eq(studentDiagnosticAnswers.attemptId, attemptId)
-            // شيلنا شرط (isCorrect, false) عشان يجيب كله
         )
         .leftJoin(
             questionOptions,
@@ -449,10 +444,37 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
                 eq(questionOptions.isCorrect, true)
             )
         )
-        .leftJoin(questionAnswers, eq(questionAnswers.questionId, studentDiagnosticAnswers.questionId))
         .leftJoin(lessons, eq(questions.lessonId, lessons.id))
         .leftJoin(chapters, eq(lessons.chapterId, chapters.id))
         .leftJoin(courses, eq(lessons.courseId, courses.id));
+
+    // Fetch all answer objects for the returned questions as an array, grouped by questionId
+    const questionIds = Array.from(new Set(allAnswers.map(a => a.questionId)));
+    let allExplanations: any[] = [];
+    if (questionIds.length > 0) {
+        allExplanations = await db
+            .select({
+                questionId: questionAnswers.questionId,
+                id: questionAnswers.id,
+                answerPdf: questionAnswers.pdf,
+                answerVideo: questionAnswers.video,
+                answerImage: questionAnswers.image,
+                answerText: questionAnswers.text,
+            })
+            .from(questionAnswers)
+            .where(inArray(questionAnswers.questionId, questionIds));
+    }
+    const explanationsMap = new Map<string, any[]>();
+    for (const e of allExplanations) {
+        if (!explanationsMap.has(e.questionId)) explanationsMap.set(e.questionId, []);
+        explanationsMap.get(e.questionId)!.push({
+            id: e.id,
+            answerPdf: e.answerPdf,
+            answerVideo: e.answerVideo,
+            answerImage: e.answerImage,
+            answerText: e.answerText,
+        });
+    }
 
     const uniqueAnswersMap = new Map();
     for (const ans of allAnswers) {
@@ -462,16 +484,11 @@ export const getDiagnosticAttemptReview = async (req: Request, res: Response) =>
                 questionText: ans.questionText,
                 questionImage: ans.questionImage,
                 answerType: ans.answerType,
-                isCorrect: ans.isCorrect, // بتظهر هنا في النتيجة النهائية
+                isCorrect: ans.isCorrect,
                 studentSubmittedMCQId: ans.studentAnswerId,
                 studentSubmittedGridInText: ans.studentGridInAnswer,
                 correctAnswers: [],
-                explanationContent: {
-                    pdf: ans.explanationPdf,
-                    video: ans.explanationVideo,
-                    image: ans.explanationImage,
-                    text: ans.explanationText,
-                },
+                answers: explanationsMap.get(ans.questionId) ?? [], // array of [{ id, answerPdf, answerVideo, answerImage, answerText }]
                 recommendationToRecap: ans.isCorrect ? null : {
                     lessonName: ans.lessonName,
                     chapterName: ans.chapterName,
