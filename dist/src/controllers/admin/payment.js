@@ -45,7 +45,7 @@ const replyToRechargeRequest = async (req, res) => {
     const newStatus = action === 'approve' ? 'completed' : 'rejected';
     await connection_1.db
         .update(schema_1.payment)
-        .set({ status: newStatus, reason: action === 'reject' ? reason : null })
+        .set({ status: newStatus, reason: reason || null })
         .where((0, drizzle_orm_1.eq)(schema_1.payment.id, paymentId));
     if (newStatus === 'completed') {
         const amountToAdd = existingPayment.amount;
@@ -159,6 +159,7 @@ const replytoPackageBuyRequest = async (req, res) => {
         status: schema_1.payment.status,
         studentId: schema_1.payment.studentId,
         packageId: schema_1.payment.packageId,
+        promoCodeId: schema_1.payment.promoCodeId,
     })
         .from(schema_1.payment)
         .where((0, drizzle_orm_1.eq)(schema_1.payment.id, paymentId))
@@ -219,8 +220,14 @@ const replytoPackageBuyRequest = async (req, res) => {
     await connection_1.db.transaction(async (tx) => {
         await tx
             .update(schema_1.payment)
-            .set({ status: newStatus, reason: action === 'reject' ? reason : null })
+            .set({ status: newStatus, reason: reason || null })
             .where((0, drizzle_orm_1.eq)(schema_1.payment.id, paymentId));
+        if (action === 'approve' && existingPayment.promoCodeId && existingPayment.studentId) {
+            await tx.insert(schema_1.promoCodesUsers).values({
+                promoCodeId: existingPayment.promoCodeId,
+                userId: existingPayment.studentId,
+            });
+        }
         switch (packageType) {
             case "live":
                 await tx.update(schema_1.Student)
@@ -386,6 +393,7 @@ const replyToContentBuyRequest = async (req, res) => {
         id: schema_1.payment.id,
         status: schema_1.payment.status,
         studentId: schema_1.payment.studentId,
+        promoCodeId: schema_1.payment.promoCodeId,
     })
         .from(schema_1.payment)
         .where((0, drizzle_orm_1.eq)(schema_1.payment.id, paymentId))
@@ -400,9 +408,15 @@ const replyToContentBuyRequest = async (req, res) => {
     await connection_1.db.transaction(async (tx) => {
         await tx
             .update(schema_1.payment)
-            .set({ status: newStatus, reason: action === 'reject' ? reason : null })
+            .set({ status: newStatus, reason: reason || null })
             .where((0, drizzle_orm_1.eq)(schema_1.payment.id, paymentId));
         if (action === 'approve') {
+            if (existingPayment.promoCodeId && existingPayment.studentId) {
+                await tx.insert(schema_1.promoCodesUsers).values({
+                    promoCodeId: existingPayment.promoCodeId,
+                    userId: existingPayment.studentId,
+                });
+            }
             // Fetch all enrolled items for this payment to recalculate expiresAt
             // from NOW (approval date) instead of the original purchase date.
             const items = await tx

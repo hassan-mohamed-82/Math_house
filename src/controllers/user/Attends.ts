@@ -8,7 +8,7 @@ import { teachers } from "../../models/schema/admin/teacher";
 import { category } from "../../models/schema/admin/category";
 import { courses } from "../../models/schema/admin/courses";
 import { Student } from "../../models/schema/admin/Student";
-import { eq, and, gte, lt, or, inArray, sql } from "drizzle-orm";
+import { eq, and, gte, lt, or, inArray, sql, gt } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 
@@ -19,7 +19,10 @@ const getStudentId = (req: Request): string => {
 
 export const getUpcomingSessions = async (req: Request, res: Response) => {
     const studentId = getStudentId(req);
-    const today = new Date().toISOString().split("T")[0];
+    // const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const currentTime = now.toISOString().split("T")[1].slice(0, 8); // "HH:MM:SS"
 
     const ExistingStudent = await db.select().from(Student).where(eq(Student.id, studentId));
     if (ExistingStudent.length === 0) {
@@ -53,13 +56,16 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
         .leftJoin(chapters, eq(lessons.chapterId, chapters.id))
         .leftJoin(courses, eq(chapters.courseId, courses.id))
         .where(and(
-            gte(sessions.sessionDate, new Date(today)),
+            sql`(
+                ${sessions.sessionDate} > ${today}
+                OR (${sessions.sessionDate} = ${today} AND ${sessions.timeTo} >= ${currentTime})
+            )`,
             or(
                 inArray(sessions.id, db.select({ sessionId: sessionUsers.sessionId }).from(sessionUsers).where(eq(sessionUsers.studentId, studentId))),
                 inArray(sessions.id, db.select({ sessionId: sessionGroups.sessionId }).from(sessionGroups).where(inArray(sessionGroups.groupId, db.select({ groupId: groupStudents.groupId }).from(groupStudents).where(eq(groupStudents.studentId, studentId)))))
             )
         ))
-        .orderBy(sql`${sessions.sessionDate} ASC`);
+        .orderBy(sql`${sessions.sessionDate} ASC, ${sessions.timeFrom} ASC`);
 
     const sessionsMap = new Map();
     rawSessions.forEach((row) => {
@@ -92,7 +98,10 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
 
 export const getSessionHistory = async (req: Request, res: Response) => {
     const studentId = getStudentId(req);
-    const today = new Date().toISOString().split("T")[0];
+    // const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const currentTime = now.toISOString().split("T")[1].slice(0, 8);
 
     const ExistingStudent = await db.select().from(Student).where(eq(Student.id, studentId));
     if (ExistingStudent.length === 0) {
@@ -131,13 +140,16 @@ export const getSessionHistory = async (req: Request, res: Response) => {
         .leftJoin(chapters, eq(lessons.chapterId, chapters.id))
         .leftJoin(courses, eq(chapters.courseId, courses.id))
         .where(and(
-            lt(sessions.sessionDate, new Date(today)),
+            sql`(
+                ${sessions.sessionDate} < ${today}
+                OR (${sessions.sessionDate} = ${today} AND ${sessions.timeTo} < ${currentTime})
+            )`,
             or(
                 inArray(sessions.id, db.select({ sessionId: sessionUsers.sessionId }).from(sessionUsers).where(eq(sessionUsers.studentId, studentId))),
                 inArray(sessions.id, db.select({ sessionId: sessionGroups.sessionId }).from(sessionGroups).where(inArray(sessionGroups.groupId, db.select({ groupId: groupStudents.groupId }).from(groupStudents).where(eq(groupStudents.studentId, studentId)))))
             )
         ))
-        .orderBy(sql`${sessions.sessionDate} DESC`);
+        .orderBy(sql`${sessions.sessionDate} DESC, ${sessions.timeFrom} DESC`);
 
     const pastSessionsMap = new Map();
     rawPastSessions.forEach((row) => {

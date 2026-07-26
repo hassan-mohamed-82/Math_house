@@ -226,6 +226,7 @@ const handlePaymobCallback = async (req, res) => {
         paymentMethodId: schema_1.payment.paymentMethodId,
         purpose: schema_1.payment.purpose,
         packageId: schema_1.payment.packageId,
+        promoCodeId: schema_1.payment.promoCodeId,
     })
         .from(schema_1.payment)
         .where((0, drizzle_orm_1.eq)(schema_1.payment.id, merchantOrderId))
@@ -280,16 +281,42 @@ const handlePaymobCallback = async (req, res) => {
         await creditWalletForPayment(existingPayment.id, existingPayment.studentId, existingPayment.amount);
     }
     else if (existingPayment.purpose === 'purchase') {
-        if (!existingPayment.packageId) {
-            throw new Errors_1.BadRequest('Associated package not found for this payment');
+        if (existingPayment.packageId) {
+            // ── Package (exam/question/live balance) purchase ──────────────────
+            await connection_1.db.transaction(async (tx) => {
+                await tx
+                    .update(schema_1.payment)
+                    .set({ status: 'completed' })
+                    .where((0, drizzle_orm_1.eq)(schema_1.payment.id, existingPayment.id));
+                if (existingPayment.promoCodeId && existingPayment.studentId) {
+                    await tx.insert(schema_1.promoCodesUsers).values({
+                        promoCodeId: existingPayment.promoCodeId,
+                        userId: existingPayment.studentId,
+                    });
+                }
+                await (0, payment_1.creditPackageBalance)(existingPayment.studentId, existingPayment.packageId, tx);
+            });
         }
-        await connection_1.db.transaction(async (tx) => {
-            await tx
-                .update(schema_1.payment)
-                .set({ status: 'completed' })
-                .where((0, drizzle_orm_1.eq)(schema_1.payment.id, existingPayment.id));
-            await (0, payment_1.creditPackageBalance)(existingPayment.studentId, existingPayment.packageId, tx);
-        });
+        else {
+            // ── Course / Chapter / Lesson enrollment purchase ──────────────────
+            // Activate all pending enrolled items tied to this payment
+            await connection_1.db.transaction(async (tx) => {
+                await tx
+                    .update(schema_1.payment)
+                    .set({ status: 'completed' })
+                    .where((0, drizzle_orm_1.eq)(schema_1.payment.id, existingPayment.id));
+                if (existingPayment.promoCodeId && existingPayment.studentId) {
+                    await tx.insert(schema_1.promoCodesUsers).values({
+                        promoCodeId: existingPayment.promoCodeId,
+                        userId: existingPayment.studentId,
+                    });
+                }
+                await tx
+                    .update(schema_1.enrolledItems)
+                    .set({ status: 'active' })
+                    .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.enrolledItems.paymentId, existingPayment.id), (0, drizzle_orm_1.eq)(schema_1.enrolledItems.status, 'pending')));
+            });
+        }
     }
     else {
         throw new Errors_1.BadRequest('Unsupported payment purpose');

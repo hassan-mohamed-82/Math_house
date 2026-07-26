@@ -242,7 +242,7 @@ const getStudentById = async (req, res) => {
 exports.getStudentById = getStudentById;
 const updateStudent = async (req, res) => {
     const { id } = req.params;
-    const { firstname, lastname, nickname, email, phone, category: categoryId, grade, parentphone, oldPassword, newPassword, avatar } = req.body;
+    const { firstname, lastname, nickname, email, phone, category: categoryId, grade, parentphone, password, avatar } = req.body;
     if (!id) {
         throw new BadRequest_1.BadRequest("id is required");
     }
@@ -307,15 +307,8 @@ const updateStudent = async (req, res) => {
         updateData.grade = grade;
     if (parentphone)
         updateData.parentphone = parentphone;
-    if (newPassword) {
-        if (!oldPassword) {
-            throw new BadRequest_1.BadRequest("old password is required to change password");
-        }
-        const isPasswordValid = await bcrypt_1.default.compare(oldPassword, existingStudent[0].password);
-        if (!isPasswordValid) {
-            throw new BadRequest_1.BadRequest("old password is not valid");
-        }
-        updateData.password = await bcrypt_1.default.hash(newPassword, 10);
+    if (password) {
+        updateData.password = await bcrypt_1.default.hash(password, 10);
     }
     if (Object.keys(updateData).length === 0) {
         throw new BadRequest_1.BadRequest("no data to update");
