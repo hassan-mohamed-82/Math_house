@@ -50,7 +50,7 @@ export const replyToRechargeRequest = async (req: Request, res: Response) => {
 
     await db
         .update(payment)
-        .set({ status: newStatus, reason: action === 'reject' ? reason : null })
+        .set({ status: newStatus, reason: reason || null })
         .where(eq(payment.id, paymentId));
 
     if (newStatus === 'completed') {
@@ -268,7 +268,7 @@ export const replytoPackageBuyRequest = async (req: Request, res: Response) => {
     await db.transaction(async (tx) => {
         await tx
             .update(payment)
-            .set({ status: newStatus, reason: action === 'reject' ? reason : null })
+            .set({ status: newStatus, reason: reason || null })
             .where(eq(payment.id, paymentId));
 
         if (action === 'approve' && existingPayment.promoCodeId && existingPayment.studentId) {
@@ -504,7 +504,7 @@ export const replyToContentBuyRequest = async (req: Request, res: Response) => {
     await db.transaction(async (tx) => {
         await tx
             .update(payment)
-            .set({ status: newStatus, reason: action === 'reject' ? reason : null })
+            .set({ status: newStatus, reason: reason || null })
             .where(eq(payment.id, paymentId));
 
         if (action === 'approve') {
