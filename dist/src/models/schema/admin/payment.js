@@ -7,6 +7,7 @@ const paymentMethod_1 = require("./paymentMethod");
 const Student_1 = require("./Student");
 const parent_1 = require("./parent");
 const Package_1 = require("./Package");
+const promoCodes_1 = require("./promoCodes");
 exports.payment = (0, mysql_core_1.mysqlTable)("payment", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     amount: (0, mysql_core_1.int)("amount").notNull(),
@@ -18,6 +19,7 @@ exports.payment = (0, mysql_core_1.mysqlTable)("payment", {
     source: (0, mysql_core_1.mysqlEnum)("source", ["student", "parent"]).notNull(),
     purpose: (0, mysql_core_1.mysqlEnum)("purpose", ["wallet_recharge", "purchase"]).notNull(),
     packageId: (0, mysql_core_1.char)("packageId", { length: 36 }).references(() => Package_1.packages.id, { onDelete: "cascade" }),
+    promoCodeId: (0, mysql_core_1.char)("promoCodeId", { length: 255 }).references(() => promoCodes_1.promoCodes.id, { onDelete: "set null" }),
     includedAnswers: (0, mysql_core_1.boolean)("includedAnswers").default(false).notNull(),
     reason: (0, mysql_core_1.char)("reason", { length: 255 }),
     isDeleted: (0, mysql_core_1.boolean)("isDeleted").default(false).notNull(),

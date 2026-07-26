@@ -9,6 +9,7 @@ const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const handleImages_1 = require("../../utils/handleImages");
 const paymob_1 = require("../../utils/paymob");
+const promoCodeValidation_1 = require("../../utils/promoCodeValidation");
 const getAuthenticatedStudentId = (req) => {
     const studentId = req.user?.id;
     if (!studentId)
@@ -66,7 +67,7 @@ const creditPackageBalance = async (studentId, packageId, database = connection_
 };
 exports.creditPackageBalance = creditPackageBalance;
 const requestPackageBuy = async (req, res) => {
-    const { packageId, paymentMethodId, receiptImg, buyAnswersAddon } = req.body;
+    const { packageId, paymentMethodId, receiptImg, buyAnswersAddon, promoCode } = req.body;
     const studentId = getAuthenticatedStudentId(req);
     if (!packageId || !paymentMethodId || !receiptImg) {
         throw new Errors_1.BadRequest("Package ID, Payment Method ID, and receipt image are required");
@@ -121,6 +122,13 @@ const requestPackageBuy = async (req, res) => {
             finalAmount += Number(existingPackage.answersPrice || 0);
         }
     }
+    let appliedPromoCodeId;
+    if (promoCode) {
+        const promo = await (0, promoCodeValidation_1.validatePromoCode)(promoCode, studentId, { packageId });
+        appliedPromoCodeId = promo.id;
+        const discountVal = finalAmount * (promo.discountAmount / 100);
+        finalAmount = Math.round(Math.max(0, finalAmount - discountVal));
+    }
     const savedReceiptImg = await (0, handleImages_1.validateAndSaveLogo)(req, receiptImg, 'payment_receipts');
     await connection_1.db.insert(schema_1.payment).values({
         studentId: studentId,
@@ -131,6 +139,7 @@ const requestPackageBuy = async (req, res) => {
         receiptImg: savedReceiptImg,
         source: "student",
         packageId: packageId,
+        promoCodeId: appliedPromoCodeId,
         includedAnswers: answersIncluded,
         isDeleted: false
     });
@@ -138,7 +147,7 @@ const requestPackageBuy = async (req, res) => {
 };
 exports.requestPackageBuy = requestPackageBuy;
 const initiateAutomaticPackageBuy = async (req, res) => {
-    const { packageId, paymentMethodId, buyAnswersAddon } = req.body;
+    const { packageId, paymentMethodId, buyAnswersAddon, promoCode } = req.body;
     const studentId = getAuthenticatedStudentId(req);
     if (!packageId || !paymentMethodId) {
         throw new Errors_1.BadRequest('Package ID and payment method ID are required');
@@ -164,7 +173,14 @@ const initiateAutomaticPackageBuy = async (req, res) => {
             finalAmount += Number(existingPackage.answersPrice || 0);
         }
     }
-    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
+    let appliedPromoCodeId;
+    if (promoCode) {
+        const promo = await (0, promoCodeValidation_1.validatePromoCode)(promoCode, studentId, { packageId });
+        appliedPromoCodeId = promo.id;
+        const discountVal = finalAmount * (promo.discountAmount / 100);
+        finalAmount = Math.round(Math.max(0, finalAmount - discountVal));
+    }
+    if (!Number.isFinite(finalAmount) || finalAmount < 0) {
         throw new Errors_1.BadRequest('Package price calculated is invalid');
     }
     const [existingPaymentMethod] = await connection_1.db.select({
@@ -193,6 +209,7 @@ const initiateAutomaticPackageBuy = async (req, res) => {
         source: 'student',
         purpose: 'purchase',
         packageId,
+        promoCodeId: appliedPromoCodeId,
         includedAnswers: answersIncluded,
         isDeleted: false
     });

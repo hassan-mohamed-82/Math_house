@@ -18,7 +18,10 @@ const getStudentId = (req) => {
 };
 const getUpcomingSessions = async (req, res) => {
     const studentId = getStudentId(req);
-    const today = new Date().toISOString().split("T")[0];
+    // const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const currentTime = now.toISOString().split("T")[1].slice(0, 8); // "HH:MM:SS"
     const ExistingStudent = await connection_1.db.select().from(Student_1.Student).where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
     if (ExistingStudent.length === 0) {
         throw new Errors_1.NotFound("Student not found");
@@ -49,8 +52,11 @@ const getUpcomingSessions = async (req, res) => {
         .leftJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(Session_1.sessionLessons.lessonId, schema_1.lessons.id))
         .leftJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
         .leftJoin(courses_1.courses, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, courses_1.courses.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.gte)(Session_1.sessions.sessionDate, new Date(today)), (0, drizzle_orm_1.or)((0, drizzle_orm_1.inArray)(Session_1.sessions.id, connection_1.db.select({ sessionId: Session_1.sessionUsers.sessionId }).from(Session_1.sessionUsers).where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.studentId, studentId))), (0, drizzle_orm_1.inArray)(Session_1.sessions.id, connection_1.db.select({ sessionId: Session_1.sessionGroups.sessionId }).from(Session_1.sessionGroups).where((0, drizzle_orm_1.inArray)(Session_1.sessionGroups.groupId, connection_1.db.select({ groupId: Groups_1.groupStudents.groupId }).from(Groups_1.groupStudents).where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.studentId, studentId))))))))
-        .orderBy((0, drizzle_orm_1.sql) `${Session_1.sessions.sessionDate} ASC`);
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.sql) `(
+                ${Session_1.sessions.sessionDate} > ${today}
+                OR (${Session_1.sessions.sessionDate} = ${today} AND ${Session_1.sessions.timeTo} >= ${currentTime})
+            )`, (0, drizzle_orm_1.or)((0, drizzle_orm_1.inArray)(Session_1.sessions.id, connection_1.db.select({ sessionId: Session_1.sessionUsers.sessionId }).from(Session_1.sessionUsers).where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.studentId, studentId))), (0, drizzle_orm_1.inArray)(Session_1.sessions.id, connection_1.db.select({ sessionId: Session_1.sessionGroups.sessionId }).from(Session_1.sessionGroups).where((0, drizzle_orm_1.inArray)(Session_1.sessionGroups.groupId, connection_1.db.select({ groupId: Groups_1.groupStudents.groupId }).from(Groups_1.groupStudents).where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.studentId, studentId))))))))
+        .orderBy((0, drizzle_orm_1.sql) `${Session_1.sessions.sessionDate} ASC, ${Session_1.sessions.timeFrom} ASC`);
     const sessionsMap = new Map();
     rawSessions.forEach((row) => {
         if (!sessionsMap.has(row.id)) {
@@ -80,7 +86,10 @@ const getUpcomingSessions = async (req, res) => {
 exports.getUpcomingSessions = getUpcomingSessions;
 const getSessionHistory = async (req, res) => {
     const studentId = getStudentId(req);
-    const today = new Date().toISOString().split("T")[0];
+    // const today = new Date().toISOString().split("T")[0];
+    const now = new Date();
+    const today = now.toISOString().split("T")[0];
+    const currentTime = now.toISOString().split("T")[1].slice(0, 8);
     const ExistingStudent = await connection_1.db.select().from(Student_1.Student).where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
     if (ExistingStudent.length === 0) {
         throw new Errors_1.NotFound("Student not found");
@@ -113,8 +122,11 @@ const getSessionHistory = async (req, res) => {
         .leftJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(Session_1.sessionLessons.lessonId, schema_1.lessons.id))
         .leftJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
         .leftJoin(courses_1.courses, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, courses_1.courses.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.lt)(Session_1.sessions.sessionDate, new Date(today)), (0, drizzle_orm_1.or)((0, drizzle_orm_1.inArray)(Session_1.sessions.id, connection_1.db.select({ sessionId: Session_1.sessionUsers.sessionId }).from(Session_1.sessionUsers).where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.studentId, studentId))), (0, drizzle_orm_1.inArray)(Session_1.sessions.id, connection_1.db.select({ sessionId: Session_1.sessionGroups.sessionId }).from(Session_1.sessionGroups).where((0, drizzle_orm_1.inArray)(Session_1.sessionGroups.groupId, connection_1.db.select({ groupId: Groups_1.groupStudents.groupId }).from(Groups_1.groupStudents).where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.studentId, studentId))))))))
-        .orderBy((0, drizzle_orm_1.sql) `${Session_1.sessions.sessionDate} DESC`);
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.sql) `(
+                ${Session_1.sessions.sessionDate} < ${today}
+                OR (${Session_1.sessions.sessionDate} = ${today} AND ${Session_1.sessions.timeTo} < ${currentTime})
+            )`, (0, drizzle_orm_1.or)((0, drizzle_orm_1.inArray)(Session_1.sessions.id, connection_1.db.select({ sessionId: Session_1.sessionUsers.sessionId }).from(Session_1.sessionUsers).where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.studentId, studentId))), (0, drizzle_orm_1.inArray)(Session_1.sessions.id, connection_1.db.select({ sessionId: Session_1.sessionGroups.sessionId }).from(Session_1.sessionGroups).where((0, drizzle_orm_1.inArray)(Session_1.sessionGroups.groupId, connection_1.db.select({ groupId: Groups_1.groupStudents.groupId }).from(Groups_1.groupStudents).where((0, drizzle_orm_1.eq)(Groups_1.groupStudents.studentId, studentId))))))))
+        .orderBy((0, drizzle_orm_1.sql) `${Session_1.sessions.sessionDate} DESC, ${Session_1.sessions.timeFrom} DESC`);
     const pastSessionsMap = new Map();
     rawPastSessions.forEach((row) => {
         if (!pastSessionsMap.has(row.id)) {
