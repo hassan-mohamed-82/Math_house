@@ -555,6 +555,8 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound } from "../../Errors";
 import { validateAndSaveLogo } from "../../utils/handleImages";
 import { createPaymobCheckoutSession } from "../../utils/paymob";
+import { validatePromoCode } from "../../utils/promoCodeValidation";
+import { promoCodesUsers } from "../../models/schema";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -706,6 +708,7 @@ export const enrollInCourse = async (req: Request, res: Response) => {
         paymentType,
         paymentMethodId,
         image,
+        promoCode,
     } = req.body;
 
     if (paymentType === "automatic") {
@@ -715,7 +718,19 @@ export const enrollInCourse = async (req: Request, res: Response) => {
     await checkDuplicateEnrollment(studentId, coursesPayload, chaptersPayload, lessonsPayload);
 
     await db.transaction(async (tx) => {
-        const { itemsToEnroll, totalPrice } = await resolveEnrollmentItems(tx, coursesPayload, chaptersPayload, lessonsPayload);
+        let { itemsToEnroll, totalPrice } = await resolveEnrollmentItems(tx, coursesPayload, chaptersPayload, lessonsPayload);
+
+        let appliedPromoCodeId: string | undefined;
+        if (promoCode) {
+            const promo = await validatePromoCode(promoCode, studentId, { 
+                courseIds: coursesPayload?.map((c: any) => c.id), 
+                chapterIds: chaptersPayload?.map((c: any) => c.id), 
+                lessonIds: lessonsPayload?.map((c: any) => c.id) 
+            });
+            appliedPromoCodeId = promo.id;
+            const discountVal = totalPrice * (promo.discountAmount / 100);
+            totalPrice = Math.round(Math.max(0, totalPrice - discountVal));
+        }
 
         let paymentRecordId: string | null = null;
         let enrollmentStatus: "active" | "pending" = "pending";
@@ -739,6 +754,13 @@ export const enrollInCourse = async (req: Request, res: Response) => {
 
             enrollmentStatus = "active";
             paymentStatus = "completed";
+
+            if (appliedPromoCodeId) {
+                await tx.insert(promoCodesUsers).values({
+                    promoCodeId: appliedPromoCodeId,
+                    userId: studentId,
+                });
+            }
         }
         // b. Manual payment method
         else {
@@ -762,6 +784,7 @@ export const enrollInCourse = async (req: Request, res: Response) => {
                 receiptImg: savedImageUrl,
                 source: "student",
                 purpose: "purchase",
+                promoCodeId: appliedPromoCodeId,
             });
 
             paymentRecordId = paymentId;
@@ -800,6 +823,7 @@ export const initiateAutomaticEnrollment = async (req: Request, res: Response) =
         chapters: chaptersPayload,
         lessons: lessonsPayload,
         paymentMethodId,
+        promoCode,
     } = req.body;
 
     if (!paymentMethodId) throw new BadRequest("Payment method ID is required");
@@ -821,9 +845,21 @@ export const initiateAutomaticEnrollment = async (req: Request, res: Response) =
     await checkDuplicateEnrollment(studentId, coursesPayload, chaptersPayload, lessonsPayload);
 
     // 3. Resolve items and total price (use db directly, not a transaction yet)
-    const { itemsToEnroll, totalPrice } = await resolveEnrollmentItems(db, coursesPayload, chaptersPayload, lessonsPayload);
+    let { itemsToEnroll, totalPrice } = await resolveEnrollmentItems(db, coursesPayload, chaptersPayload, lessonsPayload);
 
-    if (!Number.isFinite(totalPrice) || totalPrice <= 0) {
+    let appliedPromoCodeId: string | undefined;
+    if (promoCode) {
+        const promo = await validatePromoCode(promoCode, studentId, { 
+            courseIds: coursesPayload?.map((c: any) => c.id), 
+            chapterIds: chaptersPayload?.map((c: any) => c.id), 
+            lessonIds: lessonsPayload?.map((c: any) => c.id) 
+        });
+        appliedPromoCodeId = promo.id;
+        const discountVal = totalPrice * (promo.discountAmount / 100);
+        totalPrice = Math.round(Math.max(0, totalPrice - discountVal));
+    }
+
+    if (!Number.isFinite(totalPrice) || totalPrice < 0) {
         throw new BadRequest("Total price for selected items is invalid or zero");
     }
 
@@ -850,6 +886,7 @@ export const initiateAutomaticEnrollment = async (req: Request, res: Response) =
             status: "pending",
             source: "student",
             purpose: "purchase",
+            promoCodeId: appliedPromoCodeId,
         });
 
         for (const item of itemsToEnroll) {

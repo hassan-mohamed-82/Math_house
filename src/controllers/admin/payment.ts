@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { BadRequest } from '../../Errors';
 import { db } from '../../models/connection';
-import { packages, payment, paymentMethod, Student, wallet, walletTransaction, enrolledItems } from '../../models/schema';
+import { packages, payment, paymentMethod, Student, wallet, walletTransaction, enrolledItems, promoCodesUsers } from '../../models/schema';
 import { prices } from '../../models/schema/admin/prices';
 import { and, count, desc, eq, like, or, sql, isNotNull, isNull } from 'drizzle-orm';
 import { SuccessResponse } from '../../utils/response';
@@ -193,6 +193,7 @@ export const replytoPackageBuyRequest = async (req: Request, res: Response) => {
             status: payment.status,
             studentId: payment.studentId,
             packageId: payment.packageId,
+            promoCodeId: payment.promoCodeId,
         })
         .from(payment)
         .where(eq(payment.id, paymentId))
@@ -269,6 +270,13 @@ export const replytoPackageBuyRequest = async (req: Request, res: Response) => {
             .update(payment)
             .set({ status: newStatus, reason: action === 'reject' ? reason : null })
             .where(eq(payment.id, paymentId));
+
+        if (action === 'approve' && existingPayment.promoCodeId && existingPayment.studentId) {
+            await tx.insert(promoCodesUsers).values({
+                promoCodeId: existingPayment.promoCodeId,
+                userId: existingPayment.studentId,
+            });
+        }
 
         switch (packageType) {
             case "live":
@@ -477,6 +485,7 @@ export const replyToContentBuyRequest = async (req: Request, res: Response) => {
             id: payment.id,
             status: payment.status,
             studentId: payment.studentId,
+            promoCodeId: payment.promoCodeId,
         })
         .from(payment)
         .where(eq(payment.id, paymentId))
@@ -499,6 +508,12 @@ export const replyToContentBuyRequest = async (req: Request, res: Response) => {
             .where(eq(payment.id, paymentId));
 
         if (action === 'approve') {
+            if (existingPayment.promoCodeId && existingPayment.studentId) {
+                await tx.insert(promoCodesUsers).values({
+                    promoCodeId: existingPayment.promoCodeId,
+                    userId: existingPayment.studentId,
+                });
+            }
             // Fetch all enrolled items for this payment to recalculate expiresAt
             // from NOW (approval date) instead of the original purchase date.
             const items = await tx

@@ -4,6 +4,7 @@ import { paymentMethod } from "./paymentMethod";
 import { Student } from "./Student";
 import { parents } from "./parent";
 import { packages } from "./Package";
+import { promoCodes } from "./promoCodes";
 
 export const payment = mysqlTable("payment", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
@@ -16,6 +17,7 @@ export const payment = mysqlTable("payment", {
     source: mysqlEnum("source", ["student", "parent"]).notNull(),
     purpose: mysqlEnum("purpose", ["wallet_recharge", "purchase"]).notNull(),
     packageId: char("packageId", { length: 36 }).references(() => packages.id, { onDelete: "cascade" }),
+    promoCodeId: char("promoCodeId", { length: 255 }).references(() => promoCodes.id, { onDelete: "set null" }),
     includedAnswers: boolean("includedAnswers").default(false).notNull(), 
     reason: char("reason", { length: 255 }),
     isDeleted: boolean("isDeleted").default(false).notNull(),

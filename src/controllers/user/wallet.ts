@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import { BadRequest, NotFound, UnauthorizedError } from '../../Errors';
 import { SuccessResponse } from '../../utils/response';
 import { db } from '../../models/connection';
-import { parents, payment, paymentMethod, Student, wallet, walletTransaction,enrolledItems } from '../../models/schema';
+import { parents, payment, paymentMethod, Student, wallet, walletTransaction,enrolledItems, promoCodesUsers } from '../../models/schema';
 import { and, count, desc, eq, like, or, sql } from 'drizzle-orm';
 import { validateAndSaveLogo } from '../../utils/handleImages';
 import { createPaymobCheckoutSession, extractPaymobCallbackPayload, verifyPaymobHmac } from '../../utils/paymob';
@@ -276,6 +276,7 @@ export const handlePaymobCallback = async (req: Request, res: Response) => {
             paymentMethodId: payment.paymentMethodId,
             purpose: payment.purpose,
             packageId: payment.packageId,
+            promoCodeId: payment.promoCodeId,
         })
         .from(payment)
         .where(eq(payment.id, merchantOrderId))
@@ -348,6 +349,13 @@ export const handlePaymobCallback = async (req: Request, res: Response) => {
                     .set({ status: 'completed' })
                     .where(eq(payment.id, existingPayment.id));
 
+                if (existingPayment.promoCodeId && existingPayment.studentId) {
+                    await tx.insert(promoCodesUsers).values({
+                        promoCodeId: existingPayment.promoCodeId,
+                        userId: existingPayment.studentId,
+                    });
+                }
+
                 await creditPackageBalance(existingPayment.studentId!, existingPayment.packageId!, tx);
             });
         } else {
@@ -359,6 +367,13 @@ export const handlePaymobCallback = async (req: Request, res: Response) => {
                     .update(payment)
                     .set({ status: 'completed' })
                     .where(eq(payment.id, existingPayment.id));
+
+                if (existingPayment.promoCodeId && existingPayment.studentId) {
+                    await tx.insert(promoCodesUsers).values({
+                        promoCodeId: existingPayment.promoCodeId,
+                        userId: existingPayment.studentId,
+                    });
+                }
 
                 await tx
                     .update(enrolledItems)

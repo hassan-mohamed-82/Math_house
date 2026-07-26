@@ -7,6 +7,7 @@ import { packages, paymentMethod, Student, parents, payment } from "../../models
 import { and, count, desc, eq, like, or, sql, isNotNull } from 'drizzle-orm';
 import { validateAndSaveLogo } from "../../utils/handleImages";
 import { createPaymobCheckoutSession } from "../../utils/paymob";
+import { validatePromoCode } from "../../utils/promoCodeValidation";
 
 const getAuthenticatedStudentId = (req: Request) => {
     const studentId = req.user?.id;
@@ -67,7 +68,7 @@ export const creditPackageBalance = async (studentId: string, packageId: string,
 };
 
 export const requestPackageBuy = async (req: Request, res: Response) => {
-    const { packageId, paymentMethodId, receiptImg, buyAnswersAddon } = req.body;
+    const { packageId, paymentMethodId, receiptImg, buyAnswersAddon, promoCode } = req.body;
     const studentId = getAuthenticatedStudentId(req);
 
     if (!packageId || !paymentMethodId || !receiptImg) {
@@ -126,6 +127,14 @@ export const requestPackageBuy = async (req: Request, res: Response) => {
         }
     }
 
+    let appliedPromoCodeId: string | undefined;
+    if (promoCode) {
+        const promo = await validatePromoCode(promoCode, studentId, { packageId });
+        appliedPromoCodeId = promo.id;
+        const discountVal = finalAmount * (promo.discountAmount / 100);
+        finalAmount = Math.round(Math.max(0, finalAmount - discountVal));
+    }
+
     const savedReceiptImg = await validateAndSaveLogo(req, receiptImg, 'payment_receipts');
 
     await db.insert(payment).values({
@@ -137,6 +146,7 @@ export const requestPackageBuy = async (req: Request, res: Response) => {
         receiptImg: savedReceiptImg,
         source: "student",
         packageId: packageId,
+        promoCodeId: appliedPromoCodeId,
         includedAnswers: answersIncluded,
         isDeleted: false
     });
@@ -145,7 +155,7 @@ export const requestPackageBuy = async (req: Request, res: Response) => {
 };
 
 export const initiateAutomaticPackageBuy = async (req: Request, res: Response) => {
-    const { packageId, paymentMethodId, buyAnswersAddon } = req.body;
+    const { packageId, paymentMethodId, buyAnswersAddon, promoCode } = req.body;
     const studentId = getAuthenticatedStudentId(req);
 
     if (!packageId || !paymentMethodId) {
@@ -175,7 +185,15 @@ export const initiateAutomaticPackageBuy = async (req: Request, res: Response) =
         }
     }
 
-    if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
+    let appliedPromoCodeId: string | undefined;
+    if (promoCode) {
+        const promo = await validatePromoCode(promoCode, studentId, { packageId });
+        appliedPromoCodeId = promo.id;
+        const discountVal = finalAmount * (promo.discountAmount / 100);
+        finalAmount = Math.round(Math.max(0, finalAmount - discountVal));
+    }
+
+    if (!Number.isFinite(finalAmount) || finalAmount < 0) {
         throw new BadRequest('Package price calculated is invalid');
     }
 
@@ -204,6 +222,7 @@ export const initiateAutomaticPackageBuy = async (req: Request, res: Response) =
         source: 'student',
         purpose: 'purchase',
         packageId,
+        promoCodeId: appliedPromoCodeId,
         includedAnswers: answersIncluded,
         isDeleted: false
     });
