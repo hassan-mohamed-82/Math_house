@@ -7,9 +7,12 @@ import { Student } from "../../models/schema/admin/Student";
 import { courses } from "../../models/schema/admin/courses";
 import { category } from "../../models/schema/admin/category";
 import { Sections } from "../../models/schema/admin/sections";
-import { questions, questionOptions, questionAnswers } from "../../models/schema/admin/questions";
+import { questions, questionOptions, questionAnswers, ParallelQuestion, ParallelQuestionOptions } from "../../models/schema/admin/questions";
 import { examCodes } from "../../models/schema/admin/examCodes";
-import { eq, and, inArray, sql, desc } from "drizzle-orm";
+import { studentParallelAttempts } from "../../models/schema/admin/studentParallelAttempts";
+import { studentParallelAnswers } from "../../models/schema/admin/studentParallelAnswers";
+import { payment } from "../../models/schema/admin/payment";
+import { eq, and, inArray, sql, desc, isNull } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 import { randomUUID } from "crypto";
@@ -500,6 +503,7 @@ export const submitExam = async (req: Request, res: Response) => {
         await tx.update(examAttempts).set({ endedAt: new Date(), score: totalAchievedScore, isPassed, status: finalStatus }).where(eq(examAttempts.id, attempt.id));
     });
 
+    // ── Fetch wrong questions + enrich with hasParallel ──────────────────────────
     const wrongIds = answersToInsert.filter((a: any) => !a.isCorrect).map((a: any) => a.questionId);
     let mistakes: any[] = [];
     if (wrongIds.length > 0) {
@@ -518,10 +522,484 @@ export const submitExam = async (req: Request, res: Response) => {
                 answerText: m.text,
             });
         }
-        mistakes = qs.map(q => ({ ...q, options: opts.filter(o => o.questionId === q.id), answers: mediaMap.get(q.id) ?? [] }));
+
+        // Check which wrong questions have at least one parallel question
+        const parallelRows = await db
+            .select({ originalQuestionId: ParallelQuestion.origianlQuestionId })
+            .from(ParallelQuestion)
+            .where(inArray(ParallelQuestion.origianlQuestionId, wrongIds));
+
+        const parallelQuestionIds = new Set(parallelRows.map(r => r.originalQuestionId));
+
+        mistakes = qs.map(q => ({
+            ...q,
+            options: opts.filter(o => o.questionId === q.id),
+            answers: mediaMap.get(q.id) ?? [],
+            hasParallel: parallelQuestionIds.has(q.id),
+        }));
     }
 
-    return SuccessResponse(res, { result: { attemptId: attempt.id, score: totalAchievedScore, totalScore: exam.totalScore, passScore: exam.passScore, isPassed, status: finalStatus, mistakes } });
+    // ── Student balances ──────────────────────────────────────────────────────────
+    const [updatedStudent] = await db
+        .select({ questionBalance: Student.questionbalance, examBalance: Student.exambalance })
+        .from(Student)
+        .where(eq(Student.id, studentId));
+
+    // ── Check if this student's exam purchase included answers ────────────────────
+    const [answersPayment] = await db
+        .select({ id: payment.id })
+        .from(payment)
+        .where(and(
+            eq(payment.studentId, studentId),
+            eq(payment.purpose, "purchase"),
+            eq(payment.status, "completed"),
+            eq(payment.includedAnswers, true),
+            eq(payment.isDeleted, false),
+        ))
+        .limit(1);
+
+    return SuccessResponse(res, {
+        result: {
+            attemptId: attempt.id,
+            score: totalAchievedScore,
+            totalScore: exam.totalScore,
+            passScore: exam.passScore,
+            isPassed,
+            status: finalStatus,
+            mistakes,
+            studentBalances: {
+                questionBalance: updatedStudent?.questionBalance ?? 0,
+                examBalance: updatedStudent?.examBalance ?? 0,
+            },
+            examHasAnswers: !!answersPayment,
+        },
+    });
+};
+
+// ===================== GET PARALLEL QUESTIONS =====================
+// POST /exams/parallel/questions
+// Body: { questionIds: string[], attemptId: string }
+export const getParallelQuestions = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { questionIds, attemptId } = req.body;
+
+    if (!attemptId || !Array.isArray(questionIds) || questionIds.length === 0) {
+        throw new BadRequest("attemptId and a non-empty questionIds array are required");
+    }
+
+    // 1. Validate the attempt belongs to this student and is completed/timed_out
+    const [attempt] = await db
+        .select({ id: examAttempts.id, status: examAttempts.status })
+        .from(examAttempts)
+        .where(and(
+            eq(examAttempts.id, attemptId),
+            eq(examAttempts.studentId, studentId),
+            inArray(examAttempts.status, ["completed", "timed_out"]),
+        ))
+        .limit(1);
+
+    if (!attempt) throw new NotFound("No completed exam attempt found with that ID");
+
+    // 2. Validate all requested questionIds were actually answered wrong in this attempt
+    const wrongAnswers = await db
+        .select({ questionId: studentAnswers.questionId })
+        .from(studentAnswers)
+        .where(and(
+            eq(studentAnswers.attemptId, attemptId),
+            eq(studentAnswers.isCorrect, false),
+            inArray(studentAnswers.questionId, questionIds),
+        ));
+
+    const validWrongIds = new Set(wrongAnswers.map(a => a.questionId));
+    const invalidIds = questionIds.filter((id: string) => !validWrongIds.has(id));
+    if (invalidIds.length > 0) {
+        throw new BadRequest(`The following question IDs are not wrong answers from this attempt: ${invalidIds.join(", ")}`);
+    }
+
+    // 3. Find the latest parallel question for each requested original question
+    const allParallels = await db
+        .select({
+            id: ParallelQuestion.id,
+            originalQuestionId: ParallelQuestion.origianlQuestionId,
+            question: ParallelQuestion.question,
+            answerType: ParallelQuestion.answerType,
+            difficulty: ParallelQuestion.difficulty,
+            lessonId: ParallelQuestion.lessonId,
+            createdAt: ParallelQuestion.createdAt,
+        })
+        .from(ParallelQuestion)
+        .where(inArray(ParallelQuestion.origianlQuestionId, questionIds))
+        .orderBy(desc(ParallelQuestion.createdAt));
+
+    // Pick the most recent parallel per original question
+    const parallelMap = new Map<string, typeof allParallels[0]>();
+    for (const p of allParallels) {
+        if (!parallelMap.has(p.originalQuestionId)) {
+            parallelMap.set(p.originalQuestionId, p);
+        }
+    }
+
+    const selectedParallels = Array.from(parallelMap.values());
+    const chargeableCount = selectedParallels.length;
+
+    if (chargeableCount === 0) {
+        throw new BadRequest("None of the requested questions have parallel questions available");
+    }
+
+    // 4. Check question balance
+    const [student] = await db
+        .select({ questionBalance: Student.questionbalance })
+        .from(Student)
+        .where(eq(Student.id, studentId));
+
+    if (!student) throw new NotFound("Student not found");
+    if ((student.questionBalance ?? 0) < chargeableCount) {
+        throw new BadRequest(
+            `Insufficient question balance. You need ${chargeableCount} but have ${student.questionBalance ?? 0}. Please purchase a question package.`
+        );
+    }
+
+    // 5. Fetch options for chosen parallels (no isCorrect revealed)
+    const parallelIds = selectedParallels.map(p => p.id);
+    const parallelOptions = await db
+        .select({
+            id: ParallelQuestionOptions.id,
+            questionId: ParallelQuestionOptions.questionId,
+            answer: ParallelQuestionOptions.answer,
+            order: ParallelQuestionOptions.order,
+        })
+        .from(ParallelQuestionOptions)
+        .where(inArray(ParallelQuestionOptions.questionId, parallelIds));
+
+    const optionsMap = new Map<string, typeof parallelOptions>();
+    for (const opt of parallelOptions) {
+        const list = optionsMap.get(opt.questionId) ?? [];
+        list.push(opt);
+        optionsMap.set(opt.questionId, list);
+    }
+
+    // 6. Deduct balance + create parallel attempt in a transaction
+    const parallelAttemptId = randomUUID();
+
+    await db.transaction(async (tx) => {
+        await tx
+            .update(Student)
+            .set({ questionbalance: sql`${Student.questionbalance} - ${chargeableCount}` })
+            .where(eq(Student.id, studentId));
+
+        await tx.insert(studentParallelAttempts).values({
+            id: parallelAttemptId,
+            studentId,
+            examAttemptId: attemptId,
+            status: "in_progress",
+        });
+    });
+
+    const parallelQuestions = selectedParallels.map(p => ({
+        id: p.id,
+        originalQuestionId: p.originalQuestionId,
+        question: p.question,
+        answerType: p.answerType,
+        difficulty: p.difficulty,
+        options: optionsMap.get(p.id) ?? [],
+    }));
+
+    return SuccessResponse(res, {
+        message: "Parallel questions fetched successfully",
+        parallelAttemptId,
+        balanceDeducted: chargeableCount,
+        remainingQuestionBalance: (student.questionBalance ?? 0) - chargeableCount,
+        parallelQuestions,
+    }, 201);
+};
+
+// ===================== SUBMIT PARALLEL ANSWERS =====================
+// POST /exams/parallel/:parallelAttemptId/submit
+// Body: { answers: [{ parallelQuestionId, selectedOptionId?, gridInAnswer? }] }
+export const submitParallelAnswers = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { parallelAttemptId } = req.params;
+    const { answers } = req.body;
+
+    if (!Array.isArray(answers) || answers.length === 0) {
+        throw new BadRequest("answers array is required");
+    }
+
+    // 1. Validate the parallel attempt belongs to this student and is in_progress
+    const [parallelAttempt] = await db
+        .select({ id: studentParallelAttempts.id, status: studentParallelAttempts.status })
+        .from(studentParallelAttempts)
+        .where(and(
+            eq(studentParallelAttempts.id, parallelAttemptId),
+            eq(studentParallelAttempts.studentId, studentId),
+            eq(studentParallelAttempts.status, "in_progress"),
+        ))
+        .limit(1);
+
+    if (!parallelAttempt) throw new NotFound("No active parallel attempt found with that ID");
+
+    // 2. Fetch all parallel questions being answered (with their correct options)
+    const parallelQuestionIds = answers.map((a: any) => a.parallelQuestionId);
+
+    const parallelQs = await db
+        .select({
+            id: ParallelQuestion.id,
+            originalQuestionId: ParallelQuestion.origianlQuestionId,
+            question: ParallelQuestion.question,
+            answerType: ParallelQuestion.answerType,
+        })
+        .from(ParallelQuestion)
+        .where(inArray(ParallelQuestion.id, parallelQuestionIds));
+
+    const correctParallelOpts = await db
+        .select({
+            id: ParallelQuestionOptions.id,
+            questionId: ParallelQuestionOptions.questionId,
+            answer: ParallelQuestionOptions.answer,
+            order: ParallelQuestionOptions.order,
+        })
+        .from(ParallelQuestionOptions)
+        .where(and(
+            inArray(ParallelQuestionOptions.questionId, parallelQuestionIds),
+            eq(ParallelQuestionOptions.isCorrect, true),
+        ));
+
+    // Fetch all options (for returning full options list in results)
+    const allParallelOpts = await db
+        .select({
+            id: ParallelQuestionOptions.id,
+            questionId: ParallelQuestionOptions.questionId,
+            answer: ParallelQuestionOptions.answer,
+            order: ParallelQuestionOptions.order,
+            isCorrect: ParallelQuestionOptions.isCorrect,
+        })
+        .from(ParallelQuestionOptions)
+        .where(inArray(ParallelQuestionOptions.questionId, parallelQuestionIds));
+
+    const correctOptMap = new Map(correctParallelOpts.map(o => [o.questionId, o]));
+    const allOptsMap = new Map<string, typeof allParallelOpts>();
+    for (const opt of allParallelOpts) {
+        const list = allOptsMap.get(opt.questionId) ?? [];
+        list.push(opt);
+        allOptsMap.set(opt.questionId, list);
+    }
+
+    // 3. Grade each answer
+    let totalCorrect = 0;
+    const answersToInsert: any[] = [];
+    const results: any[] = [];
+
+    for (const ans of answers) {
+        const pq = parallelQs.find(q => q.id === ans.parallelQuestionId);
+        if (!pq) continue;
+
+        const correct = correctOptMap.get(ans.parallelQuestionId);
+        const isCorrect = pq.answerType === "MCQ"
+            ? ans.selectedOptionId === correct?.id
+            : (ans.gridInAnswer && correct?.answer ? isEquivalentGridInAnswer(ans.gridInAnswer, correct.answer) : false);
+
+        if (isCorrect) totalCorrect++;
+
+        answersToInsert.push({
+            id: randomUUID(),
+            parallelAttemptId,
+            parallelQuestionId: ans.parallelQuestionId,
+            selectedOptionId: ans.selectedOptionId ?? null,
+            gridInAnswer: ans.gridInAnswer ?? null,
+            isCorrect,
+            score: isCorrect ? 1 : 0,
+        });
+
+        results.push({
+            parallelQuestionId: pq.id,
+            originalQuestionId: pq.originalQuestionId,
+            question: pq.question,
+            answerType: pq.answerType,
+            isCorrect,
+            yourAnswer: ans.selectedOptionId ?? ans.gridInAnswer ?? null,
+            correctAnswer: correct ? { id: correct.id, answer: correct.answer, order: correct.order } : null,
+            options: allOptsMap.get(pq.id) ?? [],
+        });
+    }
+
+    // 4. Persist answers + mark parallel attempt as completed
+    await db.transaction(async (tx) => {
+        if (answersToInsert.length > 0) {
+            await tx.insert(studentParallelAnswers).values(answersToInsert);
+        }
+        await tx
+            .update(studentParallelAttempts)
+            .set({ status: "completed" })
+            .where(eq(studentParallelAttempts.id, parallelAttemptId));
+    });
+
+    return SuccessResponse(res, {
+        message: "Parallel answers submitted successfully",
+        parallelAttemptId,
+        totalQuestions: results.length,
+        totalCorrect,
+        totalWrong: results.length - totalCorrect,
+        results,
+    });
+};
+
+// ===================== GET EXAM ATTEMPT ANSWERS =====================
+// GET /exams/:examId/attempts/:attemptId/answers
+export const getExamAttemptAnswers = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { examId, attemptId } = req.params;
+
+    // 1. Validate the attempt belongs to this student and is completed
+    const [attempt] = await db
+        .select({ id: examAttempts.id, status: examAttempts.status })
+        .from(examAttempts)
+        .where(and(
+            eq(examAttempts.id, attemptId),
+            eq(examAttempts.studentId, studentId),
+            eq(examAttempts.examId, examId),
+            inArray(examAttempts.status, ["completed", "timed_out"]),
+        ))
+        .limit(1);
+
+    if (!attempt) throw new NotFound("No completed exam attempt found");
+
+    // 2. Check the student has a completed exam purchase with includedAnswers = true
+    const [answersPayment] = await db
+        .select({ id: payment.id, includedAnswers: payment.includedAnswers })
+        .from(payment)
+        .where(and(
+            eq(payment.studentId, studentId),
+            eq(payment.purpose, "purchase"),
+            eq(payment.status, "completed"),
+            eq(payment.includedAnswers, true),
+            eq(payment.isDeleted, false),
+        ))
+        .limit(1);
+
+    if (!answersPayment) {
+        throw new BadRequest(
+            "Your exam package does not include answers. Please purchase a package with answers to access this feature."
+        );
+    }
+
+    // 3. Fetch all section questions for this exam
+    const sectionQs = await db
+        .select({
+            questionId: SectionQuestions.questionId,
+            questionOrder: SectionQuestions.questionOrder,
+            score: SectionQuestions.score,
+            sectionId: SectionQuestions.sectionId,
+            questionText: questions.question,
+            questionImage: questions.image,
+            answerType: questions.answerType,
+            difficulty: questions.difficulty,
+        })
+        .from(SectionQuestions)
+        .innerJoin(ExamSections, eq(SectionQuestions.sectionId, ExamSections.id))
+        .leftJoin(questions, eq(SectionQuestions.questionId, questions.id))
+        .where(eq(ExamSections.examId, examId))
+        .orderBy(SectionQuestions.questionOrder);
+
+    const allQuestionIds = sectionQs.map(q => q.questionId);
+
+    if (allQuestionIds.length === 0) {
+        return SuccessResponse(res, { message: "No questions found for this exam", questions: [] });
+    }
+
+    // 4. Fetch correct options + all options + explanations
+    const [allOptions, correctOptions, explanations] = await Promise.all([
+        db.select({
+            id: questionOptions.id,
+            questionId: questionOptions.questionId,
+            answer: questionOptions.answer,
+            order: questionOptions.order,
+            isCorrect: questionOptions.isCorrect,
+        }).from(questionOptions).where(inArray(questionOptions.questionId, allQuestionIds)),
+
+        db.select({
+            id: questionOptions.id,
+            questionId: questionOptions.questionId,
+            answer: questionOptions.answer,
+            order: questionOptions.order,
+        }).from(questionOptions).where(and(
+            inArray(questionOptions.questionId, allQuestionIds),
+            eq(questionOptions.isCorrect, true),
+        )),
+
+        db.select({
+            id: questionAnswers.id,
+            questionId: questionAnswers.questionId,
+            answerPdf: questionAnswers.pdf,
+            answerVideo: questionAnswers.video,
+            answerImage: questionAnswers.image,
+            answerText: questionAnswers.text,
+        }).from(questionAnswers).where(inArray(questionAnswers.questionId, allQuestionIds)),
+    ]);
+
+    // 5. Fetch this student's submitted answers for the attempt
+    const submittedAnswers = await db
+        .select({
+            questionId: studentAnswers.questionId,
+            selectedOptionId: studentAnswers.selectedOptionId,
+            gridInAnswer: studentAnswers.gridInAnswer,
+            isCorrect: studentAnswers.isCorrect,
+            score: studentAnswers.score,
+        })
+        .from(studentAnswers)
+        .where(eq(studentAnswers.attemptId, attemptId));
+
+    // 6. Build lookup maps
+    const allOptsMap = new Map<string, typeof allOptions>();
+    for (const opt of allOptions) {
+        const list = allOptsMap.get(opt.questionId) ?? [];
+        list.push(opt);
+        allOptsMap.set(opt.questionId, list);
+    }
+
+    const correctOptMap = new Map(correctOptions.map(o => [o.questionId, o]));
+
+    const explanationsMap = new Map<string, typeof explanations>();
+    for (const exp of explanations) {
+        const list = explanationsMap.get(exp.questionId) ?? [];
+        list.push(exp);
+        explanationsMap.set(exp.questionId, list);
+    }
+
+    const submittedMap = new Map(submittedAnswers.map(a => [a.questionId, a]));
+
+    // 7. Assemble final result
+    const questionsWithAnswers = sectionQs.map(q => {
+        const studentAnswer = submittedMap.get(q.questionId) ?? null;
+        const correctOpt = correctOptMap.get(q.questionId) ?? null;
+
+        return {
+            questionId: q.questionId,
+            questionOrder: q.questionOrder,
+            score: q.score,
+            questionText: q.questionText,
+            questionImage: q.questionImage,
+            answerType: q.answerType,
+            difficulty: q.difficulty,
+            options: allOptsMap.get(q.questionId) ?? [],
+            correctAnswer: correctOpt,
+            studentAnswer: studentAnswer
+                ? {
+                    selectedOptionId: studentAnswer.selectedOptionId,
+                    gridInAnswer: studentAnswer.gridInAnswer,
+                    isCorrect: studentAnswer.isCorrect,
+                    scoreEarned: studentAnswer.score,
+                }
+                : null,
+            explanation: explanationsMap.get(q.questionId) ?? [],
+        };
+    });
+
+    return SuccessResponse(res, {
+        message: "Exam answers retrieved successfully",
+        attemptId,
+        examId,
+        questions: questionsWithAnswers,
+    });
 };
 
 // ===================== SHOW QUESTION ANSWER =====================
@@ -589,7 +1067,7 @@ export const showQuestionAnswer = async (req: Request, res: Response) => {
         result: {
             correctOptions,
             studentAnswer: latestStudentAnswer ?? req.body.studentAnswer ?? null,
-            explanation : answers ?? [] // array of answer objects: [{ id, answerPdf, answerVideo, answerImage, answerText }]
+            explanation: answers ?? [] // array of answer objects: [{ id, answerPdf, answerVideo, answerImage, answerText }]
         },
     });
 };

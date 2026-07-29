@@ -31,6 +31,8 @@ export * from "./schema/admin/examAttempts";
 export * from "./schema/admin/studentAnswers";
 export * from "./schema/admin/quizAttempts";
 export * from "./schema/admin/studentQuizAnswers";
+export * from "./schema/admin/studentParallelAttempts";
+export * from "./schema/admin/studentParallelAnswers";
 export * from "./schema/user/Wallet";
 export * from "./schema/user/StudentDiagnosticExam";
 export * from "./schema/user/studentDiagnosticAnswers";
