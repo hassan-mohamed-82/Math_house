@@ -1071,3 +1071,52 @@ export const showQuestionAnswer = async (req: Request, res: Response) => {
         },
     });
 };
+
+// ===================== GET EXAM ATTEMPTS HISTORY =====================
+// GET /exams/attempts
+export const getExamAttemptsHistory = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const examId = req.query.examId as string | undefined;
+
+    const whereCondition = and(
+        eq(examAttempts.studentId, studentId),
+        examId ? eq(examAttempts.examId, examId) : undefined
+    );
+
+    const attempts = await db
+        .select({
+            id: examAttempts.id,
+            examId: examAttempts.examId,
+            score: examAttempts.score,
+            isPassed: examAttempts.isPassed,
+            status: examAttempts.status,
+            startedAt: examAttempts.startedAt,
+            endedAt: examAttempts.endedAt,
+            createdAt: examAttempts.createdAt,
+            exam: {
+                id: Exams.id,
+                title: Exams.title,
+                description: Exams.description,
+                duration: Exams.duration,
+                totalScore: Exams.totalScore,
+                passScore: Exams.passScore,
+                examType: Exams.examType,
+                year: Exams.year,
+                month: Exams.Month,
+                courseId: Exams.courseId,
+                courseName: courses.name,
+                codeName: examCodes.code,
+            },
+        })
+        .from(examAttempts)
+        .leftJoin(Exams, eq(examAttempts.examId, Exams.id))
+        .leftJoin(courses, eq(Exams.courseId, courses.id))
+        .leftJoin(examCodes, eq(Exams.codeId, examCodes.id))
+        .where(whereCondition)
+        .orderBy(desc(examAttempts.startedAt));
+
+    return SuccessResponse(res, {
+        message: "Exam attempts history retrieved successfully",
+        attempts,
+    });
+};

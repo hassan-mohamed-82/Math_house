@@ -5,7 +5,7 @@ import { courses, diagnosticExam, diagnosticExamQuestions, questions, questionOp
 import { Student } from "../../models/schema/admin/Student";
 import { category } from "../../models/schema/admin/category";
 import { NotFound } from "../../Errors";
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 import { BadRequest } from "../../Errors";
 import { isEquivalentGridInAnswer } from "../../utils/checkGridInAnswer";
@@ -390,26 +390,41 @@ export const getStudentAttempts = async (req: Request, res: Response) => {
     const studentId = req.user?.id;
     if (!studentId) throw new BadRequest("Not authenticated");
 
+    const examId = (req.query.examId as string | undefined) || (req.query.diagnosticExamId as string | undefined);
+
+    const whereCondition = and(
+        eq(diagnosticExamAttempt.studentId, studentId),
+        examId ? eq(diagnosticExamAttempt.diagnosticExamId, examId) : undefined
+    );
+
     const attempts = await db
         .select({
             id: diagnosticExamAttempt.id,
             diagnosticExamId: diagnosticExamAttempt.diagnosticExamId,
+            score: diagnosticExamAttempt.score,
             isCompleted: diagnosticExamAttempt.isCompleted,
             startedAt: diagnosticExamAttempt.startedAt,
             endedAt: diagnosticExamAttempt.endedAt,
             diagnosticExam: {
                 id: diagnosticExam.id,
                 title: diagnosticExam.title,
-                description: diagnosticExam.description
+                description: diagnosticExam.description,
+                duration: diagnosticExam.duration,
+                totalScore: diagnosticExam.totalScore,
+                passScore: diagnosticExam.passScore,
+                numberOfQuestions: diagnosticExam.numberOfQuestions,
+                courseId: diagnosticExam.courseId,
+                courseName: courses.name,
             }
         })
         .from(diagnosticExamAttempt)
         .leftJoin(diagnosticExam, eq(diagnosticExamAttempt.diagnosticExamId, diagnosticExam.id))
-        .where(eq(diagnosticExamAttempt.studentId, studentId))
-        .orderBy(diagnosticExamAttempt.startedAt);
+        .leftJoin(courses, eq(diagnosticExam.courseId, courses.id))
+        .where(whereCondition)
+        .orderBy(desc(diagnosticExamAttempt.startedAt));
 
     return SuccessResponse(res, {
-        message: "Attempts retrieved successfully",
+        message: "Diagnostic exam attempts retrieved successfully",
         data: attempts
     }, 200);
 };

@@ -10,6 +10,7 @@ import {
     getParallelQuestions,
     submitParallelAnswers,
     getExamAttemptAnswers,
+    getExamAttemptsHistory,
 } from "../../controllers/user/exams";
 
 const router = Router();
@@ -18,6 +19,7 @@ router.use(authorizeRoles("student"));
 
 // ── Core exam flow ───────────────────────────────────────────────────────────
 router.get("/", catchAsync(getExams));
+router.get("/attempts", catchAsync(getExamAttemptsHistory));
 router.get("/:examId", catchAsync(getExamById));
 router.post("/:examId/start", catchAsync(startExam));
 router.post("/:examId/submit", catchAsync(submitExam));
