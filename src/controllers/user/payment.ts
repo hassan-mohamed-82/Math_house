@@ -83,9 +83,47 @@ export const requestPackageBuy = async (req: Request, res: Response) => {
         number: packages.number,
         hasAnswers: packages.hasAnswers,
         answersPrice: packages.answersPrice,
+        duration: packages.duration,
     }).from(packages).where(eq(packages.id, packageId)).limit(1);
 
     if (!existingPackage) throw new NotFound("Package not found");
+
+    // Guard: prevent re-purchasing if there's already a pending or active completed payment
+    const [existingPaymentRecord] = await db
+        .select({
+            id: payment.id,
+            status: payment.status,
+            createdAt: payment.createdAt,
+        })
+        .from(payment)
+        .where(
+            and(
+                eq(payment.studentId, studentId),
+                eq(payment.packageId, packageId),
+                eq(payment.purpose, 'purchase'),
+                eq(payment.isDeleted, false),
+            )
+        )
+        .orderBy(desc(payment.createdAt))
+        .limit(1);
+
+    if (existingPaymentRecord) {
+        if (existingPaymentRecord.status === 'pending') {
+            throw new BadRequest('You already have a pending purchase request for this package. Please wait for it to be reviewed before trying again.');
+        }
+        if (existingPaymentRecord.status === 'completed' && existingPaymentRecord.createdAt) {
+            const packageDurationDays = existingPackage.duration ?? 0;
+            if (packageDurationDays > 0) {
+                const expiresAt = new Date(existingPaymentRecord.createdAt);
+                expiresAt.setDate(expiresAt.getDate() + packageDurationDays);
+                if (new Date() < expiresAt) {
+                    throw new BadRequest('You already have an active subscription for this package. You can repurchase after it expires.');
+                }
+            } else {
+                throw new BadRequest('You already have a completed purchase for this package.');
+            }
+        }
+    }
 
     const [existingPaymentMethod] = await db.select({
         id: paymentMethod.id,
@@ -168,10 +206,48 @@ export const initiateAutomaticPackageBuy = async (req: Request, res: Response) =
         price: packages.price,
         type: packages.type,
         hasAnswers: packages.hasAnswers,
-        answersPrice: packages.answersPrice
+        answersPrice: packages.answersPrice,
+        duration: packages.duration,
     }).from(packages).where(eq(packages.id, packageId)).limit(1);
 
     if (!existingPackage) throw new NotFound('Package not found');
+
+    // Guard: prevent re-purchasing if there's already a pending or active completed payment
+    const [existingPaymentRecord] = await db
+        .select({
+            id: payment.id,
+            status: payment.status,
+            createdAt: payment.createdAt,
+        })
+        .from(payment)
+        .where(
+            and(
+                eq(payment.studentId, studentId),
+                eq(payment.packageId, packageId),
+                eq(payment.purpose, 'purchase'),
+                eq(payment.isDeleted, false),
+            )
+        )
+        .orderBy(desc(payment.createdAt))
+        .limit(1);
+
+    if (existingPaymentRecord) {
+        if (existingPaymentRecord.status === 'pending') {
+            throw new BadRequest('You already have a pending purchase request for this package. Please wait for it to be reviewed before trying again.');
+        }
+        if (existingPaymentRecord.status === 'completed' && existingPaymentRecord.createdAt) {
+            const packageDurationDays = existingPackage.duration ?? 0;
+            if (packageDurationDays > 0) {
+                const expiresAt = new Date(existingPaymentRecord.createdAt);
+                expiresAt.setDate(expiresAt.getDate() + packageDurationDays);
+                if (new Date() < expiresAt) {
+                    throw new BadRequest('You already have an active subscription for this package. You can repurchase after it expires.');
+                }
+            } else {
+                throw new BadRequest('You already have a completed purchase for this package.');
+            }
+        }
+    }
 
     let finalAmount = Number(existingPackage.price);
     let answersIncluded = false;
