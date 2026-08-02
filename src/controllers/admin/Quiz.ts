@@ -727,7 +727,7 @@ export const getQuizzesByLessonId = async (req: Request, res: Response) => {
         .leftJoin(courses, eq(quizzes.courseId, courses.id))
         .leftJoin(chapters, eq(quizzes.chapterId, chapters.id))
         .leftJoin(lessons, eq(quizzes.lessonId, lessons.id))
-        .leftJoin(semesters, eq(courses.id, semesters.courseId))
+        .leftJoin(semesters, eq(chapters.semesterId, semesters.id))
         .where(eq(quizzes.lessonId, id))
         .orderBy(desc(quizzes.createdAt));
 
