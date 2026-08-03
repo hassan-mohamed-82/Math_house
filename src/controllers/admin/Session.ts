@@ -197,6 +197,7 @@ export const createSession = async (req: Request, res: Response) => {
         session_link,
         material_link,
         teacher_material_link,
+        contentAccessDays,      // number | null – days students can access content after attending (null = permanent)
     } = req.body;
 
     // ── 1. Required field presence (General fields) ────────────────────────
@@ -386,6 +387,7 @@ export const createSession = async (req: Request, res: Response) => {
             material_link: material_link ?? null,
             teacher_material_link: teacher_material_link ?? null,
             sessionRelationalType,
+            contentAccessDays: contentAccessDays != null ? Number(contentAccessDays) : null,
         });
 
         // ربط الدروس بالحصة الحالية
@@ -451,6 +453,7 @@ export const getAllSessions = async (req: Request, res: Response) => {
         session_link: sessions.session_link,
         material_link: sessions.material_link,
         teacher_material_link: sessions.teacher_material_link,
+        contentAccessDays: sessions.contentAccessDays,
         createdAt: sessions.createdAt,
         updatedAt: sessions.updatedAt,
         teacher: {
@@ -528,6 +531,7 @@ export const getSessionById = async (req: Request, res: Response) => {
         material_link: sessions.material_link,
         teacher_material_link: sessions.teacher_material_link,
         sessionRelationalType: sessions.sessionRelationalType,
+        contentAccessDays: sessions.contentAccessDays,
         createdAt: sessions.createdAt,
         updatedAt: sessions.updatedAt,
         teacher: {
@@ -668,6 +672,7 @@ export const updateSession = async (req: Request, res: Response) => {
         session_link,
         material_link,
         teacher_material_link,
+        contentAccessDays,      // number | null | undefined – omit to leave unchanged
     } = req.body;
 
     // ── 1. Session must exist ─────────────────────────────────────────────
@@ -875,6 +880,10 @@ export const updateSession = async (req: Request, res: Response) => {
                 ...(teacher_material_link && { teacher_material_link }),
                 ...(sessionRelationalType && { sessionRelationalType }),
                 ...(teacherId             && { teacherId }),
+                // Allow explicit null to clear the expiry (permanent access)
+                ...(contentAccessDays !== undefined && {
+                    contentAccessDays: contentAccessDays != null ? Number(contentAccessDays) : null,
+                }),
                 ...scheduleFields,
             })
             .where(eq(sessions.id, id));

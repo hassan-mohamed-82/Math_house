@@ -27,6 +27,10 @@ export const sessions = mysqlTable("sessions", {
 
     sessionRelationalType: mysqlEnum("session_relational_type", ["Explanation", "Re-Explanation", "Mistakes", "Exam"]).default("Explanation"),
 
+    // How many days after attending can a student access the session's lesson content.
+    // NULL = permanent access (no expiry).
+    contentAccessDays: int("content_access_days"),
+
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });

@@ -8,6 +8,7 @@ import { teachers } from "../../models/schema/admin/teacher";
 import { category } from "../../models/schema/admin/category";
 import { courses } from "../../models/schema/admin/courses";
 import { Student } from "../../models/schema/admin/Student";
+import { enrolledItems } from "../../models/schema/user/enrolledItems";
 import { eq, and, gte, lt, or, inArray, sql, gt } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
@@ -189,6 +190,7 @@ export const joinSession = async (req: Request, res: Response) => {
             id: sessions.id,
             sessionLink: sessions.session_link,
             sessionRelationalType: sessions.sessionRelationalType,
+            contentAccessDays: sessions.contentAccessDays,
         })
         .from(sessions)
         .where(eq(sessions.id, sessionId));
@@ -299,9 +301,10 @@ export const joinSession = async (req: Request, res: Response) => {
         }
 
         // ── Record attendance ─────────────────────────────────────────────────
+        const attendedAt = new Date();
         if (existing) {
             await tx.update(sessionAttendance)
-                .set({ status: "present", attendedAt: new Date() })
+                .set({ status: "present", attendedAt })
                 .where(eq(sessionAttendance.id, existing.id));
         } else {
             await tx.insert(sessionAttendance).values({
@@ -309,8 +312,57 @@ export const joinSession = async (req: Request, res: Response) => {
                 sessionId,
                 studentId,
                 status: "present",
-                attendedAt: new Date(),
+                attendedAt,
             });
+        }
+
+        // ── Auto-unlock lesson content for this session ───────────────────────
+        // Compute expiresAt from contentAccessDays (null → permanent access)
+        const expiresAt: Date | null = session.contentAccessDays != null
+            ? (() => {
+                const d = new Date(attendedAt);
+                d.setDate(d.getDate() + session.contentAccessDays!);
+                return d;
+            })()
+            : null;
+
+        const sessionLessonRows = await tx
+            .select({ lessonId: sessionLessons.lessonId })
+            .from(sessionLessons)
+            .where(eq(sessionLessons.sessionId, sessionId));
+
+        if (sessionLessonRows.length > 0) {
+            const lessonIds = sessionLessonRows.map(r => r.lessonId);
+
+            // Find lessons already enrolled to avoid duplicates
+            const alreadyEnrolled = await tx
+                .select({ lessonId: enrolledItems.lessonId })
+                .from(enrolledItems)
+                .where(
+                    and(
+                        eq(enrolledItems.studentId, studentId),
+                        eq(enrolledItems.status, "active"),
+                        inArray(enrolledItems.lessonId, lessonIds)
+                    )
+                );
+
+            const enrolledLessonIdSet = new Set(
+                alreadyEnrolled.map(r => r.lessonId).filter(Boolean)
+            );
+
+            const newEnrollments = lessonIds
+                .filter(id => !enrolledLessonIdSet.has(id))
+                .map(lessonId => ({
+                    id: randomUUID(),
+                    studentId,
+                    lessonId,
+                    status: "active" as const,
+                    expiresAt,
+                }));
+
+            if (newEnrollments.length > 0) {
+                await tx.insert(enrolledItems).values(newEnrollments);
+            }
         }
     });
 
