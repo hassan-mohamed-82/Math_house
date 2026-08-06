@@ -8,6 +8,7 @@ import { courses } from "../../models/schema/admin/courses";
 import { category } from "../../models/schema/admin/category";
 import { Sections } from "../../models/schema/admin/sections";
 import { questions, questionOptions, questionAnswers, ParallelQuestion, ParallelQuestionOptions } from "../../models/schema/admin/questions";
+import { lessons } from "../../models/schema/admin/lessons";
 import { examCodes } from "../../models/schema/admin/examCodes";
 import { studentParallelAttempts } from "../../models/schema/admin/studentParallelAttempts";
 import { studentParallelAnswers } from "../../models/schema/admin/studentParallelAnswers";
@@ -882,7 +883,7 @@ export const getExamAttemptAnswers = async (req: Request, res: Response) => {
         );
     }
 
-    // 3. Fetch all section questions for this exam
+    // 3. Fetch all section questions for this exam (with their lesson info)
     const sectionQs = await db
         .select({
             questionId: SectionQuestions.questionId,
@@ -893,10 +894,13 @@ export const getExamAttemptAnswers = async (req: Request, res: Response) => {
             questionImage: questions.image,
             answerType: questions.answerType,
             difficulty: questions.difficulty,
+            lessonId: questions.lessonId,
+            lessonName: lessons.name,
         })
         .from(SectionQuestions)
         .innerJoin(ExamSections, eq(SectionQuestions.sectionId, ExamSections.id))
         .leftJoin(questions, eq(SectionQuestions.questionId, questions.id))
+        .leftJoin(lessons, eq(questions.lessonId, lessons.id))
         .where(eq(ExamSections.examId, examId))
         .orderBy(SectionQuestions.questionOrder);
 
@@ -980,6 +984,8 @@ export const getExamAttemptAnswers = async (req: Request, res: Response) => {
             questionImage: q.questionImage,
             answerType: q.answerType,
             difficulty: q.difficulty,
+            lessonId: q.lessonId,
+            lessonName: q.lessonName,
             options: allOptsMap.get(q.questionId) ?? [],
             correctAnswer: correctOpt,
             studentAnswer: studentAnswer
@@ -994,11 +1000,32 @@ export const getExamAttemptAnswers = async (req: Request, res: Response) => {
         };
     });
 
+    // 8. Build recommendedLessonsToStudy from incorrectly answered questions
+    const seenLessonIds = new Set<string>();
+    const recommendedLessonsToStudy: { lessonId: string; lessonName: string }[] = [];
+
+    for (const q of sectionQs) {
+        if (!q.lessonId || !q.lessonName) continue;
+        if (seenLessonIds.has(q.lessonId)) continue;
+
+        const studentAnswer = submittedMap.get(q.questionId);
+        const answeredIncorrectly = !studentAnswer || studentAnswer.isCorrect === false;
+
+        if (answeredIncorrectly) {
+            seenLessonIds.add(q.lessonId);
+            recommendedLessonsToStudy.push({
+                lessonId: q.lessonId,
+                lessonName: q.lessonName,
+            });
+        }
+    }
+
     return SuccessResponse(res, {
         message: "Exam answers retrieved successfully",
         attemptId,
         examId,
         questions: questionsWithAnswers,
+        recommendedLessonsToStudy,
     });
 };
 
