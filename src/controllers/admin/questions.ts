@@ -47,9 +47,6 @@ export const createQuestion = async (req: Request, res: Response) => {
         || !difficulty
         || !questionType
         || !lessonId
-        || !year
-        || !month
-        || !sectionId
         || !codeId
     ) throw new BadRequest("All fields are required");
 
@@ -64,9 +61,11 @@ export const createQuestion = async (req: Request, res: Response) => {
     if (!examCode[0]) {
         throw new NotFound("Exam code is not found");
     }
-    const section = await db.select().from(Sections).where(eq(Sections.id, sectionId)).limit(1);
-    if (!section[0]) {
-        throw new NotFound("Section is not found");
+    if (sectionId) {
+        const section = await db.select().from(Sections).where(eq(Sections.id, sectionId)).limit(1);
+        if (!section[0]) {
+            throw new NotFound("Section is not found");
+        }
     }
 
     let imageUrl = image;
@@ -84,9 +83,9 @@ export const createQuestion = async (req: Request, res: Response) => {
             difficulty,
             questionType,
             lessonId,
-            year,
-            month,
-            sectionId,
+            year: year || null,
+            month: month || null,
+            sectionId: sectionId || null,
             codeId,
         });
 
@@ -347,9 +346,9 @@ export const updateQuestion = async (req: Request, res: Response) => {
         if (difficulty !== undefined) questionUpdateData.difficulty = difficulty;
         if (questionType !== undefined) questionUpdateData.questionType = questionType;
         if (lessonId !== undefined) questionUpdateData.lessonId = lessonId;
-        if (year !== undefined) questionUpdateData.year = year;
-        if (month !== undefined) questionUpdateData.month = month;
-        if (sectionId !== undefined) questionUpdateData.sectionId = sectionId;
+        if (year !== undefined) questionUpdateData.year = year || null;
+        if (month !== undefined) questionUpdateData.month = month || null;
+        if (sectionId !== undefined) questionUpdateData.sectionId = sectionId || null;
         if (codeId !== undefined) questionUpdateData.codeId = codeId;
 
         if (Object.keys(questionUpdateData).length > 0) {

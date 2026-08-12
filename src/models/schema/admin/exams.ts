@@ -21,8 +21,8 @@ export const Exams = mysqlTable("exams", {
 
     // Details
     courseId: char("course_id", { length: 255 }).notNull().references(() => courses.id, { onDelete: "cascade" }),
-    year: int("year").notNull(),
-    Month: mysqlEnum("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]).notNull(),
+    year: int("year"),
+    Month: mysqlEnum("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]),
     codeId: char("code_id", { length: 255 }).notNull().references(() => examCodes.id, { onDelete: "cascade" }),
 
     // Calculators allowed for this exam (subset of CALCULATOR_TYPES)

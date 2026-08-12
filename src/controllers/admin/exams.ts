@@ -35,7 +35,7 @@ export const createExam = async (req: Request, res: Response) => {
                 }
             }
 
-            if (!title || !description || !duration || !totalScore || !passScore || !courseId || !year || !month || !codeId || !sections) {
+            if (!title || !description || !duration || !totalScore || !passScore || !courseId || !codeId || !sections) {
                 throw new BadRequest("All fields are required");
             }
 
@@ -129,8 +129,8 @@ export const createExam = async (req: Request, res: Response) => {
                     totalScore,
                     passScore,
                     courseId,
-                    year,
-                    Month: month,
+                    year: year || null,
+                    Month: month || null,
                     codeId,
                     isActive: true, // Default
                     examType: "static",
@@ -176,8 +176,8 @@ export const updateExam = async (req: Request, res: Response) => {
     if (totalScore) updateData.totalScore = totalScore;
     if (passScore) updateData.passScore = passScore;
     if (courseId) updateData.courseId = courseId;
-    if (year) updateData.year = year;
-    if (month) updateData.Month = month;
+    if (year !== undefined) updateData.year = year || null;
+    if (month !== undefined) updateData.Month = month || null;
     if (codeId) updateData.codeId = codeId;
     if (isActive !== undefined) updateData.isActive = isActive;
     if (rawScoreId) updateData.rawScoreId = rawScoreId;

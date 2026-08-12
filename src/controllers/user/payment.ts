@@ -113,14 +113,34 @@ export const requestPackageBuy = async (req: Request, res: Response) => {
         }
         if (existingPaymentRecord.status === 'completed' && existingPaymentRecord.createdAt) {
             const packageDurationDays = existingPackage.duration ?? 0;
+            let isExpired = false;
             if (packageDurationDays > 0) {
                 const expiresAt = new Date(existingPaymentRecord.createdAt);
                 expiresAt.setDate(expiresAt.getDate() + packageDurationDays);
-                if (new Date() < expiresAt) {
-                    throw new BadRequest('You already have an active subscription for this package. You can repurchase after it expires.');
+                if (new Date() >= expiresAt) {
+                    isExpired = true;
                 }
-            } else {
-                throw new BadRequest('You already have a completed purchase for this package.');
+            }
+
+            if (!isExpired) {
+                const [studentBalances] = await db.select({
+                    livebalance: Student.livebalance,
+                    exambalance: Student.exambalance,
+                    questionbalance: Student.questionbalance,
+                }).from(Student).where(eq(Student.id, studentId)).limit(1);
+
+                let balance = 0;
+                if (existingPackage.type === 'live') balance = studentBalances?.livebalance ?? 0;
+                else if (existingPackage.type === 'exam') balance = studentBalances?.exambalance ?? 0;
+                else if (existingPackage.type === 'question') balance = studentBalances?.questionbalance ?? 0;
+
+                if (balance > 0) {
+                    if (packageDurationDays > 0) {
+                        throw new BadRequest('You already have an active subscription for this package. You can repurchase after it expires or remaining items end.');
+                    } else {
+                        throw new BadRequest('You already have a completed purchase for this package with remaining items.');
+                    }
+                }
             }
         }
     }
@@ -237,14 +257,34 @@ export const initiateAutomaticPackageBuy = async (req: Request, res: Response) =
         }
         if (existingPaymentRecord.status === 'completed' && existingPaymentRecord.createdAt) {
             const packageDurationDays = existingPackage.duration ?? 0;
+            let isExpired = false;
             if (packageDurationDays > 0) {
                 const expiresAt = new Date(existingPaymentRecord.createdAt);
                 expiresAt.setDate(expiresAt.getDate() + packageDurationDays);
-                if (new Date() < expiresAt) {
-                    throw new BadRequest('You already have an active subscription for this package. You can repurchase after it expires.');
+                if (new Date() >= expiresAt) {
+                    isExpired = true;
                 }
-            } else {
-                throw new BadRequest('You already have a completed purchase for this package.');
+            }
+
+            if (!isExpired) {
+                const [studentBalances] = await db.select({
+                    livebalance: Student.livebalance,
+                    exambalance: Student.exambalance,
+                    questionbalance: Student.questionbalance,
+                }).from(Student).where(eq(Student.id, studentId)).limit(1);
+
+                let balance = 0;
+                if (existingPackage.type === 'live') balance = studentBalances?.livebalance ?? 0;
+                else if (existingPackage.type === 'exam') balance = studentBalances?.exambalance ?? 0;
+                else if (existingPackage.type === 'question') balance = studentBalances?.questionbalance ?? 0;
+
+                if (balance > 0) {
+                    if (packageDurationDays > 0) {
+                        throw new BadRequest('You already have an active subscription for this package. You can repurchase after it expires or remaining items end.');
+                    } else {
+                        throw new BadRequest('You already have a completed purchase for this package with remaining items.');
+                    }
+                }
             }
         }
     }
