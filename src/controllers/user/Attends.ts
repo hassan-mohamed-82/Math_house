@@ -117,6 +117,7 @@ export const getSessionHistory = async (req: Request, res: Response) => {
             timeFrom: sessions.timeFrom,
             timeTo: sessions.timeTo,
             sessionLink: sessions.session_link,
+            materialLink: sessions.material_link,
             attendanceStatus: sessionAttendance.status,
             lesson: {
                 id: lessons.id,
@@ -162,6 +163,7 @@ export const getSessionHistory = async (req: Request, res: Response) => {
                 timeFrom: row.timeFrom,
                 timeTo: row.timeTo,
                 sessionLink: row.sessionLink,
+                materialLink: row.materialLink,
                 attendanceStatus: row.attendanceStatus,
                 lessons: []
             });
