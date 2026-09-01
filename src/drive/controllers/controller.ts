@@ -78,7 +78,7 @@ export const initializeVideoUpload = async (req: Request, res: Response) => {
 export const uploadDriveFile = async (req: Request, res: Response) => {
     try {
         const file = req.file;
-        const { folderId , title } = req.body;
+        const { folderId, title } = req.body;
 
         if (!file) {
             throw new BadRequest('File is required');
@@ -469,17 +469,19 @@ export const handleBunnyWebhook = async (req: Request, res: Response) => {
 
 export const getLessonVideo = async (req: Request, res: Response) => {
     try {
-        const { videoId } = req.params;
-
         if (!req.user?.id) {
             throw new UnauthorizedError('Not authenticated');
         }
+
+        const { videoId } = req.params;
 
         if (!videoId || typeof videoId !== 'string' || !videoId.trim()) {
             throw new BadRequest('Video ID is required');
         }
 
         const normalizedVideoId = videoId.trim();
+
+        // Query database by primary key ID or bunnyGuid
         const [videoAsset] = await db
             .select({
                 id: driveAssets.id,
@@ -516,17 +518,13 @@ export const getLessonVideo = async (req: Request, res: Response) => {
             throw new BadRequest('Video is not ready for streaming yet');
         }
 
-        // 1. Verify Authorization (Database check)
-        // Example: const hasAccess = await db.checkStudentLessonAccess(req.user.id, videoAsset.id);
-        // if (!hasAccess) return res.status(403).json({ message: "Unauthorized" });
-
-        // 2. Generate the expiring URL
+        // Generate expiring HLS secure stream URL using the actual bunnyGuid
         const streamUrl = generateSecureStreamUrl(videoAsset.bunnyGuid);
 
-        // 3. Return it to your React frontend
         return SuccessResponse(res, {
             video: {
                 id: videoAsset.id,
+                bunnyGuid: videoAsset.bunnyGuid,
                 title: videoAsset.title,
                 streamUrl,
             },
