@@ -3,6 +3,7 @@ import {
     createChapter,
     getAllChapters,
     getAllChaptersByCourseId,
+    getAllChaptersBySemesterId,
     swapChapterOrder,
     getChapterById,
     updateChapter,
@@ -18,9 +19,10 @@ const router = Router();
 router.get("/selectionSemester/:courseId", catchAsync(getSemestersByCourseId));
 
 // ── List & detail ─────────────────────────────────────────────────────────
-router.get("/",                   requirePermission("chapters", "View"),   catchAsync(getAllChapters));
-router.get("/course/:courseId",   requirePermission("chapters", "View"),   catchAsync(getAllChaptersByCourseId));
-router.get("/:id",                requirePermission("chapters", "View"),   catchAsync(getChapterById));
+router.get("/",                      requirePermission("chapters", "View"),   catchAsync(getAllChapters));
+router.get("/course/:courseId",      requirePermission("chapters", "View"),   catchAsync(getAllChaptersByCourseId));
+router.get("/semester/:semesterId",  requirePermission("chapters", "View"),   catchAsync(getAllChaptersBySemesterId));
+router.get("/:id",                   requirePermission("chapters", "View"),   catchAsync(getChapterById));
 
 // ── Create ────────────────────────────────────────────────────────────────
 router.post("/",                  requirePermission("chapters", "Add"),    catchAsync(createChapter));

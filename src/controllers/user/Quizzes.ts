@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
-import { eq, and, inArray, asc, desc } from "drizzle-orm";
+import { eq, and, inArray, asc, desc, or, isNull, gt, sql } from "drizzle-orm";
 import { db } from "../../models/connection";
-import { quizzes, questions, quizQuestions, questionOptions, quizAttempts, studentQuizAnswers, lessons } from "../../models/schema";
+import { quizzes, questions, quizQuestions, questionOptions, quizAttempts, studentQuizAnswers, lessons, Student, enrolledItems, chapters, courses } from "../../models/schema";
 import { randomUUID } from "crypto";
 import { isEquivalentGridInAnswer } from "../../utils/checkGridInAnswer";
 import { SuccessResponse } from "../../utils/response";
@@ -382,5 +382,343 @@ export const getQuizzesByLessonId = async (req: Request, res: Response) => {
     return SuccessResponse(res, {
         message: "Lesson quizzes fetched successfully",
         quizzes: lessonQuizzes
+    }, 200);
+};
+
+export const getRemainingHomework = async (req: Request, res: Response) => {
+    const studentId = req.user.id;
+    const { lessonId } = req.query as { lessonId?: string };
+
+    const [existingStudent] = await db.select().from(Student).where(eq(Student.id, studentId));
+    if (!existingStudent) {
+        throw new NotFound("Student not found");
+    }
+
+    let accessibleLessons: {
+        id: string;
+        name: string;
+        order: number;
+        chapterId: string;
+        courseId: string;
+    }[] = [];
+
+    if (lessonId) {
+        // 1. Specific lesson requested
+        const [lessonData] = await db
+            .select({
+                id: lessons.id,
+                name: lessons.name,
+                order: lessons.order,
+                chapterId: lessons.chapterId,
+                courseId: lessons.courseId,
+            })
+            .from(lessons)
+            .where(eq(lessons.id, lessonId));
+
+        if (!lessonData) {
+            throw new NotFound("Lesson not found");
+        }
+
+        const hasAccess = await checkAccess(studentId, {
+            lessonId,
+            chapterId: lessonData.chapterId,
+            courseId: lessonData.courseId,
+        });
+
+        if (!hasAccess) {
+            throw new BadRequest("You do not have access to this lesson's homework. Please purchase the lesson, chapter, or course.");
+        }
+
+        accessibleLessons = [lessonData];
+    } else {
+        // 2. Fetch all active enrollments for the student
+        const now = new Date();
+        const activeEnrollments = await db
+            .select({
+                courseId: enrolledItems.courseId,
+                semesterId: enrolledItems.semesterId,
+                chapterId: enrolledItems.chapterId,
+                lessonId: enrolledItems.lessonId,
+            })
+            .from(enrolledItems)
+            .where(
+                and(
+                    eq(enrolledItems.studentId, studentId),
+                    eq(enrolledItems.status, "active"),
+                    or(
+                        isNull(enrolledItems.expiresAt),
+                        gt(enrolledItems.expiresAt, now)
+                    )
+                )
+            );
+
+        if (activeEnrollments.length === 0) {
+            return SuccessResponse(res, {
+                message: "No remaining homework found",
+                summary: {
+                    total: 0,
+                    solved: 0,
+                    remaining: 0,
+                },
+                count: 0,
+                quizzes: [],
+            }, 200);
+        }
+
+        const enrolledLessonIds = activeEnrollments.map(e => e.lessonId).filter((id): id is string => !!id);
+        const enrolledChapterIds = activeEnrollments.map(e => e.chapterId).filter((id): id is string => !!id);
+        const enrolledSemesterIds = activeEnrollments.map(e => e.semesterId).filter((id): id is string => !!id);
+        const enrolledCourseIds = activeEnrollments.map(e => e.courseId).filter((id): id is string => !!id);
+
+        const orConditions = [];
+        if (enrolledLessonIds.length > 0) {
+            orConditions.push(inArray(lessons.id, enrolledLessonIds));
+        }
+        if (enrolledChapterIds.length > 0) {
+            orConditions.push(inArray(lessons.chapterId, enrolledChapterIds));
+        }
+        if (enrolledCourseIds.length > 0) {
+            orConditions.push(inArray(lessons.courseId, enrolledCourseIds));
+        }
+        if (enrolledSemesterIds.length > 0) {
+            const semesterChapters = await db
+                .select({ id: chapters.id })
+                .from(chapters)
+                .where(inArray(chapters.semesterId, enrolledSemesterIds));
+            const semesterChapterIds = semesterChapters.map(c => c.id);
+            if (semesterChapterIds.length > 0) {
+                orConditions.push(inArray(lessons.chapterId, semesterChapterIds));
+            }
+        }
+
+        if (orConditions.length === 0) {
+            return SuccessResponse(res, {
+                message: "No remaining homework found",
+                summary: {
+                    total: 0,
+                    solved: 0,
+                    remaining: 0,
+                },
+                count: 0,
+                quizzes: [],
+            }, 200);
+        }
+
+        accessibleLessons = await db
+            .select({
+                id: lessons.id,
+                name: lessons.name,
+                order: lessons.order,
+                chapterId: lessons.chapterId,
+                courseId: lessons.courseId,
+            })
+            .from(lessons)
+            .where(or(...orConditions));
+    }
+
+    if (accessibleLessons.length === 0) {
+        return SuccessResponse(res, {
+            message: "No remaining homework found",
+            summary: {
+                total: 0,
+                solved: 0,
+                remaining: 0,
+            },
+            count: 0,
+            quizzes: [],
+        }, 200);
+    }
+
+    const accessibleLessonIds = accessibleLessons.map(l => l.id);
+
+    // 3. Fetch all active quizzes linked to these accessible lessons
+    const homeworkQuizzes = await db
+        .select({
+            id: quizzes.id,
+            title: quizzes.title,
+            description: quizzes.description,
+            durationHours: quizzes.durationHours,
+            durationMinutes: quizzes.durationMinutes,
+            totalScore: quizzes.totalScore,
+            passScore: quizzes.passScore,
+            quizOrder: quizzes.quizOrder,
+            lessonId: quizzes.lessonId,
+            chapterId: quizzes.chapterId,
+            courseId: quizzes.courseId,
+        })
+        .from(quizzes)
+        .where(
+            and(
+                eq(quizzes.isActive, true),
+                inArray(quizzes.lessonId, accessibleLessonIds)
+            )
+        )
+        .orderBy(asc(quizzes.quizOrder));
+
+    if (homeworkQuizzes.length === 0) {
+        return SuccessResponse(res, {
+            message: "No remaining homework found",
+            summary: {
+                total: 0,
+                solved: 0,
+                remaining: 0,
+            },
+            count: 0,
+            quizzes: [],
+        }, 200);
+    }
+
+    const quizIds = homeworkQuizzes.map(q => q.id);
+
+    // 4. Fetch student attempts for these quizzes
+    const attempts = await db
+        .select({
+            id: quizAttempts.id,
+            quizId: quizAttempts.quizId,
+            status: quizAttempts.status,
+            score: quizAttempts.score,
+            isPassed: quizAttempts.isPassed,
+            startedAt: quizAttempts.startedAt,
+            endedAt: quizAttempts.endedAt,
+        })
+        .from(quizAttempts)
+        .where(
+            and(
+                eq(quizAttempts.studentId, studentId),
+                inArray(quizAttempts.quizId, quizIds)
+            )
+        )
+        .orderBy(desc(quizAttempts.startedAt));
+
+    // A quiz is solved if there is any attempt with status 'completed' or 'timed_out' (or isPassed = true)
+    const solvedQuizIds = new Set(
+        attempts
+            .filter(a => a.status === "completed" || a.status === "timed_out" || a.isPassed === true)
+            .map(a => a.quizId)
+    );
+
+    // In-progress attempt lookup
+    const inProgressAttemptsMap = new Map<string, typeof attempts[0]>();
+    attempts.forEach(a => {
+        if (a.status === "in_progress" && !inProgressAttemptsMap.has(a.quizId)) {
+            inProgressAttemptsMap.set(a.quizId, a);
+        }
+    });
+
+    const remainingQuizzes = homeworkQuizzes.filter(q => !solvedQuizIds.has(q.id));
+    const solvedQuizzesCount = homeworkQuizzes.filter(q => solvedQuizIds.has(q.id)).length;
+
+    const summary = {
+        total: homeworkQuizzes.length,
+        solved: solvedQuizzesCount,
+        remaining: remainingQuizzes.length,
+    };
+
+    if (remainingQuizzes.length === 0) {
+        return SuccessResponse(res, {
+            message: "All homework quizzes have been solved!",
+            summary,
+            count: 0,
+            quizzes: [],
+        }, 200);
+    }
+
+    const remainingQuizIds = remainingQuizzes.map(q => q.id);
+
+    // 5. Fetch question counts
+    const questionsCountRows = await db
+        .select({
+            quizId: quizQuestions.quizId,
+            count: sql<number>`count(${quizQuestions.id})`
+        })
+        .from(quizQuestions)
+        .where(inArray(quizQuestions.quizId, remainingQuizIds))
+        .groupBy(quizQuestions.quizId);
+
+    const questionsCountMap = new Map<string, number>(
+        questionsCountRows.map(r => [r.quizId, Number(r.count)])
+    );
+
+    // 6. Gather chapter & course names
+    const chapterIds = Array.from(
+        new Set(
+            remainingQuizzes
+                .map(q => q.chapterId)
+                .concat(accessibleLessons.map(l => l.chapterId))
+                .filter((id): id is string => !!id)
+        )
+    );
+    const courseIds = Array.from(
+        new Set(
+            remainingQuizzes
+                .map(q => q.courseId)
+                .concat(accessibleLessons.map(l => l.courseId))
+                .filter((id): id is string => !!id)
+        )
+    );
+
+    const chaptersMap = new Map<string, { id: string; name: string }>();
+    if (chapterIds.length > 0) {
+        const chapterRows = await db
+            .select({ id: chapters.id, name: chapters.name })
+            .from(chapters)
+            .where(inArray(chapters.id, chapterIds));
+        chapterRows.forEach(c => chaptersMap.set(c.id, c));
+    }
+
+    const coursesMap = new Map<string, { id: string; name: string }>();
+    if (courseIds.length > 0) {
+        const courseRows = await db
+            .select({ id: courses.id, name: courses.name })
+            .from(courses)
+            .where(inArray(courses.id, courseIds));
+        courseRows.forEach(c => coursesMap.set(c.id, c));
+    }
+
+    const lessonsMap = new Map<string, typeof accessibleLessons[0]>(
+        accessibleLessons.map(l => [l.id, l])
+    );
+
+    const formattedQuizzes = remainingQuizzes.map(quiz => {
+        const lesson = quiz.lessonId ? lessonsMap.get(quiz.lessonId) : null;
+        const chapterId = quiz.chapterId || lesson?.chapterId;
+        const courseId = quiz.courseId || lesson?.courseId;
+        const inProgress = inProgressAttemptsMap.get(quiz.id);
+
+        return {
+            id: quiz.id,
+            title: quiz.title,
+            description: quiz.description,
+            durationHours: quiz.durationHours,
+            durationMinutes: quiz.durationMinutes,
+            totalScore: quiz.totalScore,
+            passScore: quiz.passScore,
+            quizOrder: quiz.quizOrder,
+            questionsCount: questionsCountMap.get(quiz.id) || 0,
+            attemptStatus: inProgress ? "in_progress" : "not_attempted",
+            attempt: inProgress
+                ? {
+                    id: inProgress.id,
+                    startedAt: inProgress.startedAt,
+                    status: inProgress.status,
+                }
+                : null,
+            lesson: lesson
+                ? {
+                    id: lesson.id,
+                    name: lesson.name,
+                    order: lesson.order,
+                }
+                : null,
+            chapter: chapterId ? chaptersMap.get(chapterId) ?? null : null,
+            course: courseId ? coursesMap.get(courseId) ?? null : null,
+        };
+    });
+
+    return SuccessResponse(res, {
+        message: "Remaining homework retrieved successfully",
+        summary,
+        count: formattedQuizzes.length,
+        quizzes: formattedQuizzes,
     }, 200);
 };

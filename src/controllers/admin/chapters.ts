@@ -191,6 +191,34 @@ export const getAllChaptersByCourseId = async (req: Request, res: Response) => {
     return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: result }, 200);
 }
 
+export const getAllChaptersBySemesterId = async (req: Request, res: Response) => {
+    const { semesterId } = req.params;
+
+    const existingSemester = await db.select().from(semesters).where(eq(semesters.id, semesterId));
+    if (existingSemester.length === 0) {
+        throw new BadRequest("Semester not found");
+    }
+
+    const allChapters = await chapterDetailedQuery()
+        .where(eq(chapters.semesterId, semesterId))
+        .orderBy(asc(chapters.order));
+
+    const chapterIds = allChapters.map(c => c.chapter.id);
+    let allPrices: any[] = [];
+    if (chapterIds.length > 0) {
+        allPrices = await db.select().from(prices).where(and(inArray(prices.targetId, chapterIds), eq(prices.targetType, "chapter")));
+    }
+
+    const result = allChapters.map(c => ({
+        ...c,
+        prices: allPrices.filter(p => p.targetId === c.chapter.id)
+    }));
+
+    return SuccessResponse(res, { message: "Chapters fetched successfully", chapters: result }, 200);
+};
+
+export const getChaptersBySemesterId = getAllChaptersBySemesterId;
+
 export const swapChapterOrder = async (req: Request, res: Response) => {
     const { chapterIdA, chapterIdB } = req.body;
     if (!chapterIdA || !chapterIdB) {
