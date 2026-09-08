@@ -5,7 +5,7 @@ import {
     getExtraHomeworkById,
     updateExtraHomework,
     deleteExtraHomework,
-    assignStudentsToHomework,
+    // assignStudentsToHomework,
     reviewStudentSubmission,
     getStudentExtraHomework,
 } from "../../controllers/admin/ExtraHomework";
@@ -31,7 +31,7 @@ router.post("/", validate(createExtraHomeworkSchema), requirePermission("extra_h
 
 // ── Update & Assign ───────────────────────────────────────────────
 router.put("/:id", validate(updateExtraHomeworkSchema), requirePermission("extra_homework", "Edit"), catchAsync(updateExtraHomework));
-router.post("/:id/assign", validate(assignStudentsSchema), requirePermission("extra_homework", "Edit"), catchAsync(assignStudentsToHomework));
+// router.post("/:id/assign", validate(assignStudentsSchema), requirePermission("extra_homework", "Edit"), catchAsync(assignStudentsToHomework));
 
 // ── Grade / Review Submission ─────────────────────────────────────
 router.put("/:id/submissions/:submissionId/review", validate(reviewSubmissionSchema), requirePermission("extra_homework", "Edit"), catchAsync(reviewStudentSubmission));
