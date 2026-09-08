@@ -23,11 +23,11 @@ export const extraHomework = mysqlTable("extra_homework", {
     
     // Target audience type
     targetType: mysqlEnum("target_type", ["all", "category", "grade", "group", "individual"]).default("individual").notNull(),
-    targetCategoryId: char("target_category_id", { length: 36 }).references(() => category.id, { onDelete: "set null" }),
+    targetCategoryId: char("target_category_id", { length: 255 }).references(() => category.id, { onDelete: "set null" }),
     targetGradeId: char("target_grade_id", { length: 36 }).references(() => grade.id, { onDelete: "set null" }),
     targetGroupId: char("target_group_id", { length: 36 }).references(() => groups.id, { onDelete: "set null" }),
     
-    createdBy: char("created_by", { length: 36 }).references(() => admins.id, { onDelete: "set null" }),
+    createdBy: char("created_by", { length: 255 }).references(() => admins.id, { onDelete: "set null" }),
     
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
