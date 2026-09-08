@@ -40,6 +40,9 @@ export * from "./schema/user/studentDiagnosticAnswers";
 export * from "./schema/user/enrolledItems";
 export * from "./schema/admin/grade";
 export * from "./schema/admin/prices";
+// export * from "./schema/admin/SessionRatingQuestions";
+export * from "./schema/admin/ExtraHomework";
 
 // Drive schema
 export * from "../drive/models/drive";
+
