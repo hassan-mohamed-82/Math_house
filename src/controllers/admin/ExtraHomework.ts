@@ -10,7 +10,7 @@ import {
     admins,
     groupStudents,
 } from "../../models/schema";
-import { eq, desc, and, like, inArray, count, sql } from "drizzle-orm";
+import { eq, desc, and, like, inArray, count, sql, not } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -172,6 +172,7 @@ export const getAllExtraHomework = async (req: Request, res: Response) => {
             link: extraHomework.link,
             dueDate: extraHomework.dueDate,
             targetType: extraHomework.targetType,
+            targetGroupId: extraHomework.targetGroupId,
             createdAt: extraHomework.createdAt,
             categoryName: category.name,
             gradeName: grade.name,
@@ -244,6 +245,7 @@ export const getExtraHomeworkById = async (req: Request, res: Response) => {
             link: extraHomework.link,
             dueDate: extraHomework.dueDate,
             targetType: extraHomework.targetType,
+            targetGroupId: extraHomework.targetGroupId,
             createdAt: extraHomework.createdAt,
             updatedAt: extraHomework.updatedAt,
             categoryName: category.name,
@@ -368,6 +370,13 @@ export const updateExtraHomework = async (req: Request, res: Response) => {
 
     let newlyAssignedCount = 0;
 
+    // Detect whether the target audience is changing
+    const targetChanged =
+        (targetType !== undefined && targetType !== existing.targetType) ||
+        (targetGroupId !== undefined && targetGroupId !== existing.targetGroupId) ||
+        (targetCategoryId !== undefined && targetCategoryId !== existing.targetCategoryId) ||
+        (targetGradeId !== undefined && targetGradeId !== existing.targetGradeId);
+
     await db.transaction(async (tx) => {
         if (Object.keys(updateData).length > 0) {
             await tx
@@ -376,17 +385,36 @@ export const updateExtraHomework = async (req: Request, res: Response) => {
                 .where(eq(extraHomework.id, id));
         }
 
-        // Handle adding students if target criteria or studentIds are supplied
+        // Handle student assignment when target criteria or studentIds are supplied
+        const effectiveTargetType = targetType !== undefined ? targetType : existing.targetType;
+        const effectiveTargetGroupId = targetGroupId !== undefined ? targetGroupId : existing.targetGroupId ?? undefined;
+        const effectiveTargetCategoryId = targetCategoryId !== undefined ? targetCategoryId : existing.targetCategoryId ?? undefined;
+        const effectiveTargetGradeId = targetGradeId !== undefined ? targetGradeId : existing.targetGradeId ?? undefined;
+
         if (targetType || Array.isArray(studentIds) || targetCategoryId || targetGradeId || targetGroupId) {
+            // If the target audience changed, remove old unsubmitted assignments
+            // so students are reassigned from scratch for the new target
+            if (targetChanged) {
+                await tx
+                    .delete(extraHomeworkStudents)
+                    .where(
+                        and(
+                            eq(extraHomeworkStudents.homeworkId, id),
+                            eq(extraHomeworkStudents.status, "assigned")
+                        )
+                    );
+            }
+
             const resolvedStudentIds = await resolveTargetStudents({
-                targetType: targetType || existing.targetType,
-                targetCategoryId: targetCategoryId !== undefined ? targetCategoryId : existing.targetCategoryId ?? undefined,
-                targetGradeId: targetGradeId !== undefined ? targetGradeId : existing.targetGradeId ?? undefined,
-                targetGroupId: targetGroupId !== undefined ? targetGroupId : existing.targetGroupId ?? undefined,
+                targetType: effectiveTargetType,
+                targetCategoryId: effectiveTargetCategoryId,
+                targetGradeId: effectiveTargetGradeId,
+                targetGroupId: effectiveTargetGroupId,
                 studentIds: studentIds || [],
             });
 
             if (resolvedStudentIds.length > 0) {
+                // Re-fetch remaining assignments (after possible delete above)
                 const existingAssignments = await tx
                     .select({ studentId: extraHomeworkStudents.studentId })
                     .from(extraHomeworkStudents)

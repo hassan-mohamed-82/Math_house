@@ -7,18 +7,19 @@ export const createExtraHomeworkSchema = z.object({
     link: z.string().url("رابط غير صالح").optional().or(z.literal("")),
     dueDate: z.string().datetime().optional().or(z.string().optional()),
     targetType: z.enum(["all", "category", "grade", "group", "individual"]).default("individual"),
-    targetCategoryId: z.string().uuid().optional(),
-    targetGradeId: z.string().uuid().optional(),
     targetGroupId: z.string().uuid().optional(),
     studentIds: z.array(z.string().uuid()).optional(),
 });
 
 export const updateExtraHomeworkSchema = z.object({
     title: z.string().min(2).max(255).optional(),
-    description: z.string().optional(),
-    pdf: z.string().optional(),
-    link: z.string().url().optional().or(z.literal("")),
-    dueDate: z.string().optional(),
+    description: z.string().optional().nullable(),
+    pdf: z.string().optional().nullable(),
+    link: z.string().url().optional().or(z.literal("")).nullable(),
+    dueDate: z.string().optional().nullable(),
+    targetType: z.enum(["all", "category", "grade", "group", "individual"]).optional(),
+    targetGroupId: z.string().optional().nullable().or(z.literal("")),
+    studentIds: z.array(z.string()).optional(),
 });
 
 export const assignStudentsSchema = z.object({
