@@ -148,8 +148,11 @@ export const createExtraHomework = async (req: Request, res: Response) => {
 
 // ── GET ALL EXTRA HOMEWORK ─────────────────────────────────────────
 export const getAllExtraHomework = async (req: Request, res: Response) => {
-    const { page = 1, limit = 10, search, targetType } = req.query;
-    const offset = (Number(page) - 1) * Number(limit);
+    const { page, limit, search, targetType } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page as string) || 1);
+    const limitNum = Math.max(1, parseInt(limit as string) || 10);
+    const offset = (pageNum - 1) * limitNum;
 
     const conditions = [];
 
@@ -180,7 +183,7 @@ export const getAllExtraHomework = async (req: Request, res: Response) => {
         .leftJoin(groups, eq(extraHomework.targetGroupId, groups.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(desc(extraHomework.createdAt))
-        .limit(Number(limit))
+        .limit(limitNum)
         .offset(offset);
 
     const homeworkWithStats = await Promise.all(
@@ -220,9 +223,9 @@ export const getAllExtraHomework = async (req: Request, res: Response) => {
             homework: homeworkWithStats,
             pagination: {
                 total: totalCount.count,
-                page: Number(page),
-                limit: Number(limit),
-                totalPages: Math.ceil(totalCount.count / Number(limit)),
+                page: pageNum,
+                limit: limitNum,
+                totalPages: Math.ceil(totalCount.count / limitNum),
             }
         }
     });
