@@ -158,7 +158,7 @@ export const submitDiagnosticExam = async (studentId: string, attemptId: string,
                 //isCorrect = correctOptions.some(opt => opt.answer.trim().toLowerCase() === normalizedSubmit);
 
                 // Allow if text matches any valid correct grid-in answer
-                isCorrect = correctOptions.some(opt => isEquivalentGridInAnswer(studentGridInAnswer!, opt.answer));
+                isCorrect = correctOptions.some(opt => opt.answer ? isEquivalentGridInAnswer(studentGridInAnswer!, opt.answer) : false);
             }
         }
         // If no submittedAnswer is found, isCorrect remains false 

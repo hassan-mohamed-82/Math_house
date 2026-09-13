@@ -6,7 +6,7 @@ import { Sections } from "./sections";
 
 export const questions = mysqlTable("questions", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
-    question: varchar("question", { length: 255 }).notNull(),
+    question: varchar("question", { length: 255 }),
     image: varchar("image", { length: 255 }),
     answerType: mysqlEnum("answerType", ["MCQ", "Grid in"]).notNull(),
     difficulty: mysqlEnum("difficulty", ["A", "B", "C", "D", "E"]).notNull(),
@@ -28,7 +28,7 @@ export const questions = mysqlTable("questions", {
 export const questionOptions = mysqlTable("question_options", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     questionId: char("question_id", { length: 255 }).notNull().references(() => questions.id, { onDelete: "cascade" }),
-    answer: varchar("answer", { length: 255 }).notNull(),
+    answer: varchar("answer", { length: 255 }),
     isCorrect: boolean("is_correct").notNull().default(false),
     order: char("order", { length: 1 }),
     createdAt: timestamp("created_at").defaultNow(),
@@ -49,7 +49,7 @@ export const questionAnswers = mysqlTable("question_answers", {
 export const ParallelQuestion = mysqlTable("parallel_questions", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     origianlQuestionId: char("question_id", { length: 255 }).notNull().references(() => questions.id, { onDelete: "cascade" }),
-    question: varchar("question", { length: 255 }).notNull(),
+    question: varchar("question", { length: 255 }),
     answerType: mysqlEnum("answerType", ["MCQ", "Grid in"]).notNull(),
     difficulty: mysqlEnum("difficulty", ["A", "B", "C", "D", "E"]).notNull(),
     lessonId: char("lesson_id", { length: 255 }).notNull().references(() => lessons.id, { onDelete: "cascade" }),
@@ -60,7 +60,7 @@ export const ParallelQuestion = mysqlTable("parallel_questions", {
 export const ParallelQuestionOptions = mysqlTable("parallel_question_options", {
     id: char("id", { length: 255 }).primaryKey().notNull().default(sql`(uuid())`),
     questionId: char("question_id", { length: 255 }).notNull().references(() => ParallelQuestion.id, { onDelete: "cascade" }),
-    answer: varchar("answer", { length: 255 }).notNull(),
+    answer: varchar("answer", { length: 255 }),
     isCorrect: boolean("is_correct").notNull().default(false),
     order: char("order", { length: 1 }),
     createdAt: timestamp("created_at").defaultNow(),

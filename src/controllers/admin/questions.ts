@@ -42,7 +42,7 @@ export const createQuestion = async (req: Request, res: Response) => {
     const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answers } = req.body;
     // answers = [{ answerPdf, answerVideo, answerImage, answerText }, ...]
 
-    if (!question
+    if (!image
         || !answerType
         || !difficulty
         || !questionType
@@ -77,7 +77,7 @@ export const createQuestion = async (req: Request, res: Response) => {
     await db.transaction(async (tx) => {
         await tx.insert(questions).values({
             id: questionId,
-            question,
+            question: question || null,
             image: imageUrl,
             answerType,
             difficulty,
@@ -92,7 +92,7 @@ export const createQuestion = async (req: Request, res: Response) => {
         if (options && Array.isArray(options) && options.length > 0) {
             const formattedOptions = options.map((opt: any) => ({
                 questionId: questionId,
-                answer: opt.answer,
+                answer: opt.answer || "",
                 isCorrect: answerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
@@ -337,7 +337,7 @@ export const updateQuestion = async (req: Request, res: Response) => {
         }
 
         const questionUpdateData: any = {};
-        if (question !== undefined) questionUpdateData.question = question;
+        if (question !== undefined) questionUpdateData.question = question || null;
         if (image !== undefined) {
             const imageUpdate = await handleImageUpdate(req, existingQuestion[0].image, image, "questions");
             questionUpdateData.image = imageUpdate;
@@ -363,7 +363,7 @@ export const updateQuestion = async (req: Request, res: Response) => {
             const currentAnswerType = answerType !== undefined ? answerType : existingQuestion[0].answerType;
             const formattedOptions = options.map((opt: any) => ({
                 questionId: id,
-                answer: opt.answer,
+                answer: opt.answer || "",
                 isCorrect: currentAnswerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
@@ -732,7 +732,6 @@ export const createParallelQuestion = async (req: Request, res: Response) => {
     const { origianlQuestionId, question, answerType, difficulty, lessonId, options } = req.body;
 
     if (!origianlQuestionId
-        || !question
         || !answerType
         || !difficulty
         || !lessonId
@@ -744,8 +743,8 @@ export const createParallelQuestion = async (req: Request, res: Response) => {
         throw new NotFound("Original question is not found");
     }
 
-    if (!(originalQuestion[0].question) || originalQuestion[0].question.length <= 0) {
-        throw new BadRequest("Original Question must have question text");
+    if (!originalQuestion[0].image) {
+        throw new BadRequest("Original Question must have question image");
     }
     const lesson = await db.select().from(lessons).where(eq(lessons.id, lessonId)).limit(1);
 
@@ -758,7 +757,7 @@ export const createParallelQuestion = async (req: Request, res: Response) => {
         await tx.insert(ParallelQuestion).values({
             id: questionId,
             origianlQuestionId,
-            question,
+            question: question || null,
             answerType,
             difficulty,
             lessonId,
@@ -767,7 +766,7 @@ export const createParallelQuestion = async (req: Request, res: Response) => {
         if (options && Array.isArray(options) && options.length > 0) {
             const formattedOptions = options.map((opt: any) => ({
                 questionId: questionId,
-                answer: opt.answer,
+                answer: opt.answer || "",
                 isCorrect: answerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
@@ -793,7 +792,7 @@ export const updateParallelQuestion = async (req: Request, res: Response) => {
         }
 
         const updateData: any = {};
-        if (question !== undefined) updateData.question = question;
+        if (question !== undefined) updateData.question = question || null;
         if (answerType !== undefined) updateData.answerType = answerType;
         if (difficulty !== undefined) updateData.difficulty = difficulty;
         if (lessonId !== undefined) updateData.lessonId = lessonId;
@@ -810,7 +809,7 @@ export const updateParallelQuestion = async (req: Request, res: Response) => {
             const currentAnswerType = answerType !== undefined ? answerType : existingQuestion[0].answerType;
             const formattedOptions = options.map((opt: any) => ({
                 questionId: id,
-                answer: opt.answer,
+                answer: opt.answer || "",
                 isCorrect: currentAnswerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
