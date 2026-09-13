@@ -29,7 +29,7 @@ import paymentMethodRouter from "./paymentMethod"
 import paymentRouter from "./payment"
 import gradeRouter from "./grade"
 import reportsRouter from "./reports"
-// import sessionRatingQuestionsRouter from "./SessionRatingQuestions"
+import sessionRatingQuestionsRouter from "./SessionRatingQuestions"
 // import sessionRatingRouter from "./SessionRating"
 import extraHomeworkRouter from "./ExtraHomework"
 import { authenticated } from "../../middlewares/authenticated";
@@ -47,7 +47,7 @@ router.use("/category", categoryRouter)
 router.use("/roles", rolesRouter)
 router.use("/session", sessionRouter)
 // router.use("/session-ratings", sessionRatingRouter)
-// router.use("/session-rating-questions", sessionRatingQuestionsRouter)
+router.use("/session-rating-questions", sessionRatingQuestionsRouter)
 router.use("/extra-homework", extraHomeworkRouter)
 router.use("/package", packageRouter)
 router.use("/student", studentRouter)
