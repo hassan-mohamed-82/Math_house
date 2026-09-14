@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { sessions, sessionLessons, sessionUsers, sessionGroups, sessionAttendance } from "../../models/schema/admin/Session";
-import { lessons, lessonIdeas, chapters, courses, teachers } from "../../models/schema";
+import { lessons, lessonIdeas, chapters, courses, teachers, sessionRatingQuestions, sessionStudentRatings, sessionStudentQuestionRatings } from "../../models/schema";
 import { groups, groupStudents } from "../../models/schema/admin/Groups";
 import { Student } from "../../models/schema/admin/Student";
 import { eq, and, or, inArray, sql, desc, asc } from "drizzle-orm";
@@ -109,6 +109,97 @@ async function fetchSessionResources(sessionIds: string[]) {
     return resourcesBySession;
 }
 
+/**
+ * Fetches student ratings (with question ratings and student info) for a list of sessionIds, grouped by sessionId.
+ */
+async function fetchSessionRatings(sessionIds: string[]) {
+    if (sessionIds.length === 0) return new Map<string, any[]>();
+
+    const ratingsRows = await db
+        .select({
+            id: sessionStudentRatings.id,
+            sessionId: sessionStudentRatings.sessionId,
+            studentId: sessionStudentRatings.studentId,
+            overallRating: sessionStudentRatings.overallRating,
+            generalComment: sessionStudentRatings.generalComment,
+            ratedByTeacherId: sessionStudentRatings.ratedByTeacherId,
+            ratedByAdminId: sessionStudentRatings.ratedByAdminId,
+            createdAt: sessionStudentRatings.createdAt,
+            updatedAt: sessionStudentRatings.updatedAt,
+            studentFirstname: Student.firstname,
+            studentLastname: Student.lastname,
+            studentEmail: Student.email,
+            studentAvatar: Student.avatar,
+            studentPhone: Student.phone,
+        })
+        .from(sessionStudentRatings)
+        .innerJoin(Student, eq(sessionStudentRatings.studentId, Student.id))
+        .where(inArray(sessionStudentRatings.sessionId, sessionIds))
+        .orderBy(desc(sessionStudentRatings.createdAt));
+
+    const ratingIds = ratingsRows.map(r => r.id);
+    const questionRatingsMap = new Map<string, any[]>();
+
+    if (ratingIds.length > 0) {
+        const questionRatings = await db
+            .select({
+                id: sessionStudentQuestionRatings.id,
+                sessionStudentRatingId: sessionStudentQuestionRatings.sessionStudentRatingId,
+                questionId: sessionStudentQuestionRatings.questionId,
+                rating: sessionStudentQuestionRatings.rating,
+                comment: sessionStudentQuestionRatings.comment,
+                questionTitle: sessionRatingQuestions.title,
+                questionCategory: sessionRatingQuestions.category,
+                questionWeight: sessionRatingQuestions.weight,
+            })
+            .from(sessionStudentQuestionRatings)
+            .innerJoin(sessionRatingQuestions, eq(sessionStudentQuestionRatings.questionId, sessionRatingQuestions.id))
+            .where(inArray(sessionStudentQuestionRatings.sessionStudentRatingId, ratingIds));
+
+        questionRatings.forEach(qr => {
+            if (!questionRatingsMap.has(qr.sessionStudentRatingId)) {
+                questionRatingsMap.set(qr.sessionStudentRatingId, []);
+            }
+            questionRatingsMap.get(qr.sessionStudentRatingId)!.push({
+                id: qr.id,
+                questionId: qr.questionId,
+                questionTitle: qr.questionTitle,
+                category: qr.questionCategory,
+                weight: qr.questionWeight,
+                rating: qr.rating,
+                comment: qr.comment,
+            });
+        });
+    }
+
+    const ratingsBySession = new Map<string, any[]>();
+    ratingsRows.forEach(row => {
+        if (!ratingsBySession.has(row.sessionId)) {
+            ratingsBySession.set(row.sessionId, []);
+        }
+        ratingsBySession.get(row.sessionId)!.push({
+            id: row.id,
+            studentId: row.studentId,
+            student: {
+                id: row.studentId,
+                name: `${row.studentFirstname} ${row.studentLastname}`,
+                email: row.studentEmail,
+                avatar: row.studentAvatar,
+                phone: row.studentPhone,
+            },
+            overallRating: Number(row.overallRating),
+            generalComment: row.generalComment,
+            ratedByTeacherId: row.ratedByTeacherId,
+            ratedByAdminId: row.ratedByAdminId,
+            createdAt: row.createdAt,
+            updatedAt: row.updatedAt,
+            questionRatings: questionRatingsMap.get(row.id) || [],
+        });
+    });
+
+    return ratingsBySession;
+}
+
 // ── Controllers ───────────────────────────────────────────────────────────────
 
 export const getAllTeacherSessions = async (req: Request, res: Response) => {
@@ -139,11 +230,21 @@ export const getAllTeacherSessions = async (req: Request, res: Response) => {
 
     const sessionIds = rawSessions.map(s => s.id);
     const resourcesBySession = await fetchSessionResources(sessionIds);
+    const ratingsBySession = await fetchSessionRatings(sessionIds);
 
-    const result = rawSessions.map(s => ({
-        ...s,
-        lessons: resourcesBySession.get(s.id) || [],
-    }));
+    const result = rawSessions.map(s => {
+        const ratings = ratingsBySession.get(s.id) || [];
+        const overallSum = ratings.reduce((sum, r) => sum + (Number(r.overallRating) || 0), 0);
+        const averageRating = ratings.length > 0 ? Number((overallSum / ratings.length).toFixed(2)) : null;
+
+        return {
+            ...s,
+            lessons: resourcesBySession.get(s.id) || [],
+            averageRating,
+            totalRatedStudents: ratings.length,
+            ratings,
+        };
+    });
 
     return SuccessResponse(res, {
         message: "Sessions fetched successfully",
@@ -190,11 +291,21 @@ export const getUpcomingTeacherSessions = async (req: Request, res: Response) =>
 
     const sessionIds = rawSessions.map(s => s.id);
     const resourcesBySession = await fetchSessionResources(sessionIds);
+    const ratingsBySession = await fetchSessionRatings(sessionIds);
 
-    const result = rawSessions.map(s => ({
-        ...s,
-        lessons: resourcesBySession.get(s.id) || [],
-    }));
+    const result = rawSessions.map(s => {
+        const ratings = ratingsBySession.get(s.id) || [];
+        const overallSum = ratings.reduce((sum, r) => sum + (Number(r.overallRating) || 0), 0);
+        const averageRating = ratings.length > 0 ? Number((overallSum / ratings.length).toFixed(2)) : null;
+
+        return {
+            ...s,
+            lessons: resourcesBySession.get(s.id) || [],
+            averageRating,
+            totalRatedStudents: ratings.length,
+            ratings,
+        };
+    });
 
     return SuccessResponse(res, {
         message: "Upcoming sessions fetched successfully",
@@ -241,11 +352,21 @@ export const getPastTeacherSessions = async (req: Request, res: Response) => {
 
     const sessionIds = rawSessions.map(s => s.id);
     const resourcesBySession = await fetchSessionResources(sessionIds);
+    const ratingsBySession = await fetchSessionRatings(sessionIds);
 
-    const result = rawSessions.map(s => ({
-        ...s,
-        lessons: resourcesBySession.get(s.id) || [],
-    }));
+    const result = rawSessions.map(s => {
+        const ratings = ratingsBySession.get(s.id) || [];
+        const overallSum = ratings.reduce((sum, r) => sum + (Number(r.overallRating) || 0), 0);
+        const averageRating = ratings.length > 0 ? Number((overallSum / ratings.length).toFixed(2)) : null;
+
+        return {
+            ...s,
+            lessons: resourcesBySession.get(s.id) || [],
+            averageRating,
+            totalRatedStudents: ratings.length,
+            ratings,
+        };
+    });
 
     return SuccessResponse(res, {
         message: "Past sessions fetched successfully",
@@ -282,6 +403,10 @@ export const getTeacherSessionById = async (req: Request, res: Response) => {
 
     // Lessons + resources
     const resourcesBySession = await fetchSessionResources([id]);
+    const ratingsBySession = await fetchSessionRatings([id]);
+    const ratings = ratingsBySession.get(id) || [];
+    const overallSum = ratings.reduce((sum, r) => sum + (Number(r.overallRating) || 0), 0);
+    const averageRating = ratings.length > 0 ? Number((overallSum / ratings.length).toFixed(2)) : null;
 
     // Linked groups
     const linkedGroups = await db
@@ -314,6 +439,9 @@ export const getTeacherSessionById = async (req: Request, res: Response) => {
             lessons: resourcesBySession.get(id) || [],
             groups: linkedGroups,
             studentsCount: allStudentIds.size,
+            averageRating,
+            totalRatedStudents: ratings.length,
+            ratings,
         },
     }, 200);
 };
@@ -393,9 +521,81 @@ export const getSessionStudents = async (req: Request, res: Response) => {
 
     const attendanceMap = new Map(attendanceRows.map(a => [a.studentId, a]));
 
+    // 5. Fetch student ratings
+    const ratingRows = await db
+        .select({
+            id: sessionStudentRatings.id,
+            studentId: sessionStudentRatings.studentId,
+            overallRating: sessionStudentRatings.overallRating,
+            generalComment: sessionStudentRatings.generalComment,
+            ratedByTeacherId: sessionStudentRatings.ratedByTeacherId,
+            ratedByAdminId: sessionStudentRatings.ratedByAdminId,
+            createdAt: sessionStudentRatings.createdAt,
+            updatedAt: sessionStudentRatings.updatedAt,
+        })
+        .from(sessionStudentRatings)
+        .where(
+            and(
+                eq(sessionStudentRatings.sessionId, sessionId),
+                inArray(sessionStudentRatings.studentId, allStudentIds)
+            )
+        );
+
+    const ratingIds = ratingRows.map(r => r.id);
+    const questionRatingsMap = new Map<string, any[]>();
+
+    if (ratingIds.length > 0) {
+        const questionRatings = await db
+            .select({
+                id: sessionStudentQuestionRatings.id,
+                sessionStudentRatingId: sessionStudentQuestionRatings.sessionStudentRatingId,
+                questionId: sessionStudentQuestionRatings.questionId,
+                rating: sessionStudentQuestionRatings.rating,
+                comment: sessionStudentQuestionRatings.comment,
+                questionTitle: sessionRatingQuestions.title,
+                questionCategory: sessionRatingQuestions.category,
+                questionWeight: sessionRatingQuestions.weight,
+            })
+            .from(sessionStudentQuestionRatings)
+            .innerJoin(sessionRatingQuestions, eq(sessionStudentQuestionRatings.questionId, sessionRatingQuestions.id))
+            .where(inArray(sessionStudentQuestionRatings.sessionStudentRatingId, ratingIds));
+
+        questionRatings.forEach(qr => {
+            if (!questionRatingsMap.has(qr.sessionStudentRatingId)) {
+                questionRatingsMap.set(qr.sessionStudentRatingId, []);
+            }
+            questionRatingsMap.get(qr.sessionStudentRatingId)!.push({
+                id: qr.id,
+                questionId: qr.questionId,
+                questionTitle: qr.questionTitle,
+                category: qr.questionCategory,
+                weight: qr.questionWeight,
+                rating: qr.rating,
+                comment: qr.comment,
+            });
+        });
+    }
+
+    const ratingMap = new Map(
+        ratingRows.map(r => [
+            r.studentId,
+            {
+                id: r.id,
+                overallRating: Number(r.overallRating),
+                generalComment: r.generalComment,
+                ratedByTeacherId: r.ratedByTeacherId,
+                ratedByAdminId: r.ratedByAdminId,
+                createdAt: r.createdAt,
+                updatedAt: r.updatedAt,
+                questionRatings: questionRatingsMap.get(r.id) || [],
+            }
+        ])
+    );
+
     const formattedStudents = studentRows.map(student => {
         const attendance = attendanceMap.get(student.id);
         const enrollment = studentMap.get(student.id);
+        const rating = ratingMap.get(student.id) || null;
         return {
             id: student.id,
             name: `${student.firstname} ${student.lastname}`,
@@ -409,6 +609,7 @@ export const getSessionStudents = async (req: Request, res: Response) => {
                     attendedAt: attendance.attendedAt,
                 }
                 : { status: "not_marked", attendedAt: null },
+            rating,
         };
     });
 
@@ -418,3 +619,4 @@ export const getSessionStudents = async (req: Request, res: Response) => {
         students: formattedStudents,
     }, 200);
 };
+
