@@ -17,7 +17,7 @@ import ideasRouter from "./ideas";
 import enrollmentRouter from "./enrollmant";
 import reportsRouter from "./reports";
 import promoCodesRouter from "./promoCodes";
-// import sessionRatingRouter from "./SessionRating";
+import sessionRatingRouter from "./SessionRating";
 import extraHomeworkRouter from "./ExtraHomework";
 import { authorizeRoles } from "../../middlewares/authorized";
 import { authenticated } from "../../middlewares/authenticated";
@@ -29,7 +29,7 @@ router.use("/profile", profileRouter)
 router.use("/wallet", walletRouter)
 router.use("/payment", paymentRouter)
 router.use("/sessions", attendsRouter)
-// router.use("/session-ratings", sessionRatingRouter)
+router.use("/session-ratings", sessionRatingRouter)
 router.use("/extra-homework", extraHomeworkRouter)
 router.use("/packages", packagesRouter)
 router.use("/exams", examsRouter)
