@@ -1,13 +1,31 @@
-// import { Router } from "express";
-// import { catchAsync } from "../../utils/catchAsync";
-// import { getSessionRatings, getAllSessionsWithRatings } from "../../controllers/admin/SessionRating";
+import { Router } from "express";
+import {
+    rateSessionStudents,
+    getSessionRatings,
+    getStudentSessionRatings,
+    getRatingById,
+    deleteSessionRating,
+} from "../../controllers/admin/SessionRating";
+import { catchAsync } from "../../utils/catchAsync";
+import { validate } from "../../middlewares/validation";
+import { rateSessionStudentsSchema } from "../../validation/admin/sessionRating";
+import { requirePermission } from "../../middlewares/requirePermission";
 
-// const router = Router();
+const router = Router();
 
-// // Get all sessions with their ratings (supports filtering by teacher, category, course)
-// router.get("/all", catchAsync(getAllSessionsWithRatings));
+// Rate students for a specific session
+router.post("/session/:sessionId", requirePermission("session_ratings", "Add"), catchAsync(rateSessionStudents));
 
-// // Get all ratings for a specific session
-// router.get("/:sessionId", catchAsync(getSessionRatings));
+// Get all ratings for a session
+router.get("/session/:sessionId", requirePermission("session_ratings", "View"), catchAsync(getSessionRatings));
 
-// export default router;
+// Get ratings history for a student
+router.get("/student/:id", requirePermission("session_ratings", "View"), catchAsync(getStudentSessionRatings));
+
+// Get single rating by ID
+router.get("/:ratingId", requirePermission("session_ratings", "View"), catchAsync(getRatingById));
+
+// Delete a rating
+router.delete("/:ratingId", requirePermission("session_ratings", "Delete"), catchAsync(deleteSessionRating));
+
+export default router;
