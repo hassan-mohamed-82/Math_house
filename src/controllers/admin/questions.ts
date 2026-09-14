@@ -278,8 +278,8 @@ export const getQuestionbyId = async (req: Request, res: Response) => {
         },
     }).from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
-        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
-        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .leftJoin(Sections, eq(Sections.id, questions.sectionId))
         .where(eq(questions.id, id)).limit(1);
 
     if (!question[0]) {
@@ -491,8 +491,8 @@ export const getQuestionsbyLessonId = async (req: Request, res: Response) => {
     const [totalQueries] = await db.select({ count: count() })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
-        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
-        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .leftJoin(Sections, eq(Sections.id, questions.sectionId))
         .where(finalCondition);
 
     const total = totalQueries.count;
@@ -525,8 +525,8 @@ export const getQuestionsbyLessonId = async (req: Request, res: Response) => {
     })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
-        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
-        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .leftJoin(Sections, eq(Sections.id, questions.sectionId))
         .where(finalCondition)
         .limit(limit)
         .offset(offset)
@@ -571,8 +571,8 @@ export const getQuestionsbyCourseId = async (req: Request, res: Response) => {
     const [totalQueries] = await db.select({ count: count() })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
-        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
-        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .leftJoin(Sections, eq(Sections.id, questions.sectionId))
         .where(finalCondition);
 
     const total = totalQueries.count;
@@ -605,8 +605,8 @@ export const getQuestionsbyCourseId = async (req: Request, res: Response) => {
     })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
-        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
-        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .leftJoin(Sections, eq(Sections.id, questions.sectionId))
         .where(finalCondition)
         .limit(limit)
         .offset(offset)
@@ -651,8 +651,8 @@ export const getQuestionsbySectiondId = async (req: Request, res: Response) => {
     const [totalQueries] = await db.select({ count: count() })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
-        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
-        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .leftJoin(Sections, eq(Sections.id, questions.sectionId))
         .where(finalCondition);
 
     const total = totalQueries.count;
@@ -685,8 +685,8 @@ export const getQuestionsbySectiondId = async (req: Request, res: Response) => {
     })
         .from(questions)
         .innerJoin(lessons, eq(lessons.id, questions.lessonId))
-        .innerJoin(examCodes, eq(examCodes.id, questions.codeId))
-        .innerJoin(Sections, eq(Sections.id, questions.sectionId))
+        .leftJoin(examCodes, eq(examCodes.id, questions.codeId))
+        .leftJoin(Sections, eq(Sections.id, questions.sectionId))
         .where(finalCondition)
         .limit(limit)
         .offset(offset)
