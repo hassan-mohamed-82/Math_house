@@ -29,9 +29,9 @@ router.post("/:examId/submit", catchAsync(submitExam));
 
 // ── Per-section flow (sectioned exams) ───────────────────────────────────────
 // Start or resume a specific section within an active exam attempt
-router.post("/:examId/attempts/:attemptId/sections/:examSectionId/start", catchAsync(startSection));
+router.get("/:examId/attempts/:attemptId/sections/:examSectionId/start", catchAsync(startSection));
 // Start a break after completing a section
-router.post("/:examId/attempts/:attemptId/sections/:examSectionId/break", catchAsync(startBreak));
+router.get("/:examId/attempts/:attemptId/sections/:examSectionId/break", catchAsync(startBreak));
 // Submit answers for a section and end it
 router.post("/:examId/attempts/:attemptId/sections/:examSectionId/submit", catchAsync(submitSection));
 
