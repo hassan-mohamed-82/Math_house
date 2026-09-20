@@ -818,13 +818,19 @@ export const submitParallelAnswers = async (req: Request, res: Response) => {
             score: isCorrect ? 1 : 0,
         });
 
+        const selectedOpt = ans.selectedOptionId
+            ? (allOptsMap.get(pq.id) ?? []).find(o => o.id === ans.selectedOptionId)
+            : null;
+
         results.push({
             parallelQuestionId: pq.id,
             originalQuestionId: pq.originalQuestionId,
             question: pq.question,
             answerType: pq.answerType,
             isCorrect,
-            yourAnswer: ans.selectedOptionId ?? ans.gridInAnswer ?? null,
+            yourAnswer: pq.answerType === "MCQ"
+                ? (selectedOpt ? { id: selectedOpt.id, answer: selectedOpt.answer, order: selectedOpt.order } : null)
+                : (ans.gridInAnswer ?? null),
             correctAnswer: correct ? { id: correct.id, answer: correct.answer, order: correct.order } : null,
             options: allOptsMap.get(pq.id) ?? [],
         });
