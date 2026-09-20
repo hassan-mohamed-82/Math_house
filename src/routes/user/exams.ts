@@ -11,6 +11,9 @@ import {
     submitParallelAnswers,
     getExamAttemptAnswers,
     getExamAttemptsHistory,
+    startSection,
+    startBreak,
+    submitSection,
 } from "../../controllers/user/exams";
 
 const router = Router();
@@ -23,6 +26,14 @@ router.get("/attempts", catchAsync(getExamAttemptsHistory));
 router.get("/:examId", catchAsync(getExamById));
 router.post("/:examId/start", catchAsync(startExam));
 router.post("/:examId/submit", catchAsync(submitExam));
+
+// ── Per-section flow (sectioned exams) ───────────────────────────────────────
+// Start or resume a specific section within an active exam attempt
+router.post("/:examId/attempts/:attemptId/sections/:examSectionId/start", catchAsync(startSection));
+// Start a break after completing a section
+router.post("/:examId/attempts/:attemptId/sections/:examSectionId/break", catchAsync(startBreak));
+// Submit answers for a section and end it
+router.post("/:examId/attempts/:attemptId/sections/:examSectionId/submit", catchAsync(submitSection));
 
 // ── Reveal question answer (costs questionBalance) ───────────────────────────
 router.post("/questions/:questionId/show-answer", catchAsync(showQuestionAnswer));

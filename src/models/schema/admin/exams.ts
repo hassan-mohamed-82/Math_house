@@ -37,6 +37,14 @@ export const ExamSections = mysqlTable("exam_sections", {
     sectionId: char("section_id", { length: 255 }).notNull().references(() => Sections.id, { onDelete: "cascade" }),
     sectionOrder: int("section_order").notNull(),
     examId: char("exam_id", { length: 255 }).notNull().references(() => Exams.id, { onDelete: "cascade" }),
+
+    // Per-exam section duration override (minutes). If null, falls back to Sections.sectionTime.
+    duration: int("duration"),
+
+    // Break configuration between sections
+    breakLimited: boolean("break_limited").notNull().default(false), // true = break has a max duration
+    maxBreakDuration: int("max_break_duration"),                     // Max break in minutes (only used when breakLimited = true)
+
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });

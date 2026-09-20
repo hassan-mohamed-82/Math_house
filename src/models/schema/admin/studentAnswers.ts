@@ -1,4 +1,4 @@
-import { mysqlTable, char, varchar, timestamp, int, boolean } from "drizzle-orm/mysql-core";
+import { mysqlTable, char, varchar, timestamp, int, boolean, uniqueIndex } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { examAttempts } from "./examAttempts";
 import { questions, questionOptions } from "./questions";
@@ -13,4 +13,7 @@ export const studentAnswers = mysqlTable("student_answers", {
     score: int("score").notNull().default(0),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
-});
+}, (table) => ({
+    // Prevent duplicate answers for the same question within the same attempt
+    attemptQuestionUnique: uniqueIndex("student_answers_attempt_question_unique").on(table.attemptId, table.questionId),
+}));

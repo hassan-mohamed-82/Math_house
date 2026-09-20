@@ -21,8 +21,13 @@ export const createExam = async (req: Request, res: Response) => {
     switch (examType) {
         case "static":
 
-            const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, rawScoreId, calculators } = req.body;
-            // sections structure: { sectionId: string, sectionOrder: number, questionIds: string[] }[]
+    const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, rawScoreId, calculators } = req.body;
+            // sections structure:
+            // { sectionId: string, sectionOrder: number, questionIds: string[],
+            //   duration?: number,        // per-exam override in minutes (null = use Sections.sectionTime)
+            //   breakLimited?: boolean,   // whether the break after this section is time-limited
+            //   maxBreakDuration?: number // max break minutes (only when breakLimited = true)
+            // }[]
 
             // Validate calculators if provided
             const validatedCalculators: string[] = [];
@@ -100,11 +105,19 @@ export const createExam = async (req: Request, res: Response) => {
             sections.forEach((section: any) => {
                 const examSectionId = randomUUID();
 
+                // Validate breakLimited / maxBreakDuration consistency
+                if (section.breakLimited && !section.maxBreakDuration) {
+                    throw new BadRequest(`Section order ${section.sectionOrder}: maxBreakDuration is required when breakLimited is true`);
+                }
+
                 examSectionsToInsert.push({
                     id: examSectionId,
                     examId: examId,
                     sectionId: section.sectionId,
-                    sectionOrder: section.sectionOrder ?? 0 // If not provided, default or handle error
+                    sectionOrder: section.sectionOrder ?? 0,
+                    duration: section.duration ?? null,         // null → fallback to Sections.sectionTime
+                    breakLimited: section.breakLimited ?? false,
+                    maxBreakDuration: section.breakLimited ? (section.maxBreakDuration ?? null) : null,
                 });
 
                 section.questionIds.forEach((qId: string, index: number) => {
@@ -255,11 +268,19 @@ export const updateExam = async (req: Request, res: Response) => {
             sections.forEach((section: any) => {
                 const examSectionId = randomUUID();
 
+                // Validate breakLimited / maxBreakDuration consistency
+                if (section.breakLimited && !section.maxBreakDuration) {
+                    throw new BadRequest(`Section order ${section.sectionOrder}: maxBreakDuration is required when breakLimited is true`);
+                }
+
                 examSectionsToInsert.push({
                     id: examSectionId,
                     examId: id,
                     sectionId: section.sectionId,
-                    sectionOrder: section.sectionOrder ?? 0
+                    sectionOrder: section.sectionOrder ?? 0,
+                    duration: section.duration ?? null,
+                    breakLimited: section.breakLimited ?? false,
+                    maxBreakDuration: section.breakLimited ? (section.maxBreakDuration ?? null) : null,
                 });
 
                 section.questionIds.forEach((qId: string, index: number) => {
@@ -375,9 +396,13 @@ export const getExamById = async (req: Request, res: Response) => {
             id: ExamSections.id,
             sectionId: ExamSections.sectionId,
             sectionOrder: ExamSections.sectionOrder,
+            // Effective duration: use ExamSections.duration if set, else fall back to Sections.sectionTime
+            duration: ExamSections.duration,
+            sectionTime: Sections.sectionTime,
+            breakLimited: ExamSections.breakLimited,
+            maxBreakDuration: ExamSections.maxBreakDuration,
             sectionName: Sections.sectionName,
             sectionDescription: Sections.sectionDescription,
-            sectionTime: Sections.sectionTime,
         })
             .from(ExamSections)
             .leftJoin(Sections, eq(ExamSections.sectionId, Sections.id))
@@ -409,8 +434,13 @@ export const getExamById = async (req: Request, res: Response) => {
             // 4. Structure the Response
             const formattedSections = sections.map(section => {
                 const sectionQs = sectionQuestions.filter(sq => sq.sectionId === section.id);
+                const { sectionTime, duration, ...sectionRest } = section;
                 return {
-                    ...section,
+                    ...sectionRest,
+                    // If ExamSections.duration is set, it overrides Sections.sectionTime
+                    effectiveDuration: duration ?? sectionTime,
+                    durationOverride: duration,       // The per-exam override (null = using global)
+                    sectionTime,                       // The global section time (for reference)
                     questions: sectionQs
                 };
             });

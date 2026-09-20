@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { Exams, ExamSections, SectionQuestions } from "../../models/schema/admin/exams";
-import { examAttempts } from "../../models/schema/admin/examAttempts";
+import { examAttempts, sectionAttempts } from "../../models/schema/admin/examAttempts";
 import { studentAnswers } from "../../models/schema/admin/studentAnswers";
 import { Student } from "../../models/schema/admin/Student";
 import { courses } from "../../models/schema/admin/courses";
@@ -261,6 +261,9 @@ export const getExamById = async (req: Request, res: Response) => {
             sectionName: Sections.sectionName,
             sectionDescription: Sections.sectionDescription,
             sectionTime: Sections.sectionTime,
+            durationOverride: ExamSections.duration,
+            breakLimited: ExamSections.breakLimited,
+            maxBreakDuration: ExamSections.maxBreakDuration,
         })
         .from(ExamSections)
         .leftJoin(Sections, eq(ExamSections.sectionId, Sections.id))
@@ -309,15 +312,19 @@ export const getExamById = async (req: Request, res: Response) => {
             });
         }
 
-        formattedSections = sections.map(section => ({
-            ...section,
-            questions: sectionQuestions
-                .filter(sq => sq.sectionId === section.id)
-                .map(sq => ({
-                    ...sq,
-                    options: optionsMap.get(sq.questionId) ?? [],
-                })),
-        }));
+        formattedSections = sections.map(section => {
+            const { sectionTime, durationOverride, ...sectionRest } = section;
+            return {
+                ...sectionRest,
+                effectiveDuration: durationOverride ?? sectionTime,
+                questions: sectionQuestions
+                    .filter(sq => sq.sectionId === section.id)
+                    .map(sq => ({
+                        ...sq,
+                        options: optionsMap.get(sq.questionId) ?? [],
+                    })),
+            };
+        });
     }
 
     // 5. Check for existing attempt
@@ -1145,5 +1152,551 @@ export const getExamAttemptsHistory = async (req: Request, res: Response) => {
     return SuccessResponse(res, {
         message: "Exam attempts history retrieved successfully",
         attempts,
+    });
+};
+
+// ===================== helper: duplicate-key detection =====================
+// MySQL duplicate-key errors carry code 'ER_DUP_ENTRY' (errno 1062).
+const isDuplicateKeyError = (err: any): boolean =>
+    err?.code === "ER_DUP_ENTRY" || err?.errno === 1062;
+
+// ===================== FINALIZE EXAM ATTEMPT (private helper) =====================
+// Must be called from INSIDE the same transaction as the section update that
+// triggers it, so the section-close + all-done check + exam-close all commit
+// or roll back together.
+// Typed as `typeof db` rather than a nested Parameters<> extraction — drizzle's
+// db.transaction is generic, and extracting the tx type via
+// Parameters<Parameters<typeof db.transaction>[0]>[0] fails to resolve
+// properly in some drizzle/TS versions, causing query results to collapse to
+// `never`. `tx` shares the same query-builder surface as `db` for our purposes
+// (select/insert/update), so this works cleanly.
+// We use Omit<typeof db, '$client'> so the function accepts both the full db
+// instance AND a MySqlTransaction (which lacks $client) without error.
+type FinalizeExamResult = {
+    exam: { passScore: number; totalScore: number };
+    totalScore: number;
+    isPassed: boolean;
+    examFinalStatus: string;
+    endedAt: Date;
+};
+
+const finalizeExamAttempt = async (
+    tx: Omit<typeof db, "$client">,
+    { attemptId, examId }: { attemptId: string; examId: string },
+): Promise<FinalizeExamResult> => {
+    const [exam] = await tx
+        .select({ passScore: Exams.passScore, totalScore: Exams.totalScore })
+        .from(Exams)
+        .where(eq(Exams.id, examId))
+        .limit(1);
+
+    if (!exam) throw new NotFound("Exam not found");
+
+    const allSectionAttempts = await tx
+        .select({ score: sectionAttempts.score, status: sectionAttempts.status })
+        .from(sectionAttempts)
+        .where(eq(sectionAttempts.attemptId, attemptId));
+
+    const totalScore = allSectionAttempts.reduce((sum, s) => sum + (s.score ?? 0), 0);
+    const anyTimedOut = allSectionAttempts.some(s => s.status === "timed_out");
+    const examFinalStatus = anyTimedOut ? "timed_out" : "completed";
+    const isPassed = totalScore >= exam.passScore;
+    const endedAt = new Date();
+
+    await tx
+        .update(examAttempts)
+        .set({ status: examFinalStatus, score: totalScore, isPassed, endedAt })
+        .where(eq(examAttempts.id, attemptId));
+
+    return { exam, totalScore, isPassed, examFinalStatus, endedAt };
+};
+
+// ===================== START SECTION =====================
+// POST /exams/:examId/attempts/:attemptId/sections/:examSectionId/start
+export const startSection = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { examId, attemptId, examSectionId } = req.params;
+
+    // 1. Verify the exam attempt belongs to this student and is in_progress
+    const [attempt] = await db
+        .select({ id: examAttempts.id, status: examAttempts.status })
+        .from(examAttempts)
+        .where(and(
+            eq(examAttempts.id, attemptId),
+            eq(examAttempts.studentId, studentId),
+            eq(examAttempts.examId, examId),
+            eq(examAttempts.status, "in_progress"),
+        ))
+        .limit(1);
+
+    if (!attempt) throw new NotFound("No active exam attempt found");
+
+    // 2. Verify the section belongs to this exam; fetch effective duration + break config
+    const [examSection] = await db
+        .select({
+            id: ExamSections.id,
+            duration: ExamSections.duration,
+            sectionTime: Sections.sectionTime,
+            breakLimited: ExamSections.breakLimited,
+            maxBreakDuration: ExamSections.maxBreakDuration,
+        })
+        .from(ExamSections)
+        .leftJoin(Sections, eq(ExamSections.sectionId, Sections.id))
+        .where(and(
+            eq(ExamSections.id, examSectionId),
+            eq(ExamSections.examId, examId),
+        ))
+        .limit(1);
+
+    if (!examSection) throw new NotFound("Section not found in this exam");
+
+    const effectiveDuration = examSection.duration ?? examSection.sectionTime; // minutes
+
+    // 3. Check for an existing section attempt
+    const [existingSectionAttempt] = await db
+        .select()
+        .from(sectionAttempts)
+        .where(and(
+            eq(sectionAttempts.attemptId, attemptId),
+            eq(sectionAttempts.examSectionId, examSectionId),
+        ))
+        .limit(1);
+
+    if (existingSectionAttempt) {
+        if (existingSectionAttempt.status === "in_progress") {
+            const elapsedMs = existingSectionAttempt.startedAt
+                ? Date.now() - new Date(existingSectionAttempt.startedAt).getTime()
+                : 0;
+            const remainingMs = (effectiveDuration! * 60 * 1000) - elapsedMs;
+
+            if (remainingMs <= 0) {
+                await db.update(sectionAttempts)
+                    .set({ status: "timed_out", endedAt: new Date() })
+                    .where(eq(sectionAttempts.id, existingSectionAttempt.id));
+                throw new BadRequest("Section time has expired");
+            }
+
+            return SuccessResponse(res, {
+                message: "Resuming section in progress",
+                sectionAttempt: {
+                    id: existingSectionAttempt.id,
+                    startedAt: existingSectionAttempt.startedAt,
+                    effectiveDuration,
+                    remainingSeconds: Math.floor(remainingMs / 1000),
+                    breakLimited: examSection.breakLimited,
+                    maxBreakDuration: examSection.maxBreakDuration,
+                },
+            });
+        }
+
+        if (existingSectionAttempt.status === "on_break") {
+            if (examSection.breakLimited && examSection.maxBreakDuration && existingSectionAttempt.breakStartedAt) {
+                const breakElapsedMs = Date.now() - new Date(existingSectionAttempt.breakStartedAt).getTime();
+                const maxBreakMs = examSection.maxBreakDuration * 60 * 1000;
+                if (breakElapsedMs > maxBreakMs) {
+                    await db.update(sectionAttempts)
+                        .set({ status: "timed_out", endedAt: new Date() })
+                        .where(eq(sectionAttempts.id, existingSectionAttempt.id));
+                    throw new BadRequest("Break time exceeded. This section has been marked as timed out.");
+                }
+            }
+
+            await db.update(sectionAttempts)
+                .set({ status: "in_progress", breakStartedAt: null })
+                .where(eq(sectionAttempts.id, existingSectionAttempt.id));
+
+            const elapsedMs = existingSectionAttempt.startedAt
+                ? Date.now() - new Date(existingSectionAttempt.startedAt).getTime()
+                : 0;
+            const remainingMs = (effectiveDuration! * 60 * 1000) - elapsedMs;
+
+            return SuccessResponse(res, {
+                message: "Section resumed after break",
+                sectionAttempt: {
+                    id: existingSectionAttempt.id,
+                    startedAt: existingSectionAttempt.startedAt,
+                    effectiveDuration,
+                    remainingSeconds: Math.floor(remainingMs / 1000),
+                },
+            });
+        }
+
+        throw new BadRequest(`Cannot enter this section. Current status: ${existingSectionAttempt.status}`);
+    }
+
+    // 4. Enforce section ordering — student must complete sections in order
+    const allExamSections = await db
+        .select({ id: ExamSections.id, sectionOrder: ExamSections.sectionOrder })
+        .from(ExamSections)
+        .where(eq(ExamSections.examId, examId))
+        .orderBy(ExamSections.sectionOrder);
+
+    const completedSectionAttempts = await db
+        .select({ examSectionId: sectionAttempts.examSectionId })
+        .from(sectionAttempts)
+        .where(and(
+            eq(sectionAttempts.attemptId, attemptId),
+            inArray(sectionAttempts.status, ["completed", "timed_out"]),
+        ));
+
+    const completedSectionIds = new Set(completedSectionAttempts.map(s => s.examSectionId));
+    const firstIncomplete = allExamSections.find(s => !completedSectionIds.has(s.id));
+
+    if (firstIncomplete && firstIncomplete.id !== examSectionId) {
+        throw new BadRequest("You must complete previous sections first");
+    }
+
+    // 5. Create a fresh section attempt (guarded against race duplicates by the unique index)
+    const sectionAttemptId = randomUUID();
+    const now = new Date();
+
+    try {
+        await db.insert(sectionAttempts).values({
+            id: sectionAttemptId,
+            attemptId,
+            examSectionId,
+            startedAt: now,
+            status: "in_progress",
+        });
+    } catch (err) {
+        if (isDuplicateKeyError(err)) {
+            throw new BadRequest("This section has already been started. Please refresh and try again.");
+        }
+        throw err;
+    }
+
+    return SuccessResponse(res, {
+        message: "Section started successfully",
+        sectionAttempt: {
+            id: sectionAttemptId,
+            startedAt: now,
+            effectiveDuration,
+            remainingSeconds: effectiveDuration! * 60,
+            breakLimited: examSection.breakLimited,
+            maxBreakDuration: examSection.maxBreakDuration,
+        },
+    }, 201);
+};
+
+// ===================== SUBMIT SECTION =====================
+// POST /exams/:examId/attempts/:attemptId/sections/:examSectionId/submit
+// Body: { answers: [{ questionId, selectedOptionId?, gridInAnswer? }] }
+export const submitSection = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { examId, attemptId, examSectionId } = req.params;
+    const { answers } = req.body;
+
+    if (!Array.isArray(answers)) throw new BadRequest("answers array is required");
+
+    // 1. Verify exam attempt
+    const [attempt] = await db
+        .select({ id: examAttempts.id })
+        .from(examAttempts)
+        .where(and(
+            eq(examAttempts.id, attemptId),
+            eq(examAttempts.studentId, studentId),
+            eq(examAttempts.examId, examId),
+            eq(examAttempts.status, "in_progress"),
+        ))
+        .limit(1);
+
+    if (!attempt) throw new NotFound("No active exam attempt found");
+
+    // 2. Find the active section attempt (in_progress or on_break)
+    const [sectionAttempt] = await db
+        .select()
+        .from(sectionAttempts)
+        .where(and(
+            eq(sectionAttempts.attemptId, attemptId),
+            eq(sectionAttempts.examSectionId, examSectionId),
+            inArray(sectionAttempts.status, ["in_progress", "on_break"]),
+        ))
+        .limit(1);
+
+    if (!sectionAttempt) throw new NotFound("No active section attempt found");
+
+    // 3. Fetch effective duration to determine if timed out
+    const [examSection] = await db
+        .select({
+            duration: ExamSections.duration,
+            sectionTime: Sections.sectionTime,
+        })
+        .from(ExamSections)
+        .leftJoin(Sections, eq(ExamSections.sectionId, Sections.id))
+        .where(eq(ExamSections.id, examSectionId))
+        .limit(1);
+
+    const effectiveDuration = (examSection?.duration ?? examSection?.sectionTime) ?? 0;
+    const elapsedMs = sectionAttempt.startedAt
+        ? Date.now() - new Date(sectionAttempt.startedAt).getTime()
+        : 0;
+    const isTimedOut = elapsedMs > effectiveDuration * 60 * 1000;
+
+    // 4. Fetch questions for this exam section
+    const sectionQs = await db
+        .select({ qId: SectionQuestions.questionId, score: SectionQuestions.score, type: questions.answerType })
+        .from(SectionQuestions)
+        .leftJoin(questions, eq(SectionQuestions.questionId, questions.id))
+        .where(eq(SectionQuestions.sectionId, examSectionId));
+
+    const questionIds = sectionQs.map(q => q.qId);
+    const correctOpts = await db
+        .select()
+        .from(questionOptions)
+        .where(and(inArray(questionOptions.questionId, questionIds), eq(questionOptions.isCorrect, true)));
+
+    const correctMap = new Map(correctOpts.map(o => [o.questionId, o]));
+
+    // 5. Grade answers
+    let sectionScore = 0;
+    const answersToInsert = answers.map((ans: any) => {
+        const info = sectionQs.find(q => q.qId === ans.questionId);
+        if (!info) return null;
+        const correct = correctMap.get(ans.questionId);
+        const isCorrect = info.type === "MCQ"
+            ? ans.selectedOptionId === correct?.id
+            : (ans.gridInAnswer && correct?.answer ? isEquivalentGridInAnswer(ans.gridInAnswer, correct.answer) : false);
+        if (isCorrect) sectionScore += info.score;
+        return {
+            id: randomUUID(),
+            attemptId,
+            questionId: ans.questionId,
+            isCorrect,
+            score: isCorrect ? info.score : 0,
+            selectedOptionId: ans.selectedOptionId ?? null,
+            gridInAnswer: ans.gridInAnswer ?? null,
+        };
+    }).filter((x): x is NonNullable<typeof x> => x !== null);
+
+    const sectionFinalStatus = isTimedOut ? "timed_out" : "completed";
+    const now = new Date();
+
+    // 6-8. SINGLE transaction: persist answers → close section → check allDone → finalize exam if last section
+    let examFinalizeResult: FinalizeExamResult | null = null;
+
+    try {
+        await db.transaction(async (tx) => {
+            if (answersToInsert.length > 0) {
+                await tx.insert(studentAnswers).values(answersToInsert);
+            }
+
+            await tx.update(sectionAttempts)
+                .set({ status: sectionFinalStatus, score: sectionScore, endedAt: now, breakStartedAt: null })
+                .where(eq(sectionAttempts.id, sectionAttempt.id));
+
+            // Check whether ALL exam sections now have a completed/timed_out row — inside the same tx
+            const allExamSections = await tx
+                .select({ id: ExamSections.id })
+                .from(ExamSections)
+                .where(eq(ExamSections.examId, examId));
+
+            const doneSectionAttempts = await tx
+                .select({ examSectionId: sectionAttempts.examSectionId })
+                .from(sectionAttempts)
+                .where(and(
+                    eq(sectionAttempts.attemptId, attemptId),
+                    inArray(sectionAttempts.status, ["completed", "timed_out"]),
+                ));
+
+            const doneIds = new Set(doneSectionAttempts.map(s => s.examSectionId));
+            const allDone = allExamSections.every(s => doneIds.has(s.id));
+
+            if (allDone) {
+                examFinalizeResult = await finalizeExamAttempt(tx, { attemptId, examId });
+            }
+        });
+    } catch (err) {
+        if (isDuplicateKeyError(err)) {
+            throw new BadRequest("This section was already submitted.");
+        }
+        throw err;
+    }
+
+    const sectionResult = {
+        sectionAttemptId: sectionAttempt.id,
+        examSectionId,
+        score: sectionScore,
+        status: sectionFinalStatus,
+        endedAt: now,
+    };
+
+    if (!examFinalizeResult) {
+        // Not the last section — return per-section result only
+        return SuccessResponse(res, {
+            message: `Section ${sectionFinalStatus === "completed" ? "submitted" : "timed out"} successfully`,
+            sectionResult,
+        });
+    }
+
+    // 9. Last section was closed — exam is now finalized. Enrich the response with mistakes/balances.
+    const { exam, totalScore, isPassed, examFinalStatus, endedAt: examEndedAt } = examFinalizeResult;
+
+    const allWrongAnswers = await db
+        .select({ questionId: studentAnswers.questionId })
+        .from(studentAnswers)
+        .where(and(
+            eq(studentAnswers.attemptId, attemptId),
+            eq(studentAnswers.isCorrect, false),
+        ));
+
+    const wrongIds = allWrongAnswers.map(a => a.questionId);
+    let mistakes: any[] = [];
+
+    if (wrongIds.length > 0) {
+        const qs = await db.select().from(questions).where(inArray(questions.id, wrongIds));
+        const opts = await db.select().from(questionOptions).where(inArray(questionOptions.questionId, wrongIds));
+        const allMedia = await db.select().from(questionAnswers).where(inArray(questionAnswers.questionId, wrongIds));
+
+        const mediaMap = new Map<string, any[]>();
+        for (const m of allMedia) {
+            if (!mediaMap.has(m.questionId)) mediaMap.set(m.questionId, []);
+            mediaMap.get(m.questionId)!.push({
+                id: m.id,
+                answerPdf: m.pdf,
+                answerVideo: m.video,
+                answerImage: m.image,
+                answerText: m.text,
+            });
+        }
+
+        const parallelRows = await db
+            .select({ originalQuestionId: ParallelQuestion.origianlQuestionId })
+            .from(ParallelQuestion)
+            .where(inArray(ParallelQuestion.origianlQuestionId, wrongIds));
+
+        const parallelQuestionIds = new Set(parallelRows.map(r => r.originalQuestionId));
+
+        mistakes = qs.map(q => ({
+            ...q,
+            options: opts.filter(o => o.questionId === q.id),
+            answers: mediaMap.get(q.id) ?? [],
+            hasParallel: parallelQuestionIds.has(q.id),
+        }));
+    }
+
+    const [updatedStudent] = await db
+        .select({ questionBalance: Student.questionbalance, examBalance: Student.exambalance })
+        .from(Student)
+        .where(eq(Student.id, studentId));
+
+    const [answersPayment] = await db
+        .select({ id: payment.id })
+        .from(payment)
+        .where(and(
+            eq(payment.studentId, studentId),
+            eq(payment.purpose, "purchase"),
+            eq(payment.status, "completed"),
+            eq(payment.includedAnswers, true),
+            eq(payment.isDeleted, false),
+        ))
+        .limit(1);
+
+    return SuccessResponse(res, {
+        message: "Exam completed successfully",
+        sectionResult,
+        examResult: {
+            attemptId,
+            score: totalScore,
+            totalScore: exam?.totalScore ?? 0,
+            passScore: exam?.passScore ?? 0,
+            isPassed,
+            status: examFinalStatus,
+            endedAt: examEndedAt,
+            mistakes,
+            studentBalances: {
+                questionBalance: updatedStudent?.questionBalance ?? 0,
+                examBalance: updatedStudent?.examBalance ?? 0,
+            },
+            examHasAnswers: !!answersPayment,
+        },
+    });
+};
+
+// ===================== START BREAK =====================
+// POST /exams/:examId/attempts/:attemptId/sections/:examSectionId/break
+// Called when the student wants to pause the currently in-progress section
+// and resume it later (via startSection, which clears breakStartedAt).
+export const startBreak = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { examId, attemptId, examSectionId } = req.params;
+
+    // 1. Verify exam attempt belongs to this student and is in_progress
+    const [attempt] = await db
+        .select({ id: examAttempts.id })
+        .from(examAttempts)
+        .where(and(
+            eq(examAttempts.id, attemptId),
+            eq(examAttempts.studentId, studentId),
+            eq(examAttempts.examId, examId),
+            eq(examAttempts.status, "in_progress"),
+        ))
+        .limit(1);
+
+    if (!attempt) throw new NotFound("No active exam attempt found");
+
+    // 2. Fetch the section attempt + break config together
+    const [row] = await db
+        .select({
+            sectionAttemptId: sectionAttempts.id,
+            sectionAttemptStatus: sectionAttempts.status,
+            startedAt: sectionAttempts.startedAt,
+            duration: ExamSections.duration,
+            sectionTime: Sections.sectionTime,
+            breakLimited: ExamSections.breakLimited,
+            maxBreakDuration: ExamSections.maxBreakDuration,
+        })
+        .from(sectionAttempts)
+        .innerJoin(ExamSections, eq(sectionAttempts.examSectionId, ExamSections.id))
+        .leftJoin(Sections, eq(ExamSections.sectionId, Sections.id))
+        .where(and(
+            eq(sectionAttempts.attemptId, attemptId),
+            eq(sectionAttempts.examSectionId, examSectionId),
+            eq(ExamSections.examId, examId),
+        ))
+        .limit(1);
+
+    if (!row) throw new NotFound("No section attempt found for this section");
+
+    if (row.sectionAttemptStatus !== "in_progress") {
+        throw new BadRequest(`Cannot start a break. Current section status: ${row.sectionAttemptStatus}`);
+    }
+
+    // 3. Guard: don't allow a break if the section's own time has already run out —
+    //    force a proper timeout instead of letting the student "hide" in a break.
+    const effectiveDuration = row.duration ?? row.sectionTime ?? 0;
+    const elapsedMs = row.startedAt ? Date.now() - new Date(row.startedAt).getTime() : 0;
+
+    if (elapsedMs > effectiveDuration * 60 * 1000) {
+        await db.update(sectionAttempts)
+            .set({ status: "timed_out", endedAt: new Date() })
+            .where(and(
+                eq(sectionAttempts.id, row.sectionAttemptId),
+                eq(sectionAttempts.status, "in_progress"), // atomic guard against a race
+            ));
+        throw new BadRequest("Section time has already expired; cannot start a break.");
+    }
+
+    // 4. Flip to on_break atomically — the status condition in WHERE prevents
+    //    a race where two concurrent requests both think they started the break.
+    const now = new Date();
+    const updateResult = await db.update(sectionAttempts)
+        .set({ status: "on_break", breakStartedAt: now })
+        .where(and(
+            eq(sectionAttempts.id, row.sectionAttemptId),
+            eq(sectionAttempts.status, "in_progress"),
+        ));
+
+    // Drizzle's mysql2 driver returns affectedRows on the result; if another
+    // request won the race and already changed the status, treat as a conflict.
+    const affectedRows = (updateResult as any)?.[0]?.affectedRows ?? (updateResult as any)?.affectedRows;
+    if (affectedRows === 0) {
+        throw new BadRequest("Could not start break — section state changed. Please refresh and try again.");
+    }
+
+    return SuccessResponse(res, {
+        message: "Break started",
+        breakStartedAt: now,
+        breakLimited: row.breakLimited ?? false,
+        maxBreakDurationMinutes: row.maxBreakDuration ?? null,
     });
 };
