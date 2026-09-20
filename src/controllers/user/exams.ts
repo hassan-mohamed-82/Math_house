@@ -1475,7 +1475,7 @@ export const submitSection = async (req: Request, res: Response) => {
     let examFinalizeResult: FinalizeExamResult | null = null;
 
     try {
-        await db.transaction(async (tx) => {
+        examFinalizeResult = await db.transaction(async (tx) => {
             if (answersToInsert.length > 0) {
                 await tx.insert(studentAnswers).values(answersToInsert);
             }
@@ -1502,8 +1502,9 @@ export const submitSection = async (req: Request, res: Response) => {
             const allDone = allExamSections.every(s => doneIds.has(s.id));
 
             if (allDone) {
-                examFinalizeResult = await finalizeExamAttempt(tx, { attemptId, examId });
+                return await finalizeExamAttempt(tx, { attemptId, examId });
             }
+            return null;
         });
     } catch (err) {
         if (isDuplicateKeyError(err)) {
