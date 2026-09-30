@@ -925,8 +925,10 @@ export const attendItems = async (req: Request, res: Response) => {
         pricePlans.push(...found);
     }
 
+    const globalExtraDays = Number(req.body.extraDays) || 0;
+
     // دالة مساعدة لحساب الصلاحية والـ priceId
-    const getEnrollmentMeta = (itemId: string, itemType: "course" | "chapter" | "lesson", explicitPriceId?: string) => {
+    const getEnrollmentMeta = (itemId: string, itemType: "course" | "chapter" | "lesson", explicitPriceId?: string, itemExtraDays?: number) => {
         let plan: any = null;
         if (explicitPriceId) {
             plan = pricePlans.find(p => p.id === explicitPriceId);
@@ -934,12 +936,22 @@ export const attendItems = async (req: Request, res: Response) => {
             plan = pricePlans.find(p => p.targetId === itemId && p.targetType === itemType && p.isDefault === true);
         }
 
+        const totalExtra = (Number(itemExtraDays) || 0) + globalExtraDays;
+
         if (plan) {
-            const days = Math.floor(Number(plan.durationDays) || 0);
+            const planDays = Math.floor(Number(plan.durationDays) || 0);
+            const totalDays = planDays + totalExtra;
             const d = new Date();
-            d.setDate(d.getDate() + days);
+            d.setDate(d.getDate() + totalDays);
             return {
                 priceId: plan.id,
+                expiresAt: d,
+            };
+        } else if (totalExtra > 0) {
+            const d = new Date();
+            d.setDate(d.getDate() + totalExtra);
+            return {
+                priceId: null,
                 expiresAt: d,
             };
         }
@@ -964,7 +976,7 @@ export const attendItems = async (req: Request, res: Response) => {
         for (const item of courseItems) {
             if (hasCourse(item.id)) continue; // تخطي لو مشترك بالفعل في الكورس
             
-            const meta = getEnrollmentMeta(item.id, "course", item.priceId);
+            const meta = getEnrollmentMeta(item.id, "course", item.priceId, item.extraDays);
             
             enrollmentValues.push({
                 id: uuidv4(),
@@ -995,7 +1007,7 @@ export const attendItems = async (req: Request, res: Response) => {
             // الحماية: لو الطالب مشترك في الكورس الأب بالكامل أو في الشابتر نفسه ⬅️ تخطي
             if (hasCourse(chData.courseId) || hasChapter(item.id)) continue;
 
-            const meta = getEnrollmentMeta(item.id, "chapter", item.priceId);
+            const meta = getEnrollmentMeta(item.id, "chapter", item.priceId, item.extraDays);
 
             enrollmentValues.push({
                 id: uuidv4(),
@@ -1026,7 +1038,7 @@ export const attendItems = async (req: Request, res: Response) => {
             // الحماية: لو مشترك في الكورس الأب أو الشابتر الأب أو الدرس نفسه ⬅️ تخطي
             if (hasCourse(lsData.courseId) || hasChapter(lsData.chapterId) || hasLesson(item.id)) continue;
 
-            const meta = getEnrollmentMeta(item.id, "lesson", item.priceId);
+            const meta = getEnrollmentMeta(item.id, "lesson", item.priceId, item.extraDays);
 
             enrollmentValues.push({
                 id: uuidv4(),

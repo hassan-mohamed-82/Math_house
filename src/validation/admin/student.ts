@@ -49,3 +49,23 @@ export const increaseLessonsDurationSchema = z.object({
     lessonIds: z.array(z.string().uuid("معرف الدرس غير صالح")),
     days: z.number().int().positive("عدد الأيام يجب أن يكون رقماً موجباً"),
 });
+
+export const enrollWithExtraDaysSchema = z.object({
+    courses: z.array(z.object({
+        id: z.string().uuid("معرف الكورس غير صالح"),
+        priceId: z.string().uuid("معرف خطة السعر غير صالح").optional().nullable(),
+        extraDays: z.number().int().min(0, "الأيام الإضافية يجب أن تكون 0 أو أكثر").optional(),
+    })).optional(),
+    chapters: z.array(z.object({
+        id: z.string().uuid("معرف الشابتر غير صالح"),
+        priceId: z.string().uuid("معرف خطة السعر غير صالح").optional().nullable(),
+        extraDays: z.number().int().min(0, "الأيام الإضافية يجب أن تكون 0 أو أكثر").optional(),
+    })).optional(),
+    lessons: z.array(z.object({
+        id: z.string().uuid("معرف الدرس غير صالح"),
+        priceId: z.string().uuid("معرف خطة السعر غير صالح").optional().nullable(),
+        extraDays: z.number().int().min(0, "الأيام الإضافية يجب أن تكون 0 أو أكثر").optional(),
+    })).optional(),
+    extraDays: z.number().int().min(0).optional(),
+});
+
