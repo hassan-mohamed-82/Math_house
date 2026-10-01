@@ -5,6 +5,8 @@ import {
     getPastTeacherSessions,
     getTeacherSessionById,
     getSessionStudents,
+    uploadTeacherExplanationPdf,
+    deleteTeacherExplanationPdf,
 } from "../../controllers/teacher/sessions";
 import {
     getSessionRatings,
@@ -33,6 +35,12 @@ router.get("/:id", catchAsync(getTeacherSessionById));
 
 // GET /api/teacher/sessions/:id/students               — students + attendance for a session
 router.get("/:id/students", catchAsync(getSessionStudents));
+
+// POST /api/teacher/sessions/:id/explanation-pdf       — upload teacher explanation PDF (optionally per student)
+router.post("/:id/explanation-pdf", catchAsync(uploadTeacherExplanationPdf));
+
+// DELETE /api/teacher/sessions/:id/explanation-pdf     — delete teacher explanation PDF
+router.delete("/:id/explanation-pdf", catchAsync(deleteTeacherExplanationPdf));
 
 // ── Session Ratings ───────────────────────────────────────────────
 // GET /api/teacher/sessions/:id/ratings                — get all student ratings for a session

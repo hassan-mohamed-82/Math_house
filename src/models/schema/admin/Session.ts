@@ -31,6 +31,14 @@ export const sessions = mysqlTable("sessions", {
     // NULL = permanent access (no expiry).
     contentAccessDays: int("content_access_days"),
 
+    // ── Session PDFs ────────────────────────────────────────────────────────────
+    // Blank PDF (admin uploads at session creation — sent to teacher and all enrolled students)
+    session_pdf:         varchar("session_pdf",         { length: 500 }),
+    // Answers PDF (admin uploads at session creation — visible to teacher only)
+    session_answers_pdf: varchar("session_answers_pdf", { length: 500 }),
+    // Explanation PDF uploaded by teacher after the session (visible to enrolled students)
+    teacher_explanation_pdf: varchar("teacher_explanation_pdf", { length: 500 }),
+
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 });
@@ -74,4 +82,37 @@ export const sessionAttendance = mysqlTable("session_attendance", {
 }, (table) => [
     uniqueIndex("session_student_unique").on(table.sessionId, table.studentId),
     index("session_attendance_student_status_idx").on(table.studentId, table.status)
+]);
+
+/**
+ * Per-student PDFs for "Mistakes"-type sessions.
+ *
+ * For Mistakes sessions the admin can target specific students with their own
+ * blank PDF (session_pdf) and answers PDF (session_answers_pdf).
+ * The teacher can then upload a personalised explanation PDF (teacher_explanation_pdf)
+ * per student after reviewing their mistakes.
+ *
+ * Flow:
+ *  Admin  →  creates rows here with session_pdf + session_answers_pdf
+ *  Teacher → reads session_pdf + session_answers_pdf, then uploads teacher_explanation_pdf
+ *  Student → sees session_pdf + teacher_explanation_pdf (once teacher uploads it)
+ */
+export const sessionStudentPdfs = mysqlTable("session_student_pdfs", {
+    id:        char("id",         { length: 36 }).primaryKey().default(sql`(UUID())`),
+    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id, { onDelete: "cascade" }),
+    studentId: char("student_id", { length: 36 }).notNull().references(() => Student.id, { onDelete: "cascade" }),
+
+    // Blank PDF assigned by admin (visible to student and teacher)
+    session_pdf:         varchar("session_pdf",         { length: 500 }),
+    // Answers PDF assigned by admin (visible to teacher only)
+    session_answers_pdf: varchar("session_answers_pdf", { length: 500 }),
+    // Explanation PDF uploaded by teacher (visible to student once uploaded)
+    teacher_explanation_pdf: varchar("teacher_explanation_pdf", { length: 500 }),
+
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
+}, (table) => [
+    uniqueIndex("session_student_pdf_unique").on(table.sessionId, table.studentId),
+    index("session_student_pdfs_session_idx").on(table.sessionId),
+    index("session_student_pdfs_student_idx").on(table.studentId),
 ]);
