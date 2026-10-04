@@ -1341,3 +1341,115 @@ export const getStudentsCourseAttendance = async (req: Request, res: Response) =
 
     return SuccessResponse(res, { students: studentsWithAttendance }, 200);
 };
+
+/**
+ * POST /admin/sessions/:id/student-pdfs
+ * Upsert (create or update) per-student PDFs for a Mistakes-type session.
+ *
+ * Body:
+ *   studentPdfs: Array<{
+ *     studentId: string,
+ *     session_pdf?: string,        // base64 PDF or existing URL
+ *     session_answers_pdf?: string // base64 PDF or existing URL
+ *   }>
+ */
+export const upsertSessionStudentPdfs = async (req: Request, res: Response) => {
+    const { id: sessionId } = req.params;
+    const { studentPdfs } = req.body;
+
+    if (!sessionId) throw new BadRequest("Session ID is required");
+
+    const [session] = await db
+        .select({ id: sessions.id, sessionRelationalType: sessions.sessionRelationalType })
+        .from(sessions)
+        .where(eq(sessions.id, sessionId));
+
+    if (!session) throw new NotFound("Session not found");
+    if (session.sessionRelationalType !== "Mistakes") {
+        throw new BadRequest("Per-student PDFs are only supported for Mistakes-type sessions");
+    }
+
+    if (!Array.isArray(studentPdfs) || studentPdfs.length === 0) {
+        throw new BadRequest("studentPdfs array is required and cannot be empty");
+    }
+
+    // Fetch enrolled student IDs for validation
+    const enrolledUsers = await db
+        .select({ studentId: sessionUsers.studentId })
+        .from(sessionUsers)
+        .where(eq(sessionUsers.sessionId, sessionId));
+    const enrolledIds = new Set(enrolledUsers.map(u => u.studentId));
+
+    const pdfStudentIds: string[] = studentPdfs.map((p: any) => p.studentId);
+    const invalidStudents = pdfStudentIds.filter(sid => !enrolledIds.has(sid));
+    if (invalidStudents.length > 0) {
+        throw new BadRequest(`Students not enrolled in this session: [${invalidStudents.join(", ")}]`);
+    }
+
+    for (const entry of studentPdfs as any[]) {
+        const spdf = entry.session_pdf;
+        const sapdf = entry.session_answers_pdf;
+
+        const savedSpdf = spdf !== undefined
+            ? (spdf === null ? null : spdf.startsWith("http") ? spdf : await validateAndSavePdf(req, spdf, "session-pdfs"))
+            : undefined;
+
+        const savedSapdf = sapdf !== undefined
+            ? (sapdf === null ? null : sapdf.startsWith("http") ? sapdf : await validateAndSavePdf(req, sapdf, "session-pdfs"))
+            : undefined;
+
+        const [existing] = await db
+            .select({ id: sessionStudentPdfs.id })
+            .from(sessionStudentPdfs)
+            .where(and(
+                eq(sessionStudentPdfs.sessionId, sessionId),
+                eq(sessionStudentPdfs.studentId, entry.studentId)
+            ));
+
+        if (existing) {
+            await db.update(sessionStudentPdfs)
+                .set({
+                    ...(savedSpdf !== undefined  && { session_pdf:         savedSpdf }),
+                    ...(savedSapdf !== undefined && { session_answers_pdf: savedSapdf }),
+                })
+                .where(eq(sessionStudentPdfs.id, existing.id));
+        } else {
+            await db.insert(sessionStudentPdfs).values({
+                id: randomUUID(),
+                sessionId,
+                studentId: entry.studentId,
+                session_pdf: savedSpdf ?? null,
+                session_answers_pdf: savedSapdf ?? null,
+                teacher_explanation_pdf: null,
+            });
+        }
+    }
+
+    return SuccessResponse(res, { message: "Student PDFs updated successfully" }, 200);
+};
+
+/**
+ * DELETE /admin/sessions/:id/student-pdfs/:studentId
+ * Remove a per-student PDF row for a Mistakes-type session.
+ */
+export const deleteSessionStudentPdf = async (req: Request, res: Response) => {
+    const { id: sessionId, studentId } = req.params;
+
+    if (!sessionId || !studentId) {
+        throw new BadRequest("Session ID and student ID are required");
+    }
+
+    const [existing] = await db
+        .select({ id: sessionStudentPdfs.id })
+        .from(sessionStudentPdfs)
+        .where(and(
+            eq(sessionStudentPdfs.sessionId, sessionId),
+            eq(sessionStudentPdfs.studentId, studentId)
+        ));
+
+    if (!existing) throw new NotFound("Student PDF record not found");
+
+    await db.delete(sessionStudentPdfs).where(eq(sessionStudentPdfs.id, existing.id));
+
+    return SuccessResponse(res, { message: "Student PDF record deleted successfully" }, 200);
+};

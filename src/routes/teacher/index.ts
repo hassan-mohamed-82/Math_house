@@ -10,7 +10,7 @@ const router = Router();
 router.use("/auth", authRouter);
 
 // All sessions routes require authentication as teacher
-router.use(authenticated, authorizeRoles("teacher", "superadmin", "admin"));
+router.use(authenticated, authorizeRoles("teacher"));
 router.use("/profile", authRouter);
 router.use("/sessions", sessionsRouter);
 

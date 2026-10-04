@@ -3,20 +3,51 @@ import { randomUUID } from "crypto";
 import { db } from "../../models/connection";
 import { sessionLessons, sessions, sessionUsers, sessionGroups, sessionStudentPdfs } from "../../models/schema/admin/Session";
 import { lessons, lessonIdeas, sessionAttendance, chapters } from "../../models/schema";
-import { groups, groupStudents } from "../../models/schema/admin/Groups";
+import { groupStudents } from "../../models/schema/admin/Groups";
 import { teachers } from "../../models/schema/admin/teacher";
-import { category } from "../../models/schema/admin/category";
 import { courses } from "../../models/schema/admin/courses";
 import { Student } from "../../models/schema/admin/Student";
 import { enrolledItems } from "../../models/schema/user/enrolledItems";
-import { eq, and, gte, lt, or, inArray, sql, gt, asc } from "drizzle-orm";
+import { eq, and, or, inArray, sql, gt, asc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 import { generateSecureStreamUrl } from "../../drive/services/services";
 
+// ── config ────────────────────────────────────────────────────────────────────
+
+/** Students may join this many minutes before the session starts (until timeTo). */
+const JOIN_OPEN_BEFORE_MIN = 15;
+
+// ── helpers ───────────────────────────────────────────────────────────────────
+
 const getStudentId = (req: Request): string => {
     if (!req.user?.id) throw new UnauthorizedError("Not authenticated");
     return req.user.id;
+};
+
+/** Current date/time in Cairo (session dates/times are stored as Cairo local time). */
+const cairoNow = () => {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Africa/Cairo",
+        hour12: false,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+    }).formatToParts(new Date());
+    const p = Object.fromEntries(parts.map(x => [x.type, x.value]));
+    const hour = p.hour === "24" ? "00" : p.hour;
+    return {
+        today: `${p.year}-${p.month}-${p.day}`,
+        currentTime: `${hour}:${p.minute}:${p.second}`,
+    };
+};
+
+const toMinutes = (t: string): number => {
+    const [h, m] = t.split(":").map(Number);
+    return h * 60 + m;
 };
 
 const resolveIdea = (idea: {
@@ -37,13 +68,96 @@ const resolveIdea = (idea: {
     return { ...rest, video: videoPayload };
 };
 
+/** Student is enrolled directly (session_users) or through a group. */
+async function isEnrolled(studentId: string, sessionId: string): Promise<boolean> {
+    const [direct] = await db
+        .select({ id: sessionUsers.id })
+        .from(sessionUsers)
+        .where(and(eq(sessionUsers.sessionId, sessionId), eq(sessionUsers.studentId, studentId)));
+    if (direct) return true;
+
+    const [viaGroup] = await db
+        .select({ id: sessionGroups.id })
+        .from(sessionGroups)
+        .innerJoin(groupStudents, eq(sessionGroups.groupId, groupStudents.groupId))
+        .where(and(eq(sessionGroups.sessionId, sessionId), eq(groupStudents.studentId, studentId)));
+    return !!viaGroup;
+}
+
+/** Sub-query: every session the student is enrolled in (direct OR via group). */
+const enrolledSessionsFilter = (studentId: string) =>
+    or(
+        inArray(
+            sessions.id,
+            db.select({ sessionId: sessionUsers.sessionId }).from(sessionUsers).where(eq(sessionUsers.studentId, studentId))
+        ),
+        inArray(
+            sessions.id,
+            db
+                .select({ sessionId: sessionGroups.sessionId })
+                .from(sessionGroups)
+                .where(
+                    inArray(
+                        sessionGroups.groupId,
+                        db.select({ groupId: groupStudents.groupId }).from(groupStudents).where(eq(groupStudents.studentId, studentId))
+                    )
+                )
+        )
+    );
+
+/**
+ * PDFs the student sees. For "Mistakes" sessions the personal PDF wins,
+ * otherwise (or if the personal field is empty) fall back to the session-level one.
+ * session_answers_pdf is never exposed to students.
+ */
+const resolvePdfs = (
+    s: { sessionRelationalType: string | null; session_pdf: string | null; teacher_explanation_pdf: string | null },
+    studentPdf?: { session_pdf: string | null; teacher_explanation_pdf: string | null }
+) => {
+    if (s.sessionRelationalType === "Mistakes" && studentPdf) {
+        return {
+            session_pdf: studentPdf.session_pdf ?? s.session_pdf ?? null,
+            teacher_explanation_pdf: studentPdf.teacher_explanation_pdf ?? s.teacher_explanation_pdf ?? null,
+        };
+    }
+    return {
+        session_pdf: s.session_pdf ?? null,
+        teacher_explanation_pdf: s.teacher_explanation_pdf ?? null,
+    };
+};
+
+async function fetchIdeasByLesson(lessonIds: string[]) {
+    const ideasByLesson = new Map<string, any[]>();
+    if (lessonIds.length === 0) return ideasByLesson;
+
+    const ideas = await db
+        .select({
+            id: lessonIdeas.id,
+            lessonId: lessonIdeas.lessonId,
+            idea: lessonIdeas.idea,
+            ideaOrder: lessonIdeas.ideaOrder,
+            pdf: lessonIdeas.pdf,
+            video: lessonIdeas.video,
+            bunnyGuid: lessonIdeas.bunnyGuid,
+        })
+        .from(lessonIdeas)
+        .where(inArray(lessonIdeas.lessonId, lessonIds))
+        .orderBy(asc(lessonIdeas.ideaOrder));
+
+    ideas.forEach(idea => {
+        if (!ideasByLesson.has(idea.lessonId)) ideasByLesson.set(idea.lessonId, []);
+        ideasByLesson.get(idea.lessonId)!.push(resolveIdea(idea));
+    });
+    return ideasByLesson;
+}
+
+// ── Controllers ───────────────────────────────────────────────────────────────
+
 export const getUpcomingSessions = async (req: Request, res: Response) => {
     const studentId = getStudentId(req);
-    const now = new Date();
-    const today = now.toISOString().split("T")[0];
-    const currentTime = now.toISOString().split("T")[1].slice(0, 8); // "HH:MM:SS"
+    const { today, currentTime } = cairoNow();
 
-    const ExistingStudent = await db.select().from(Student).where(eq(Student.id, studentId));
+    const ExistingStudent = await db.select({ id: Student.id }).from(Student).where(eq(Student.id, studentId));
     if (ExistingStudent.length === 0) {
         throw new NotFound("Student not found");
     }
@@ -69,7 +183,7 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
             course: {
                 id: courses.id,
                 name: courses.name,
-            }
+            },
         })
         .from(sessions)
         .leftJoin(sessionLessons, eq(sessions.id, sessionLessons.sessionId))
@@ -81,14 +195,11 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
                 ${sessions.sessionDate} > ${today}
                 OR (${sessions.sessionDate} = ${today} AND ${sessions.timeTo} >= ${currentTime})
             )`,
-            or(
-                inArray(sessions.id, db.select({ sessionId: sessionUsers.sessionId }).from(sessionUsers).where(eq(sessionUsers.studentId, studentId))),
-                inArray(sessions.id, db.select({ sessionId: sessionGroups.sessionId }).from(sessionGroups).where(inArray(sessionGroups.groupId, db.select({ groupId: groupStudents.groupId }).from(groupStudents).where(eq(groupStudents.studentId, studentId)))))
-            )
+            enrolledSessionsFilter(studentId)
         ))
         .orderBy(sql`${sessions.sessionDate} ASC, ${sessions.timeFrom} ASC`);
 
-    const sessionsMap = new Map();
+    const sessionsMap = new Map<string, any>();
     rawSessions.forEach((row) => {
         if (!sessionsMap.has(row.id)) {
             sessionsMap.set(row.id, {
@@ -100,7 +211,7 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
                 sessionLink: row.sessionLink,
                 sessionRelationalType: row.sessionRelationalType,
                 session_pdf: row.session_pdf,
-                lessons: []
+                lessons: [],
             });
         }
         if (row.lesson && row.lesson.id) {
@@ -109,13 +220,13 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
                 session.lessons.push({
                     ...row.lesson,
                     chapter: row.chapter,
-                    course: row.course
+                    course: row.course,
                 });
             }
         }
     });
 
-    // Check for personalized per-student blank PDFs for Mistakes sessions
+    // Personalised blank PDFs for Mistakes sessions
     const sessionIds = Array.from(sessionsMap.keys());
     const studentPdfMap = new Map<string, string | null>();
     if (sessionIds.length > 0) {
@@ -130,31 +241,24 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
                 inArray(sessionStudentPdfs.sessionId, sessionIds)
             ));
 
-        studentPdfs.forEach(sp => {
-            studentPdfMap.set(sp.sessionId, sp.session_pdf);
-        });
+        studentPdfs.forEach(sp => studentPdfMap.set(sp.sessionId, sp.session_pdf));
     }
 
-    const formattedSessions = Array.from(sessionsMap.values()).map((s: any) => {
-        const personalizedPdf = studentPdfMap.get(s.id);
-        return {
-            ...s,
-            session_pdf: s.sessionRelationalType === "Mistakes"
-                ? (personalizedPdf ?? s.session_pdf ?? null)
-                : (s.session_pdf ?? null),
-        };
-    });
+    const formattedSessions = Array.from(sessionsMap.values()).map((s: any) => ({
+        ...s,
+        session_pdf: s.sessionRelationalType === "Mistakes"
+            ? (studentPdfMap.get(s.id) ?? s.session_pdf ?? null)
+            : (s.session_pdf ?? null),
+    }));
 
     return SuccessResponse(res, formattedSessions);
 };
 
 export const getSessionHistory = async (req: Request, res: Response) => {
     const studentId = getStudentId(req);
-    const now = new Date();
-    const today = now.toISOString().split("T")[0];
-    const currentTime = now.toISOString().split("T")[1].slice(0, 8);
+    const { today, currentTime } = cairoNow();
 
-    const ExistingStudent = await db.select().from(Student).where(eq(Student.id, studentId));
+    const ExistingStudent = await db.select({ id: Student.id }).from(Student).where(eq(Student.id, studentId));
     if (ExistingStudent.length === 0) {
         throw new NotFound("Student not found");
     }
@@ -187,7 +291,7 @@ export const getSessionHistory = async (req: Request, res: Response) => {
             course: {
                 id: courses.id,
                 name: courses.name,
-            }
+            },
         })
         .from(sessions)
         .leftJoin(sessionAttendance, and(
@@ -203,14 +307,11 @@ export const getSessionHistory = async (req: Request, res: Response) => {
                 ${sessions.sessionDate} < ${today}
                 OR (${sessions.sessionDate} = ${today} AND ${sessions.timeTo} < ${currentTime})
             )`,
-            or(
-                inArray(sessions.id, db.select({ sessionId: sessionUsers.sessionId }).from(sessionUsers).where(eq(sessionUsers.studentId, studentId))),
-                inArray(sessions.id, db.select({ sessionId: sessionGroups.sessionId }).from(sessionGroups).where(inArray(sessionGroups.groupId, db.select({ groupId: groupStudents.groupId }).from(groupStudents).where(eq(groupStudents.studentId, studentId)))))
-            )
+            enrolledSessionsFilter(studentId)
         ))
         .orderBy(sql`${sessions.sessionDate} DESC, ${sessions.timeFrom} DESC`);
 
-    const pastSessionsMap = new Map();
+    const pastSessionsMap = new Map<string, any>();
     rawPastSessions.forEach((row) => {
         if (!pastSessionsMap.has(row.id)) {
             pastSessionsMap.set(row.id, {
@@ -226,7 +327,7 @@ export const getSessionHistory = async (req: Request, res: Response) => {
                 teacher_explanation_pdf: row.teacher_explanation_pdf,
                 attendanceStatus: row.attendanceStatus || "not_marked",
                 attendedAt: row.attendedAt,
-                lessons: []
+                lessons: [],
             });
         }
         if (row.lesson && row.lesson.id) {
@@ -235,7 +336,7 @@ export const getSessionHistory = async (req: Request, res: Response) => {
                 session.lessons.push({
                     ...row.lesson,
                     chapter: row.chapter,
-                    course: row.course
+                    course: row.course,
                 });
             }
         }
@@ -243,7 +344,7 @@ export const getSessionHistory = async (req: Request, res: Response) => {
 
     const pastSessionIds = Array.from(pastSessionsMap.keys());
 
-    // 1. Fetch per-student PDFs for Mistakes sessions
+    // 1. Per-student PDFs (Mistakes sessions)
     const studentPdfMap = new Map<string, { session_pdf: string | null; teacher_explanation_pdf: string | null }>();
     if (pastSessionIds.length > 0) {
         const studentPdfs = await db
@@ -258,72 +359,36 @@ export const getSessionHistory = async (req: Request, res: Response) => {
                 inArray(sessionStudentPdfs.sessionId, pastSessionIds)
             ));
 
-        studentPdfs.forEach(sp => {
+        studentPdfs.forEach(sp =>
             studentPdfMap.set(sp.sessionId, {
                 session_pdf: sp.session_pdf,
                 teacher_explanation_pdf: sp.teacher_explanation_pdf,
-            });
-        });
+            })
+        );
     }
 
-    // 2. Fetch lesson ideas for attended sessions (attendanceStatus === "present")
-    const attendedLessonIds: string[] = [];
-    Array.from(pastSessionsMap.values()).forEach((s: any) => {
+    // 2. Ideas for lessons of attended sessions (permanent access once attended)
+    const attendedLessonIds = new Set<string>();
+    pastSessionsMap.forEach((s: any) => {
         if (s.attendanceStatus === "present") {
-            s.lessons.forEach((l: any) => {
-                if (l.id) attendedLessonIds.push(l.id);
-            });
+            s.lessons.forEach((l: any) => l.id && attendedLessonIds.add(l.id));
         }
     });
+    const ideasByLesson = await fetchIdeasByLesson(Array.from(attendedLessonIds));
 
-    const uniqueLessonIds = Array.from(new Set(attendedLessonIds));
-    const ideasByLesson = new Map<string, any[]>();
-
-    if (uniqueLessonIds.length > 0) {
-        const ideas = await db
-            .select({
-                id: lessonIdeas.id,
-                lessonId: lessonIdeas.lessonId,
-                idea: lessonIdeas.idea,
-                ideaOrder: lessonIdeas.ideaOrder,
-                pdf: lessonIdeas.pdf,
-                video: lessonIdeas.video,
-                bunnyGuid: lessonIdeas.bunnyGuid,
-            })
-            .from(lessonIdeas)
-            .where(inArray(lessonIdeas.lessonId, uniqueLessonIds))
-            .orderBy(asc(lessonIdeas.ideaOrder));
-
-        ideas.forEach(idea => {
-            if (!ideasByLesson.has(idea.lessonId)) ideasByLesson.set(idea.lessonId, []);
-            ideasByLesson.get(idea.lessonId)!.push(resolveIdea(idea));
-        });
-    }
-
-    // 3. Format final response
+    // 3. Final response
     const formattedSessions = Array.from(pastSessionsMap.values()).map((s: any) => {
         const isAttended = s.attendanceStatus === "present";
-        const studentPdf = studentPdfMap.get(s.id);
-
-        const finalSessionPdf = s.sessionRelationalType === "Mistakes"
-            ? (studentPdf?.session_pdf ?? s.session_pdf ?? null)
-            : (s.session_pdf ?? null);
-
-        const finalTeacherPdf = s.sessionRelationalType === "Mistakes"
-            ? (studentPdf?.teacher_explanation_pdf ?? s.teacher_explanation_pdf ?? null)
-            : (s.teacher_explanation_pdf ?? null);
-
-        const formattedLessons = s.lessons.map((l: any) => ({
-            ...l,
-            ideas: isAttended ? (ideasByLesson.get(l.id) || []) : [],
-            ideasLocked: !isAttended,
-        }));
+        const pdfs = resolvePdfs(s, studentPdfMap.get(s.id));
 
         return {
             ...s,
-            session_pdf: finalSessionPdf,
-            teacher_explanation_pdf: finalTeacherPdf,
-            lessons: formattedLessons,
+            ...pdfs,
+            lessons: s.lessons.map((l: any) => ({
+                ...l,
+                ideas: isAttended ? (ideasByLesson.get(l.id) || []) : [],
+                ideasLocked: !isAttended,
+            })),
         };
     });
 
@@ -347,7 +412,6 @@ export const getSessionDetails = async (req: Request, res: Response) => {
             sessionLink: sessions.session_link,
             materialLink: sessions.material_link,
             sessionRelationalType: sessions.sessionRelationalType,
-            contentAccessDays: sessions.contentAccessDays,
             session_pdf: sessions.session_pdf,
             teacher_explanation_pdf: sessions.teacher_explanation_pdf,
             teacherId: sessions.teacherId,
@@ -357,33 +421,10 @@ export const getSessionDetails = async (req: Request, res: Response) => {
 
     if (!session) throw new NotFound("Session not found");
 
-    // Check enrollment (direct or via group)
-    const [directMembership] = await db
-        .select({ id: sessionUsers.id })
-        .from(sessionUsers)
-        .where(and(
-            eq(sessionUsers.sessionId, sessionId),
-            eq(sessionUsers.studentId, studentId)
-        ));
-
-    let hasAccess = !!directMembership;
-    if (!hasAccess) {
-        const [groupMembership] = await db
-            .select({ id: sessionGroups.id })
-            .from(sessionGroups)
-            .innerJoin(groupStudents, eq(sessionGroups.groupId, groupStudents.groupId))
-            .where(and(
-                eq(sessionGroups.sessionId, sessionId),
-                eq(groupStudents.studentId, studentId)
-            ));
-        hasAccess = !!groupMembership;
-    }
-
-    if (!hasAccess) {
+    if (!(await isEnrolled(studentId, sessionId))) {
         throw new NotFound("You are not enrolled in this session");
     }
 
-    // Teacher info
     const [teacher] = await db
         .select({
             id: teachers.id,
@@ -393,7 +434,6 @@ export const getSessionDetails = async (req: Request, res: Response) => {
         .from(teachers)
         .where(eq(teachers.id, session.teacherId));
 
-    // Attendance
     const [attendance] = await db
         .select({
             status: sessionAttendance.status,
@@ -407,12 +447,10 @@ export const getSessionDetails = async (req: Request, res: Response) => {
 
     const isAttended = attendance?.status === "present";
 
-    // PDFs resolution (per-student for Mistakes, else session-level)
-    let finalSessionPdf = session.session_pdf;
-    let finalTeacherPdf = session.teacher_explanation_pdf;
-
+    // PDFs (personal for Mistakes, else session-level)
+    let studentPdf: { session_pdf: string | null; teacher_explanation_pdf: string | null } | undefined;
     if (session.sessionRelationalType === "Mistakes") {
-        const [studentPdf] = await db
+        [studentPdf] = await db
             .select({
                 session_pdf: sessionStudentPdfs.session_pdf,
                 teacher_explanation_pdf: sessionStudentPdfs.teacher_explanation_pdf,
@@ -422,14 +460,10 @@ export const getSessionDetails = async (req: Request, res: Response) => {
                 eq(sessionStudentPdfs.sessionId, sessionId),
                 eq(sessionStudentPdfs.studentId, studentId)
             ));
-
-        if (studentPdf) {
-            finalSessionPdf = studentPdf.session_pdf ?? session.session_pdf;
-            finalTeacherPdf = studentPdf.teacher_explanation_pdf ?? session.teacher_explanation_pdf;
-        }
     }
+    const pdfs = resolvePdfs(session, studentPdf);
 
-    // Lessons resolution
+    // Lessons
     const sessionLessonRows = await db
         .select({
             lesson: {
@@ -454,29 +488,9 @@ export const getSessionDetails = async (req: Request, res: Response) => {
         .leftJoin(courses, eq(lessons.courseId, courses.id))
         .where(eq(sessionLessons.sessionId, sessionId));
 
-    const lessonIds = sessionLessonRows.map(r => r.lesson.id);
-    const ideasByLesson = new Map<string, any[]>();
-
-    if (isAttended && lessonIds.length > 0) {
-        const ideas = await db
-            .select({
-                id: lessonIdeas.id,
-                lessonId: lessonIdeas.lessonId,
-                idea: lessonIdeas.idea,
-                ideaOrder: lessonIdeas.ideaOrder,
-                pdf: lessonIdeas.pdf,
-                video: lessonIdeas.video,
-                bunnyGuid: lessonIdeas.bunnyGuid,
-            })
-            .from(lessonIdeas)
-            .where(inArray(lessonIdeas.lessonId, lessonIds))
-            .orderBy(asc(lessonIdeas.ideaOrder));
-
-        ideas.forEach(idea => {
-            if (!ideasByLesson.has(idea.lessonId)) ideasByLesson.set(idea.lessonId, []);
-            ideasByLesson.get(idea.lessonId)!.push(resolveIdea(idea));
-        });
-    }
+    const ideasByLesson = isAttended
+        ? await fetchIdeasByLesson(sessionLessonRows.map(r => r.lesson.id))
+        : new Map<string, any[]>();
 
     const formattedLessons = sessionLessonRows.map(row => ({
         ...row.lesson,
@@ -499,9 +513,7 @@ export const getSessionDetails = async (req: Request, res: Response) => {
             sessionLink: session.sessionLink,
             materialLink: session.materialLink,
             sessionRelationalType: session.sessionRelationalType,
-            contentAccessDays: session.contentAccessDays,
-            session_pdf: finalSessionPdf ?? null,
-            teacher_explanation_pdf: finalTeacherPdf ?? null,
+            ...pdfs,
             teacher: teacher ?? null,
             attendance: attendance
                 ? { status: attendance.status, attendedAt: attendance.attendedAt }
@@ -518,43 +530,22 @@ export const joinSession = async (req: Request, res: Response) => {
     const [session] = await db
         .select({
             id: sessions.id,
+            sessionDate: sessions.sessionDate,
+            timeFrom: sessions.timeFrom,
+            timeTo: sessions.timeTo,
             sessionLink: sessions.session_link,
             sessionRelationalType: sessions.sessionRelationalType,
-            contentAccessDays: sessions.contentAccessDays,
         })
         .from(sessions)
         .where(eq(sessions.id, sessionId));
 
     if (!session) throw new NotFound("Session not found");
 
-    const [directMembership] = await db
-        .select({ id: sessionUsers.id })
-        .from(sessionUsers)
-        .where(and(
-            eq(sessionUsers.sessionId, sessionId),
-            eq(sessionUsers.studentId, studentId),
-        ));
-
-    let hasAccess = !!directMembership;
-
-    if (!hasAccess) {
-        const [groupMembership] = await db
-            .select({ id: sessionGroups.id })
-            .from(sessionGroups)
-            .innerJoin(groupStudents, eq(sessionGroups.groupId, groupStudents.groupId))
-            .where(and(
-                eq(sessionGroups.sessionId, sessionId),
-                eq(groupStudents.studentId, studentId),
-            ));
-        hasAccess = !!groupMembership;
-    }
-
-    if (!hasAccess) {
+    if (!(await isEnrolled(studentId, sessionId))) {
         throw new NotFound("You are not enrolled in this session");
     }
 
     await db.transaction(async (tx) => {
-        // Check if student already has an attendance record for this session
         const [existing] = await tx
             .select({ id: sessionAttendance.id, status: sessionAttendance.status })
             .from(sessionAttendance)
@@ -563,71 +554,64 @@ export const joinSession = async (req: Request, res: Response) => {
                 eq(sessionAttendance.studentId, studentId),
             ));
 
+        // Already present → just return the link again (no window check, no deduction)
         if (existing && existing.status === "present") {
-            return; // Already marked present, nothing to do
+            return;
+        }
+
+        // ── Join window (Cairo time) ──────────────────────────────────────────
+        const { today, currentTime } = cairoNow();
+        if (String(session.sessionDate) !== today) {
+            throw new BadRequest("This session is not scheduled for today");
+        }
+        const nowMin = toMinutes(currentTime);
+        if (nowMin < toMinutes(session.timeFrom) - JOIN_OPEN_BEFORE_MIN) {
+            throw new BadRequest("The session is not open for joining yet");
+        }
+        if (nowMin > toMinutes(session.timeTo)) {
+            throw new BadRequest("The session has already ended");
         }
 
         // ── Re-Explanation balance logic ──────────────────────────────────────
-        // For Re-Explanation sessions: only deduct balance if the student has
-        // NOT attended at least one of the session's lessons in a prior session.
-        // If ALL lessons were already covered in previous sessions → no deduction.
+        // Deduct balance unless the student already attended ALL of this
+        // session's lessons in previous sessions.
+        const sessionLessonRows = await tx
+            .select({ lessonId: sessionLessons.lessonId })
+            .from(sessionLessons)
+            .where(eq(sessionLessons.sessionId, sessionId));
+
+        const lessonIdsInSession = sessionLessonRows.map(r => r.lessonId);
+
         let shouldDeductBalance = true;
 
-        if (session.sessionRelationalType === "Re-Explanation") {
-            // 1. Get all lessons linked to this Re-Explanation session
-            const sessionLessonRows = await tx
+        if (session.sessionRelationalType === "Re-Explanation" && lessonIdsInSession.length > 0) {
+            const previouslyAttendedRows = await tx
                 .select({ lessonId: sessionLessons.lessonId })
-                .from(sessionLessons)
-                .where(eq(sessionLessons.sessionId, sessionId));
+                .from(sessionAttendance)
+                .innerJoin(sessionLessons, eq(sessionAttendance.sessionId, sessionLessons.sessionId))
+                .where(and(
+                    eq(sessionAttendance.studentId, studentId),
+                    eq(sessionAttendance.status, "present"),
+                    sql`${sessionAttendance.sessionId} != ${sessionId}`,
+                    inArray(sessionLessons.lessonId, lessonIdsInSession)
+                ));
 
-            const lessonIdsInSession = sessionLessonRows.map(r => r.lessonId);
-
-            if (lessonIdsInSession.length > 0) {
-                // 2. Find which of those lessons the student has already attended
-                //    in OTHER sessions (not the current Re-Explanation session itself)
-                const previouslyAttendedRows = await tx
-                    .select({ lessonId: sessionLessons.lessonId })
-                    .from(sessionAttendance)
-                    .innerJoin(
-                        sessionLessons,
-                        eq(sessionAttendance.sessionId, sessionLessons.sessionId)
-                    )
-                    .where(and(
-                        eq(sessionAttendance.studentId, studentId),
-                        eq(sessionAttendance.status, "present"),
-                        // Only from OTHER sessions, not the current one
-                        sql`${sessionAttendance.sessionId} != ${sessionId}`,
-                        inArray(sessionLessons.lessonId, lessonIdsInSession)
-                    ));
-
-                const attendedLessonIdSet = new Set(previouslyAttendedRows.map(r => r.lessonId));
-
-                // 3. If ALL lessons in this session were previously attended → free re-entry
-                const allLessonsPreviouslyAttended = lessonIdsInSession.every(
-                    lessonId => attendedLessonIdSet.has(lessonId)
-                );
-
-                if (allLessonsPreviouslyAttended) {
-                    shouldDeductBalance = false;
-                }
-                // else: at least one lesson is new → deduct balance as normal
+            const attendedLessonIdSet = new Set(previouslyAttendedRows.map(r => r.lessonId));
+            if (lessonIdsInSession.every(id => attendedLessonIdSet.has(id))) {
+                shouldDeductBalance = false;
             }
         }
 
-        // ── Balance check and deduction ───────────────────────────────────────
+        // ── Atomic balance deduction (no check-then-update race) ──────────────
         if (shouldDeductBalance) {
-            const [student] = await tx
-                .select({ liveBalance: Student.livebalance })
-                .from(Student)
-                .where(eq(Student.id, studentId));
+            const [result] = await tx
+                .update(Student)
+                .set({ livebalance: sql`${Student.livebalance} - 1` })
+                .where(and(eq(Student.id, studentId), gt(Student.livebalance, 0)));
 
-            if (!student || student.liveBalance <= 0) {
+            if (!result || (result as any).affectedRows === 0) {
                 throw new BadRequest("Insufficient live balance");
             }
-
-            await tx.update(Student)
-                .set({ livebalance: sql`${Student.livebalance} - 1` })
-                .where(eq(Student.id, studentId));
         }
 
         // ── Record attendance ─────────────────────────────────────────────────
@@ -646,48 +630,27 @@ export const joinSession = async (req: Request, res: Response) => {
             });
         }
 
-        // ── Auto-unlock lesson content for this session ───────────────────────
-        // Compute expiresAt from contentAccessDays (null → permanent access)
-        const expiresAt: Date | null = session.contentAccessDays != null
-            ? (() => {
-                const d = new Date(attendedAt);
-                d.setDate(d.getDate() + session.contentAccessDays!);
-                return d;
-            })()
-            : null;
-
-        const sessionLessonRows = await tx
-            .select({ lessonId: sessionLessons.lessonId })
-            .from(sessionLessons)
-            .where(eq(sessionLessons.sessionId, sessionId));
-
-        if (sessionLessonRows.length > 0) {
-            const lessonIds = sessionLessonRows.map(r => r.lessonId);
-
-            // Find lessons already enrolled to avoid duplicates
+        // ── Unlock lesson content permanently (expiresAt = null) ──────────────
+        if (lessonIdsInSession.length > 0) {
             const alreadyEnrolled = await tx
                 .select({ lessonId: enrolledItems.lessonId })
                 .from(enrolledItems)
-                .where(
-                    and(
-                        eq(enrolledItems.studentId, studentId),
-                        eq(enrolledItems.status, "active"),
-                        inArray(enrolledItems.lessonId, lessonIds)
-                    )
-                );
+                .where(and(
+                    eq(enrolledItems.studentId, studentId),
+                    eq(enrolledItems.status, "active"),
+                    inArray(enrolledItems.lessonId, lessonIdsInSession)
+                ));
 
-            const enrolledLessonIdSet = new Set(
-                alreadyEnrolled.map(r => r.lessonId).filter(Boolean)
-            );
+            const enrolledLessonIdSet = new Set(alreadyEnrolled.map(r => r.lessonId).filter(Boolean));
 
-            const newEnrollments = lessonIds
+            const newEnrollments = lessonIdsInSession
                 .filter(id => !enrolledLessonIdSet.has(id))
                 .map(lessonId => ({
                     id: randomUUID(),
                     studentId,
                     lessonId,
                     status: "active" as const,
-                    expiresAt,
+                    expiresAt: null,
                 }));
 
             if (newEnrollments.length > 0) {
