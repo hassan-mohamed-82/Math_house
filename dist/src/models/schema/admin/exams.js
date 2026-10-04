@@ -21,8 +21,8 @@ exports.Exams = (0, mysql_core_1.mysqlTable)("exams", {
     examType: exports.examType,
     // Details
     courseId: (0, mysql_core_1.char)("course_id", { length: 255 }).notNull().references(() => courses_1.courses.id, { onDelete: "cascade" }),
-    year: (0, mysql_core_1.int)("year").notNull(),
-    Month: (0, mysql_core_1.mysqlEnum)("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]).notNull(),
+    year: (0, mysql_core_1.int)("year"),
+    Month: (0, mysql_core_1.mysqlEnum)("month", ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]),
     codeId: (0, mysql_core_1.char)("code_id", { length: 255 }).notNull().references(() => examCodes_1.examCodes.id, { onDelete: "cascade" }),
     // Calculators allowed for this exam (subset of CALCULATOR_TYPES)
     calculators: (0, mysql_core_1.json)("calculators").$type().default([]),
@@ -34,6 +34,11 @@ exports.ExamSections = (0, mysql_core_1.mysqlTable)("exam_sections", {
     sectionId: (0, mysql_core_1.char)("section_id", { length: 255 }).notNull().references(() => sections_1.Sections.id, { onDelete: "cascade" }),
     sectionOrder: (0, mysql_core_1.int)("section_order").notNull(),
     examId: (0, mysql_core_1.char)("exam_id", { length: 255 }).notNull().references(() => exports.Exams.id, { onDelete: "cascade" }),
+    // Per-exam section duration override (minutes). If null, falls back to Sections.sectionTime.
+    duration: (0, mysql_core_1.int)("duration"),
+    // Break configuration between sections
+    breakLimited: (0, mysql_core_1.boolean)("break_limited").notNull().default(false), // true = break has a max duration
+    maxBreakDuration: (0, mysql_core_1.int)("max_break_duration"), // Max break in minutes (only used when breakLimited = true)
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

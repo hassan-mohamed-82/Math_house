@@ -8,7 +8,7 @@ const examCodes_1 = require("./examCodes");
 const sections_1 = require("./sections");
 exports.questions = (0, mysql_core_1.mysqlTable)("questions", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
-    question: (0, mysql_core_1.varchar)("question", { length: 255 }).notNull(),
+    question: (0, mysql_core_1.varchar)("question", { length: 255 }),
     image: (0, mysql_core_1.varchar)("image", { length: 255 }),
     answerType: (0, mysql_core_1.mysqlEnum)("answerType", ["MCQ", "Grid in"]).notNull(),
     difficulty: (0, mysql_core_1.mysqlEnum)("difficulty", ["A", "B", "C", "D", "E"]).notNull(),
@@ -26,7 +26,7 @@ exports.questions = (0, mysql_core_1.mysqlTable)("questions", {
 exports.questionOptions = (0, mysql_core_1.mysqlTable)("question_options", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     questionId: (0, mysql_core_1.char)("question_id", { length: 255 }).notNull().references(() => exports.questions.id, { onDelete: "cascade" }),
-    answer: (0, mysql_core_1.varchar)("answer", { length: 255 }).notNull(),
+    answer: (0, mysql_core_1.varchar)("answer", { length: 255 }),
     isCorrect: (0, mysql_core_1.boolean)("is_correct").notNull().default(false),
     order: (0, mysql_core_1.char)("order", { length: 1 }),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
@@ -45,7 +45,7 @@ exports.questionAnswers = (0, mysql_core_1.mysqlTable)("question_answers", {
 exports.ParallelQuestion = (0, mysql_core_1.mysqlTable)("parallel_questions", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     origianlQuestionId: (0, mysql_core_1.char)("question_id", { length: 255 }).notNull().references(() => exports.questions.id, { onDelete: "cascade" }),
-    question: (0, mysql_core_1.varchar)("question", { length: 255 }).notNull(),
+    question: (0, mysql_core_1.varchar)("question", { length: 255 }),
     answerType: (0, mysql_core_1.mysqlEnum)("answerType", ["MCQ", "Grid in"]).notNull(),
     difficulty: (0, mysql_core_1.mysqlEnum)("difficulty", ["A", "B", "C", "D", "E"]).notNull(),
     lessonId: (0, mysql_core_1.char)("lesson_id", { length: 255 }).notNull().references(() => lessons_1.lessons.id, { onDelete: "cascade" }),
@@ -55,7 +55,7 @@ exports.ParallelQuestion = (0, mysql_core_1.mysqlTable)("parallel_questions", {
 exports.ParallelQuestionOptions = (0, mysql_core_1.mysqlTable)("parallel_question_options", {
     id: (0, mysql_core_1.char)("id", { length: 255 }).primaryKey().notNull().default((0, drizzle_orm_1.sql) `(uuid())`),
     questionId: (0, mysql_core_1.char)("question_id", { length: 255 }).notNull().references(() => exports.ParallelQuestion.id, { onDelete: "cascade" }),
-    answer: (0, mysql_core_1.varchar)("answer", { length: 255 }).notNull(),
+    answer: (0, mysql_core_1.varchar)("answer", { length: 255 }),
     isCorrect: (0, mysql_core_1.boolean)("is_correct").notNull().default(false),
     order: (0, mysql_core_1.char)("order", { length: 1 }),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),

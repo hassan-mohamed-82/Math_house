@@ -8,5 +8,6 @@ const router = (0, express_1.Router)();
 router.use((0, authorized_1.authorizeRoles)("student"));
 router.get("/upcoming", (0, catchAsync_1.catchAsync)(Attends_1.getUpcomingSessions));
 router.get("/history", (0, catchAsync_1.catchAsync)(Attends_1.getSessionHistory));
+router.get("/:sessionId", (0, catchAsync_1.catchAsync)(Attends_1.getSessionDetails));
 router.post("/:sessionId/join", (0, catchAsync_1.catchAsync)(Attends_1.joinSession));
 exports.default = router;

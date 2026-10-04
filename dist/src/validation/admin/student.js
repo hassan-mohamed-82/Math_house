@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.increaseLessonsDurationSchema = exports.categoryIdSchema = exports.gradeSchema = exports.idParamsSchema = exports.idSchema = exports.updateStudentSchema = exports.studentSchema = void 0;
+exports.enrollWithExtraDaysSchema = exports.increaseLessonsDurationSchema = exports.categoryIdSchema = exports.gradeSchema = exports.idParamsSchema = exports.idSchema = exports.updateStudentSchema = exports.studentSchema = void 0;
 const zod_1 = require("zod");
 exports.studentSchema = zod_1.z.object({
     firstname: zod_1.z.string().min(2, "firstname must be at least 2 characters").max(255),
@@ -44,4 +44,22 @@ exports.categoryIdSchema = zod_1.z.string().uuid("معرف الفئة غير ص�
 exports.increaseLessonsDurationSchema = zod_1.z.object({
     lessonIds: zod_1.z.array(zod_1.z.string().uuid("معرف الدرس غير صالح")),
     days: zod_1.z.number().int().positive("عدد الأيام يجب أن يكون رقماً موجباً"),
+});
+exports.enrollWithExtraDaysSchema = zod_1.z.object({
+    courses: zod_1.z.array(zod_1.z.object({
+        id: zod_1.z.string().uuid("معرف الكورس غير صالح"),
+        priceId: zod_1.z.string().uuid("معرف خطة السعر غير صالح").optional().nullable(),
+        extraDays: zod_1.z.number().int().min(0, "الأيام الإضافية يجب أن تكون 0 أو أكثر").optional(),
+    })).optional(),
+    chapters: zod_1.z.array(zod_1.z.object({
+        id: zod_1.z.string().uuid("معرف الشابتر غير صالح"),
+        priceId: zod_1.z.string().uuid("معرف خطة السعر غير صالح").optional().nullable(),
+        extraDays: zod_1.z.number().int().min(0, "الأيام الإضافية يجب أن تكون 0 أو أكثر").optional(),
+    })).optional(),
+    lessons: zod_1.z.array(zod_1.z.object({
+        id: zod_1.z.string().uuid("معرف الدرس غير صالح"),
+        priceId: zod_1.z.string().uuid("معرف خطة السعر غير صالح").optional().nullable(),
+        extraDays: zod_1.z.number().int().min(0, "الأيام الإضافية يجب أن تكون 0 أو أكثر").optional(),
+    })).optional(),
+    extraDays: zod_1.z.number().int().min(0).optional(),
 });

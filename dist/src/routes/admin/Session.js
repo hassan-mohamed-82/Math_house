@@ -19,4 +19,9 @@ router.post("/", (0, requirePermission_1.requirePermission)("sessions", "Add"), 
 router.get("/:id", (0, requirePermission_1.requirePermission)("sessions", "View"), (0, catchAsync_1.catchAsync)(Session_1.getSessionById));
 router.put("/:id", (0, requirePermission_1.requirePermission)("sessions", "Edit"), (0, catchAsync_1.catchAsync)(Session_1.updateSession));
 router.delete("/:id", (0, requirePermission_1.requirePermission)("sessions", "Delete"), (0, catchAsync_1.catchAsync)(Session_1.deleteSession));
+// ── Per-student PDFs (Mistakes sessions) ──────────────────────────────────────
+// POST   /admin/sessions/:id/student-pdfs             — upsert per-student PDFs
+router.post("/:id/student-pdfs", (0, requirePermission_1.requirePermission)("sessions", "Edit"), (0, catchAsync_1.catchAsync)(Session_1.upsertSessionStudentPdfs));
+// DELETE /admin/sessions/:id/student-pdfs/:studentId  — remove a student's PDF row
+router.delete("/:id/student-pdfs/:studentId", (0, requirePermission_1.requirePermission)("sessions", "Edit"), (0, catchAsync_1.catchAsync)(Session_1.deleteSessionStudentPdf));
 exports.default = router;

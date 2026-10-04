@@ -11,6 +11,7 @@ router.get("/selectionSemester/:courseId", (0, catchAsync_1.catchAsync)(semester
 // ── List & detail ─────────────────────────────────────────────────────────
 router.get("/", (0, requirePermission_1.requirePermission)("chapters", "View"), (0, catchAsync_1.catchAsync)(chapters_1.getAllChapters));
 router.get("/course/:courseId", (0, requirePermission_1.requirePermission)("chapters", "View"), (0, catchAsync_1.catchAsync)(chapters_1.getAllChaptersByCourseId));
+router.get("/semester/:semesterId", (0, requirePermission_1.requirePermission)("chapters", "View"), (0, catchAsync_1.catchAsync)(chapters_1.getAllChaptersBySemesterId));
 router.get("/:id", (0, requirePermission_1.requirePermission)("chapters", "View"), (0, catchAsync_1.catchAsync)(chapters_1.getChapterById));
 // ── Create ────────────────────────────────────────────────────────────────
 router.post("/", (0, requirePermission_1.requirePermission)("chapters", "Add"), (0, catchAsync_1.catchAsync)(chapters_1.createChapter));

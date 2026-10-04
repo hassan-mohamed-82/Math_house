@@ -24,15 +24,13 @@ exports.getTextfromImage = getTextfromImage;
 // TODO: SAVE IMAGES TO THE DRIVE Rather than BASE64
 // Questions
 const createQuestion = async (req, res) => {
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo, answerImage, answerText } = req.body;
-    if (!question
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answers } = req.body;
+    // answers = [{ answerPdf, answerVideo, answerImage, answerText }, ...]
+    if (!image
         || !answerType
         || !difficulty
         || !questionType
         || !lessonId
-        || !year
-        || !month
-        || !sectionId
         || !codeId)
         throw new BadRequest_1.BadRequest("All fields are required");
     if ((answerType === "MCQ" || answerType === "Grid in") && (!options || !Array.isArray(options) || options.length === 0))
@@ -45,9 +43,11 @@ const createQuestion = async (req, res) => {
     if (!examCode[0]) {
         throw new Errors_1.NotFound("Exam code is not found");
     }
-    const section = await connection_1.db.select().from(schema_1.Sections).where((0, drizzle_orm_1.eq)(schema_1.Sections.id, sectionId)).limit(1);
-    if (!section[0]) {
-        throw new Errors_1.NotFound("Section is not found");
+    if (sectionId) {
+        const section = await connection_1.db.select().from(schema_1.Sections).where((0, drizzle_orm_1.eq)(schema_1.Sections.id, sectionId)).limit(1);
+        if (!section[0]) {
+            throw new Errors_1.NotFound("Section is not found");
+        }
     }
     let imageUrl = image;
     if (image) {
@@ -57,42 +57,46 @@ const createQuestion = async (req, res) => {
     await connection_1.db.transaction(async (tx) => {
         await tx.insert(schema_1.questions).values({
             id: questionId,
-            question,
+            question: question || null,
             image: imageUrl,
             answerType,
             difficulty,
             questionType,
             lessonId,
-            year,
-            month,
-            sectionId,
+            year: year || null,
+            month: month || null,
+            sectionId: sectionId || null,
             codeId,
         });
         if (options && Array.isArray(options) && options.length > 0) {
             const formattedOptions = options.map((opt) => ({
                 questionId: questionId,
-                answer: opt.answer,
+                answer: opt.answer || "",
                 isCorrect: answerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
             await tx.insert(schema_1.questionOptions).values(formattedOptions);
         }
-        let finalAnswerPdf = answerPdf;
-        if (answerPdf && !answerPdf.startsWith("http")) {
-            finalAnswerPdf = await (0, handleImages_1.validateAndSavePdf)(req, answerPdf, "questions");
-        }
-        let finalAnswerImage = answerImage;
-        if (answerImage && !answerImage.startsWith("http")) {
-            finalAnswerImage = await (0, handleImages_1.validateAndSaveLogo)(req, answerImage, "questions");
-        }
-        if (finalAnswerPdf || answerVideo || finalAnswerImage || answerText) {
-            await tx.insert(schema_1.questionAnswers).values({
-                questionId: questionId,
-                pdf: finalAnswerPdf,
-                video: answerVideo,
-                image: finalAnswerImage,
-                text: answerText,
-            });
+        // answers is now an array: [{ answerPdf, answerVideo, answerImage, answerText }]
+        if (Array.isArray(answers) && answers.length > 0) {
+            for (const ans of answers) {
+                const { answerPdf, answerVideo, answerImage, answerText } = ans;
+                let finalAnswerPdf = answerPdf || null;
+                if (finalAnswerPdf && !finalAnswerPdf.startsWith("http")) {
+                    finalAnswerPdf = await (0, handleImages_1.validateAndSavePdf)(req, finalAnswerPdf, "questions");
+                }
+                let finalAnswerImage = answerImage || null;
+                if (finalAnswerImage && !finalAnswerImage.startsWith("http")) {
+                    finalAnswerImage = await (0, handleImages_1.validateAndSaveLogo)(req, finalAnswerImage, "questions");
+                }
+                await tx.insert(schema_1.questionAnswers).values({
+                    questionId: questionId,
+                    pdf: finalAnswerPdf,
+                    video: answerVideo || null,
+                    image: finalAnswerImage,
+                    text: answerText || null,
+                });
+            }
         }
     });
     return (0, response_1.SuccessResponse)(res, { message: "Question created successfully" }, 201);
@@ -231,15 +235,10 @@ const getQuestionbyId = async (req, res) => {
             id: schema_1.Sections.id,
             sectionName: schema_1.Sections.sectionName,
         },
-        pdf: schema_1.questionAnswers.pdf,
-        video: schema_1.questionAnswers.video,
-        answerImage: schema_1.questionAnswers.image,
-        answerText: schema_1.questionAnswers.text,
     }).from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
-        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
-        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
-        .leftJoin(schema_1.questionAnswers, (0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, schema_1.questions.id))
+        .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .leftJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
         .where((0, drizzle_orm_1.eq)(schema_1.questions.id, id)).limit(1);
     if (!question[0]) {
         throw new Errors_1.NotFound("Question is not found");
@@ -250,12 +249,21 @@ const getQuestionbyId = async (req, res) => {
         isCorrect: schema_1.questionOptions.isCorrect,
         order: schema_1.questionOptions.order,
     }).from(schema_1.questionOptions).where((0, drizzle_orm_1.eq)(schema_1.questionOptions.questionId, id));
-    return (0, response_1.SuccessResponse)(res, { message: "Question fetched successfully", data: { ...question[0], options } }, 200);
+    // Fetch all answer objects as an array
+    const answers = await connection_1.db.select({
+        id: schema_1.questionAnswers.id,
+        answerPdf: schema_1.questionAnswers.pdf,
+        answerVideo: schema_1.questionAnswers.video,
+        answerImage: schema_1.questionAnswers.image,
+        answerText: schema_1.questionAnswers.text,
+    }).from(schema_1.questionAnswers).where((0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, id));
+    return (0, response_1.SuccessResponse)(res, { message: "Question fetched successfully", data: { ...question[0], options, answers } }, 200);
 };
 exports.getQuestionbyId = getQuestionbyId;
 const updateQuestion = async (req, res) => {
     const { id } = req.params;
-    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answerPdf, answerVideo, answerImage, answerText } = req.body;
+    const { question, image, answerType, difficulty, questionType, lessonId, options, year, month, sectionId, codeId, answers } = req.body;
+    // answers = [{ answerPdf, answerVideo, answerImage, answerText }, ...] | undefined
     if (!id) {
         throw new BadRequest_1.BadRequest("Question ID is required");
     }
@@ -284,7 +292,7 @@ const updateQuestion = async (req, res) => {
         }
         const questionUpdateData = {};
         if (question !== undefined)
-            questionUpdateData.question = question;
+            questionUpdateData.question = question || null;
         if (image !== undefined) {
             const imageUpdate = await (0, handleImages_1.handleImageUpdate)(req, existingQuestion[0].image, image, "questions");
             questionUpdateData.image = imageUpdate;
@@ -298,11 +306,11 @@ const updateQuestion = async (req, res) => {
         if (lessonId !== undefined)
             questionUpdateData.lessonId = lessonId;
         if (year !== undefined)
-            questionUpdateData.year = year;
+            questionUpdateData.year = year || null;
         if (month !== undefined)
-            questionUpdateData.month = month;
+            questionUpdateData.month = month || null;
         if (sectionId !== undefined)
-            questionUpdateData.sectionId = sectionId;
+            questionUpdateData.sectionId = sectionId || null;
         if (codeId !== undefined)
             questionUpdateData.codeId = codeId;
         if (Object.keys(questionUpdateData).length > 0) {
@@ -315,50 +323,43 @@ const updateQuestion = async (req, res) => {
             const currentAnswerType = answerType !== undefined ? answerType : existingQuestion[0].answerType;
             const formattedOptions = options.map((opt) => ({
                 questionId: id,
-                answer: opt.answer,
+                answer: opt.answer || "",
                 isCorrect: currentAnswerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
             await tx.insert(schema_1.questionOptions).values(formattedOptions);
         }
-        if (answerPdf !== undefined || answerVideo !== undefined || answerImage !== undefined || answerText !== undefined) {
-            const existingAnswer = await tx.select().from(schema_1.questionAnswers).where((0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, id)).limit(1);
-            let finalAnswerPdf = answerPdf;
-            if (answerPdf !== undefined && answerPdf && !answerPdf.startsWith("http")) {
-                finalAnswerPdf = await (0, handleImages_1.validateAndSavePdf)(req, answerPdf, "questions");
-                if (existingAnswer[0] && existingAnswer[0].pdf && !existingAnswer[0].pdf.startsWith("http")) {
-                    await (0, handleImages_1.deleteImage)(existingAnswer[0].pdf);
+        // answers array: when provided, replace all existing answers
+        if (answers !== undefined) {
+            // Delete all existing answer rows for this question
+            const existingAnswers = await tx.select().from(schema_1.questionAnswers).where((0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, id));
+            for (const ea of existingAnswers) {
+                if (ea.pdf && !ea.pdf.startsWith("http"))
+                    await (0, handleImages_1.deleteImage)(ea.pdf).catch(() => { });
+                if (ea.image && !ea.image.startsWith("http"))
+                    await (0, handleImages_1.deleteImage)(ea.image).catch(() => { });
+            }
+            await tx.delete(schema_1.questionAnswers).where((0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, id));
+            // Insert the new answers array
+            if (Array.isArray(answers) && answers.length > 0) {
+                for (const ans of answers) {
+                    const { answerPdf, answerVideo, answerImage, answerText } = ans;
+                    let finalAnswerPdf = answerPdf || null;
+                    if (finalAnswerPdf && !finalAnswerPdf.startsWith("http")) {
+                        finalAnswerPdf = await (0, handleImages_1.validateAndSavePdf)(req, finalAnswerPdf, "questions");
+                    }
+                    let finalAnswerImage = answerImage || null;
+                    if (finalAnswerImage && !finalAnswerImage.startsWith("http")) {
+                        finalAnswerImage = await (0, handleImages_1.validateAndSaveLogo)(req, finalAnswerImage, "questions");
+                    }
+                    await tx.insert(schema_1.questionAnswers).values({
+                        questionId: id,
+                        pdf: finalAnswerPdf,
+                        video: answerVideo || null,
+                        image: finalAnswerImage,
+                        text: answerText || null,
+                    });
                 }
-            }
-            let finalAnswerImage = answerImage;
-            if (answerImage !== undefined) {
-                finalAnswerImage = await (0, handleImages_1.handleImageUpdate)(req, existingAnswer[0]?.image, answerImage, "questions");
-            }
-            else {
-                finalAnswerImage = existingAnswer[0]?.image;
-            }
-            if (existingAnswer[0]) {
-                const answerUpdateData = {};
-                if (answerPdf !== undefined)
-                    answerUpdateData.pdf = finalAnswerPdf;
-                if (answerVideo !== undefined)
-                    answerUpdateData.video = answerVideo;
-                if (answerImage !== undefined)
-                    answerUpdateData.image = finalAnswerImage;
-                if (answerText !== undefined)
-                    answerUpdateData.text = answerText;
-                if (Object.keys(answerUpdateData).length > 0) {
-                    await tx.update(schema_1.questionAnswers).set(answerUpdateData).where((0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, id));
-                }
-            }
-            else {
-                await tx.insert(schema_1.questionAnswers).values({
-                    questionId: id,
-                    pdf: finalAnswerPdf || null,
-                    video: answerVideo || null,
-                    image: finalAnswerImage || null,
-                    text: answerText || null,
-                });
             }
         }
     });
@@ -431,8 +432,8 @@ const getQuestionsbyLessonId = async (req, res) => {
     const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() })
         .from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
-        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
-        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
+        .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .leftJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
         .where(finalCondition);
     const total = totalQueries.count;
     const totalPages = Math.ceil(total / limit);
@@ -463,8 +464,8 @@ const getQuestionsbyLessonId = async (req, res) => {
     })
         .from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
-        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
-        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
+        .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .leftJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
         .where(finalCondition)
         .limit(limit)
         .offset(offset)
@@ -499,8 +500,8 @@ const getQuestionsbyCourseId = async (req, res) => {
     const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() })
         .from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
-        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
-        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
+        .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .leftJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
         .where(finalCondition);
     const total = totalQueries.count;
     const totalPages = Math.ceil(total / limit);
@@ -531,8 +532,8 @@ const getQuestionsbyCourseId = async (req, res) => {
     })
         .from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
-        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
-        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
+        .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .leftJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
         .where(finalCondition)
         .limit(limit)
         .offset(offset)
@@ -567,8 +568,8 @@ const getQuestionsbySectiondId = async (req, res) => {
     const [totalQueries] = await connection_1.db.select({ count: (0, drizzle_orm_1.count)() })
         .from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
-        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
-        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
+        .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .leftJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
         .where(finalCondition);
     const total = totalQueries.count;
     const totalPages = Math.ceil(total / limit);
@@ -599,8 +600,8 @@ const getQuestionsbySectiondId = async (req, res) => {
     })
         .from(schema_1.questions)
         .innerJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.lessons.id, schema_1.questions.lessonId))
-        .innerJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
-        .innerJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
+        .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(schema_1.examCodes.id, schema_1.questions.codeId))
+        .leftJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(schema_1.Sections.id, schema_1.questions.sectionId))
         .where(finalCondition)
         .limit(limit)
         .offset(offset)
@@ -643,7 +644,6 @@ exports.sendParallelQuestionGenerate = sendParallelQuestionGenerate;
 const createParallelQuestion = async (req, res) => {
     const { origianlQuestionId, question, answerType, difficulty, lessonId, options } = req.body;
     if (!origianlQuestionId
-        || !question
         || !answerType
         || !difficulty
         || !lessonId)
@@ -654,8 +654,8 @@ const createParallelQuestion = async (req, res) => {
     if (!originalQuestion[0]) {
         throw new Errors_1.NotFound("Original question is not found");
     }
-    if (!(originalQuestion[0].question) || originalQuestion[0].question.length <= 0) {
-        throw new BadRequest_1.BadRequest("Original Question must have question text");
+    if (!originalQuestion[0].image) {
+        throw new BadRequest_1.BadRequest("Original Question must have question image");
     }
     const lesson = await connection_1.db.select().from(schema_1.lessons).where((0, drizzle_orm_1.eq)(schema_1.lessons.id, lessonId)).limit(1);
     if (!lesson[0]) {
@@ -666,7 +666,7 @@ const createParallelQuestion = async (req, res) => {
         await tx.insert(schema_1.ParallelQuestion).values({
             id: questionId,
             origianlQuestionId,
-            question,
+            question: question || null,
             answerType,
             difficulty,
             lessonId,
@@ -674,7 +674,7 @@ const createParallelQuestion = async (req, res) => {
         if (options && Array.isArray(options) && options.length > 0) {
             const formattedOptions = options.map((opt) => ({
                 questionId: questionId,
-                answer: opt.answer,
+                answer: opt.answer || "",
                 isCorrect: answerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));
@@ -697,7 +697,7 @@ const updateParallelQuestion = async (req, res) => {
         }
         const updateData = {};
         if (question !== undefined)
-            updateData.question = question;
+            updateData.question = question || null;
         if (answerType !== undefined)
             updateData.answerType = answerType;
         if (difficulty !== undefined)
@@ -714,7 +714,7 @@ const updateParallelQuestion = async (req, res) => {
             const currentAnswerType = answerType !== undefined ? answerType : existingQuestion[0].answerType;
             const formattedOptions = options.map((opt) => ({
                 questionId: id,
-                answer: opt.answer,
+                answer: opt.answer || "",
                 isCorrect: currentAnswerType === "Grid in" ? true : opt.isCorrect,
                 order: opt.order,
             }));

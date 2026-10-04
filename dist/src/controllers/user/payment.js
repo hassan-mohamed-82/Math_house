@@ -80,9 +80,59 @@ const requestPackageBuy = async (req, res) => {
         number: schema_1.packages.number,
         hasAnswers: schema_1.packages.hasAnswers,
         answersPrice: schema_1.packages.answersPrice,
+        duration: schema_1.packages.duration,
     }).from(schema_1.packages).where((0, drizzle_orm_1.eq)(schema_1.packages.id, packageId)).limit(1);
     if (!existingPackage)
         throw new Errors_1.NotFound("Package not found");
+    // Guard: prevent re-purchasing if there's already a pending or active completed payment
+    const [existingPaymentRecord] = await connection_1.db
+        .select({
+        id: schema_1.payment.id,
+        status: schema_1.payment.status,
+        createdAt: schema_1.payment.createdAt,
+    })
+        .from(schema_1.payment)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.payment.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.payment.packageId, packageId), (0, drizzle_orm_1.eq)(schema_1.payment.purpose, 'purchase'), (0, drizzle_orm_1.eq)(schema_1.payment.isDeleted, false)))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.payment.createdAt))
+        .limit(1);
+    if (existingPaymentRecord) {
+        if (existingPaymentRecord.status === 'pending') {
+            throw new Errors_1.BadRequest('You already have a pending purchase request for this package. Please wait for it to be reviewed before trying again.');
+        }
+        if (existingPaymentRecord.status === 'completed' && existingPaymentRecord.createdAt) {
+            const packageDurationDays = existingPackage.duration ?? 0;
+            let isExpired = false;
+            if (packageDurationDays > 0) {
+                const expiresAt = new Date(existingPaymentRecord.createdAt);
+                expiresAt.setDate(expiresAt.getDate() + packageDurationDays);
+                if (new Date() >= expiresAt) {
+                    isExpired = true;
+                }
+            }
+            if (!isExpired) {
+                const [studentBalances] = await connection_1.db.select({
+                    livebalance: schema_1.Student.livebalance,
+                    exambalance: schema_1.Student.exambalance,
+                    questionbalance: schema_1.Student.questionbalance,
+                }).from(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, studentId)).limit(1);
+                let balance = 0;
+                if (existingPackage.type === 'live')
+                    balance = studentBalances?.livebalance ?? 0;
+                else if (existingPackage.type === 'exam')
+                    balance = studentBalances?.exambalance ?? 0;
+                else if (existingPackage.type === 'question')
+                    balance = studentBalances?.questionbalance ?? 0;
+                if (balance > 0) {
+                    if (packageDurationDays > 0) {
+                        throw new Errors_1.BadRequest('You already have an active subscription for this package. You can repurchase after it expires or remaining items end.');
+                    }
+                    else {
+                        throw new Errors_1.BadRequest('You already have a completed purchase for this package with remaining items.');
+                    }
+                }
+            }
+        }
+    }
     const [existingPaymentMethod] = await connection_1.db.select({
         id: schema_1.paymentMethod.id,
         name: schema_1.paymentMethod.name,
@@ -158,10 +208,60 @@ const initiateAutomaticPackageBuy = async (req, res) => {
         price: schema_1.packages.price,
         type: schema_1.packages.type,
         hasAnswers: schema_1.packages.hasAnswers,
-        answersPrice: schema_1.packages.answersPrice
+        answersPrice: schema_1.packages.answersPrice,
+        duration: schema_1.packages.duration,
     }).from(schema_1.packages).where((0, drizzle_orm_1.eq)(schema_1.packages.id, packageId)).limit(1);
     if (!existingPackage)
         throw new Errors_1.NotFound('Package not found');
+    // Guard: prevent re-purchasing if there's already a pending or active completed payment
+    const [existingPaymentRecord] = await connection_1.db
+        .select({
+        id: schema_1.payment.id,
+        status: schema_1.payment.status,
+        createdAt: schema_1.payment.createdAt,
+    })
+        .from(schema_1.payment)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.payment.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.payment.packageId, packageId), (0, drizzle_orm_1.eq)(schema_1.payment.purpose, 'purchase'), (0, drizzle_orm_1.eq)(schema_1.payment.isDeleted, false)))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.payment.createdAt))
+        .limit(1);
+    if (existingPaymentRecord) {
+        if (existingPaymentRecord.status === 'pending') {
+            throw new Errors_1.BadRequest('You already have a pending purchase request for this package. Please wait for it to be reviewed before trying again.');
+        }
+        if (existingPaymentRecord.status === 'completed' && existingPaymentRecord.createdAt) {
+            const packageDurationDays = existingPackage.duration ?? 0;
+            let isExpired = false;
+            if (packageDurationDays > 0) {
+                const expiresAt = new Date(existingPaymentRecord.createdAt);
+                expiresAt.setDate(expiresAt.getDate() + packageDurationDays);
+                if (new Date() >= expiresAt) {
+                    isExpired = true;
+                }
+            }
+            if (!isExpired) {
+                const [studentBalances] = await connection_1.db.select({
+                    livebalance: schema_1.Student.livebalance,
+                    exambalance: schema_1.Student.exambalance,
+                    questionbalance: schema_1.Student.questionbalance,
+                }).from(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, studentId)).limit(1);
+                let balance = 0;
+                if (existingPackage.type === 'live')
+                    balance = studentBalances?.livebalance ?? 0;
+                else if (existingPackage.type === 'exam')
+                    balance = studentBalances?.exambalance ?? 0;
+                else if (existingPackage.type === 'question')
+                    balance = studentBalances?.questionbalance ?? 0;
+                if (balance > 0) {
+                    if (packageDurationDays > 0) {
+                        throw new Errors_1.BadRequest('You already have an active subscription for this package. You can repurchase after it expires or remaining items end.');
+                    }
+                    else {
+                        throw new Errors_1.BadRequest('You already have a completed purchase for this package with remaining items.');
+                    }
+                }
+            }
+        }
+    }
     let finalAmount = Number(existingPackage.price);
     let answersIncluded = false;
     if (existingPackage.type === "exam") {

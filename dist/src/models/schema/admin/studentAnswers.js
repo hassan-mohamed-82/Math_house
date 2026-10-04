@@ -15,4 +15,7 @@ exports.studentAnswers = (0, mysql_core_1.mysqlTable)("student_answers", {
     score: (0, mysql_core_1.int)("score").notNull().default(0),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
-});
+}, (table) => ({
+    // Prevent duplicate answers for the same question within the same attempt
+    attemptQuestionUnique: (0, mysql_core_1.uniqueIndex)("student_answers_attempt_question_unique").on(table.attemptId, table.questionId),
+}));

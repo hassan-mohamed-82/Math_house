@@ -47,11 +47,15 @@ __exportStar(require("./schema/admin/examAttempts"), exports);
 __exportStar(require("./schema/admin/studentAnswers"), exports);
 __exportStar(require("./schema/admin/quizAttempts"), exports);
 __exportStar(require("./schema/admin/studentQuizAnswers"), exports);
+__exportStar(require("./schema/admin/studentParallelAttempts"), exports);
+__exportStar(require("./schema/admin/studentParallelAnswers"), exports);
 __exportStar(require("./schema/user/Wallet"), exports);
 __exportStar(require("./schema/user/StudentDiagnosticExam"), exports);
 __exportStar(require("./schema/user/studentDiagnosticAnswers"), exports);
 __exportStar(require("./schema/user/enrolledItems"), exports);
 __exportStar(require("./schema/admin/grade"), exports);
 __exportStar(require("./schema/admin/prices"), exports);
+__exportStar(require("./schema/admin/SessionRatingQuestions"), exports);
+__exportStar(require("./schema/admin/ExtraHomework"), exports);
 // Drive schema
 __exportStar(require("../drive/models/drive"), exports);

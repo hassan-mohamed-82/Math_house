@@ -32,6 +32,9 @@ exports.MODULES = [
     "groups",
     "sessions",
     "session_ratings",
+    "session_rating_questions",
+    // ── Assessment & Homework ─────────────────────────────────────
+    "extra_homework",
     // ── Commerce ──────────────────────────────────────────────────
     "packages",
     "payments",

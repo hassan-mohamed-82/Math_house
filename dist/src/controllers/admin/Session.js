@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getStudentsCourseAttendance = exports.deleteSession = exports.updateSession = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.selectGroups = exports.selectTeachers = exports.selectStudents = exports.selectLesson = exports.selectChapter = exports.selectCourse = exports.selectSubCategory = exports.selectCategory = void 0;
+exports.deleteSessionStudentPdf = exports.upsertSessionStudentPdfs = exports.getStudentsCourseAttendance = exports.deleteSession = exports.updateSession = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.selectGroups = exports.selectTeachers = exports.selectStudents = exports.selectLesson = exports.selectChapter = exports.selectCourse = exports.selectSubCategory = exports.selectCategory = void 0;
 const crypto_1 = require("crypto");
 const connection_1 = require("../../models/connection");
 const Session_1 = require("../../models/schema/admin/Session");
@@ -11,6 +11,7 @@ const mysql_core_1 = require("drizzle-orm/mysql-core");
 const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
+const handleImages_1 = require("../../utils/handleImages");
 // Selections
 const selectCategory = async (req, res) => {
     const parentCategories = await connection_1.db
@@ -152,7 +153,14 @@ const createSession = async (req, res) => {
     courseId, // course ID (must belong to subCategoryId)
     chapterIds, // string[] – chapters
     lessonIds, // string[] – lessons
-    teacherId, session_link, material_link, teacher_material_link, } = req.body;
+    teacherId, session_link, material_link, teacher_material_link, contentAccessDays, // number | null – days students can access content after attending (null = permanent)
+    // ── PDF fields ──────────────────────────────────────────────────────────
+    // For all session types (base64-encoded PDF strings or existing URLs):
+    session_pdf, // blank PDF for students & teacher
+    session_answers_pdf, // answers PDF visible to teacher only
+    // For Mistakes sessions – per-student PDFs:
+    // studentPdfs: Array<{ studentId: string, session_pdf?: string, session_answers_pdf?: string }>
+    studentPdfs, } = req.body;
     // ── 1. Required field presence (General fields) ────────────────────────
     if (!name ||
         !scheduleType ||
@@ -285,11 +293,60 @@ const createSession = async (req, res) => {
             .where((0, drizzle_orm_1.inArray)(Groups_1.groupStudents.groupId, groupIds));
         groupStudentsList.forEach(gs => uniqueStudentIds.add(gs.studentId));
     }
-    // ── 12. Build arrays for Bulk Insertion ───────────────────────────────────
+    // ── 12. Validate Mistakes-type per-student PDFs ───────────────────────
+    // For Mistakes sessions, studentPdfs[] is optional but each entry must target a valid enrolled student.
+    const isMistakesSession = sessionRelationalType === "Mistakes";
+    const hasStudentPdfs = isMistakesSession && Array.isArray(studentPdfs) && studentPdfs.length > 0;
+    if (hasStudentPdfs) {
+        const pdfStudentIds = studentPdfs.map((p) => p.studentId);
+        const invalidPdfStudents = pdfStudentIds.filter(sid => !uniqueStudentIds.has(sid));
+        if (invalidPdfStudents.length > 0) {
+            throw new BadRequest_1.BadRequest(`studentPdfs contains students not enrolled in this session: [${invalidPdfStudents.join(", ")}]`);
+        }
+    }
+    // ── 13. Process and save session-level PDFs (base64 → disk) ──────────
+    let savedSessionPdf = null;
+    let savedSessionAnswersPdf = null;
+    if (session_pdf) {
+        if (session_pdf.startsWith("http")) {
+            savedSessionPdf = session_pdf;
+        }
+        else {
+            savedSessionPdf = await (0, handleImages_1.validateAndSavePdf)(req, session_pdf, "session-pdfs");
+        }
+    }
+    if (session_answers_pdf) {
+        if (session_answers_pdf.startsWith("http")) {
+            savedSessionAnswersPdf = session_answers_pdf;
+        }
+        else {
+            savedSessionAnswersPdf = await (0, handleImages_1.validateAndSavePdf)(req, session_answers_pdf, "session-pdfs");
+        }
+    }
+    const resolvedStudentPdfs = [];
+    if (hasStudentPdfs) {
+        for (const entry of studentPdfs) {
+            const spdf = entry.session_pdf;
+            const sapdf = entry.session_answers_pdf;
+            const savedSpdf = spdf
+                ? (spdf.startsWith("http") ? spdf : await (0, handleImages_1.validateAndSavePdf)(req, spdf, "session-pdfs"))
+                : null;
+            const savedSapdf = sapdf
+                ? (sapdf.startsWith("http") ? sapdf : await (0, handleImages_1.validateAndSavePdf)(req, sapdf, "session-pdfs"))
+                : null;
+            resolvedStudentPdfs.push({
+                studentId: entry.studentId,
+                session_pdf: savedSpdf,
+                session_answers_pdf: savedSapdf,
+            });
+        }
+    }
+    // ── 15. Build arrays for Bulk Insertion ───────────────────────────────────
     const sessionsToInsert = [];
     const lessonInserts = [];
     const sessionUsersInserts = [];
     const sessionGroupsInserts = [];
+    const studentPdfInserts = [];
     for (const schedule of targetSchedules) {
         const sessionId = (0, crypto_1.randomUUID)();
         sessionsToInsert.push({
@@ -306,6 +363,10 @@ const createSession = async (req, res) => {
             material_link: material_link ?? null,
             teacher_material_link: teacher_material_link ?? null,
             sessionRelationalType,
+            contentAccessDays: contentAccessDays != null ? Number(contentAccessDays) : null,
+            session_pdf: savedSessionPdf,
+            session_answers_pdf: savedSessionAnswersPdf,
+            teacher_explanation_pdf: null,
         });
         // ربط الدروس بالحصة الحالية
         lessonIds.forEach((lessonId) => {
@@ -333,8 +394,21 @@ const createSession = async (req, res) => {
                 });
             });
         }
+        // Per-student PDFs (Mistakes sessions only)
+        if (hasStudentPdfs) {
+            resolvedStudentPdfs.forEach(entry => {
+                studentPdfInserts.push({
+                    id: (0, crypto_1.randomUUID)(),
+                    sessionId,
+                    studentId: entry.studentId,
+                    session_pdf: entry.session_pdf,
+                    session_answers_pdf: entry.session_answers_pdf,
+                    teacher_explanation_pdf: null,
+                });
+            });
+        }
     }
-    // ── 13. Persist everything in one clean transaction ─────────────────────────
+    // ── 16. Persist everything in one clean transaction ─────────────────────────
     await connection_1.db.transaction(async (tx) => {
         await tx.insert(Session_1.sessions).values(sessionsToInsert);
         if (sessionGroupsInserts.length > 0) {
@@ -344,6 +418,9 @@ const createSession = async (req, res) => {
             await tx.insert(Session_1.sessionUsers).values(sessionUsersInserts);
         }
         await tx.insert(schema_1.sessionLessons).values(lessonInserts);
+        if (studentPdfInserts.length > 0) {
+            await tx.insert(Session_1.sessionStudentPdfs).values(studentPdfInserts);
+        }
     });
     return (0, response_1.SuccessResponse)(res, { message: `${sessionsToInsert.length} session(s) created successfully` }, 201);
 };
@@ -363,6 +440,10 @@ const getAllSessions = async (req, res) => {
         session_link: Session_1.sessions.session_link,
         material_link: Session_1.sessions.material_link,
         teacher_material_link: Session_1.sessions.teacher_material_link,
+        contentAccessDays: Session_1.sessions.contentAccessDays,
+        session_pdf: Session_1.sessions.session_pdf,
+        session_answers_pdf: Session_1.sessions.session_answers_pdf,
+        teacher_explanation_pdf: Session_1.sessions.teacher_explanation_pdf,
         createdAt: Session_1.sessions.createdAt,
         updatedAt: Session_1.sessions.updatedAt,
         teacher: {
@@ -434,6 +515,10 @@ const getSessionById = async (req, res) => {
         material_link: Session_1.sessions.material_link,
         teacher_material_link: Session_1.sessions.teacher_material_link,
         sessionRelationalType: Session_1.sessions.sessionRelationalType,
+        contentAccessDays: Session_1.sessions.contentAccessDays,
+        session_pdf: Session_1.sessions.session_pdf,
+        session_answers_pdf: Session_1.sessions.session_answers_pdf,
+        teacher_explanation_pdf: Session_1.sessions.teacher_explanation_pdf,
         createdAt: Session_1.sessions.createdAt,
         updatedAt: Session_1.sessions.updatedAt,
         teacher: {
@@ -524,6 +609,23 @@ const getSessionById = async (req, res) => {
         });
         recurringDays = Array.from(uniqueDays.values());
     }
+    // For Mistakes sessions, fetch per-student PDFs (admin-assigned + teacher explanation)
+    let studentPdfs = [];
+    if (session[0].sessionRelationalType === "Mistakes") {
+        studentPdfs = await connection_1.db.select({
+            id: Session_1.sessionStudentPdfs.id,
+            studentId: Session_1.sessionStudentPdfs.studentId,
+            studentName: (0, drizzle_orm_1.sql) `CONCAT(${schema_1.Student.firstname}, ' ', ${schema_1.Student.lastname})`.as("studentName"),
+            session_pdf: Session_1.sessionStudentPdfs.session_pdf,
+            session_answers_pdf: Session_1.sessionStudentPdfs.session_answers_pdf,
+            teacher_explanation_pdf: Session_1.sessionStudentPdfs.teacher_explanation_pdf,
+            createdAt: Session_1.sessionStudentPdfs.createdAt,
+            updatedAt: Session_1.sessionStudentPdfs.updatedAt,
+        })
+            .from(Session_1.sessionStudentPdfs)
+            .innerJoin(schema_1.Student, (0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.studentId, schema_1.Student.id))
+            .where((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.sessionId, id));
+    }
     return (0, response_1.SuccessResponse)(res, {
         session: {
             ...session[0],
@@ -531,6 +633,8 @@ const getSessionById = async (req, res) => {
             groups: sessionGroupsData,
             lessons: sessionLessonsData,
             students: sessionStudentsData,
+            // PDF data
+            studentPdfs: session[0].sessionRelationalType === "Mistakes" ? studentPdfs : undefined,
         },
     }, 200);
 };
@@ -548,7 +652,14 @@ const updateSession = async (req, res) => {
     studentIds, // string[] – full replace of direct students
     sessionRelationalType, categoryId, subCategoryId, courseId, chapterIds, // string[] – full replace of linked chapters
     lessonIds, // string[] – full replace of linked lessons
-    teacherId, session_link, material_link, teacher_material_link, } = req.body;
+    teacherId, session_link, material_link, teacher_material_link, contentAccessDays, // number | null | undefined – omit to leave unchanged
+    // ── PDF fields (optional – omit to leave unchanged) ──────────────
+    session_pdf, // base64 PDF or URL string, or null to clear
+    session_answers_pdf, // base64 PDF or URL string, or null to clear
+    teacher_explanation_pdf, // base64 PDF or URL string, or null to clear
+    // For Mistakes sessions – upsert per-student PDFs:
+    // studentPdfs: Array<{ studentId: string, session_pdf?: string, session_answers_pdf?: string, teacher_explanation_pdf?: string }>
+    studentPdfs, } = req.body;
     // ── 1. Session must exist ─────────────────────────────────────────────
     if (!id)
         throw new BadRequest_1.BadRequest("Session ID is required");
@@ -701,9 +812,107 @@ const updateSession = async (req, res) => {
             groupStudentsList.forEach(gs => uniqueStudentIds.add(gs.studentId));
         }
     }
-    // ── 13. Persist in one transaction ───────────────────────────────────
+    // ── 13. Process session-level PDF updates ────────────────────────────────
+    let newSessionPdf = undefined; // undefined = not changing
+    let newSessionAnswersPdf = undefined;
+    let newTeacherExplanationPdf = undefined;
+    if (session_pdf !== undefined) {
+        if (session_pdf === null) {
+            // Explicitly clear the PDF
+            if (currentSession.session_pdf)
+                await (0, handleImages_1.deleteImage)(currentSession.session_pdf);
+            newSessionPdf = null;
+        }
+        else if (session_pdf.startsWith("http")) {
+            newSessionPdf = session_pdf; // existing URL – no re-upload needed
+        }
+        else {
+            if (currentSession.session_pdf)
+                await (0, handleImages_1.deleteImage)(currentSession.session_pdf);
+            newSessionPdf = await (0, handleImages_1.validateAndSavePdf)(req, session_pdf, "session-pdfs");
+        }
+    }
+    if (session_answers_pdf !== undefined) {
+        if (session_answers_pdf === null) {
+            if (currentSession.session_answers_pdf)
+                await (0, handleImages_1.deleteImage)(currentSession.session_answers_pdf);
+            newSessionAnswersPdf = null;
+        }
+        else if (session_answers_pdf.startsWith("http")) {
+            newSessionAnswersPdf = session_answers_pdf;
+        }
+        else {
+            if (currentSession.session_answers_pdf)
+                await (0, handleImages_1.deleteImage)(currentSession.session_answers_pdf);
+            newSessionAnswersPdf = await (0, handleImages_1.validateAndSavePdf)(req, session_answers_pdf, "session-pdfs");
+        }
+    }
+    if (teacher_explanation_pdf !== undefined) {
+        if (teacher_explanation_pdf === null) {
+            if (currentSession.teacher_explanation_pdf)
+                await (0, handleImages_1.deleteImage)(currentSession.teacher_explanation_pdf);
+            newTeacherExplanationPdf = null;
+        }
+        else if (teacher_explanation_pdf.startsWith("http")) {
+            newTeacherExplanationPdf = teacher_explanation_pdf;
+        }
+        else {
+            if (currentSession.teacher_explanation_pdf)
+                await (0, handleImages_1.deleteImage)(currentSession.teacher_explanation_pdf);
+            newTeacherExplanationPdf = await (0, handleImages_1.validateAndSavePdf)(req, teacher_explanation_pdf, "session-pdfs");
+        }
+    }
+    // ── 14. Validate & process per-student PDFs (Mistakes sessions only) ─────
+    // Determine the effective session type after update
+    const effectiveRelationalType = sessionRelationalType ?? currentSession.sessionRelationalType;
+    const isMistakesSession = effectiveRelationalType === "Mistakes";
+    const hasStudentPdfs = isMistakesSession && Array.isArray(studentPdfs) && studentPdfs.length > 0;
+    // Resolve the current enrolled student set for validation
+    let enrolledStudentIds;
+    if (uniqueStudentIds) {
+        enrolledStudentIds = uniqueStudentIds;
+    }
+    else {
+        // Use existing enrolled students
+        const existingUsers = await connection_1.db
+            .select({ studentId: Session_1.sessionUsers.studentId })
+            .from(Session_1.sessionUsers)
+            .where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.sessionId, id));
+        enrolledStudentIds = new Set(existingUsers.map(u => u.studentId));
+    }
+    if (hasStudentPdfs) {
+        const pdfStudentIds = studentPdfs.map((p) => p.studentId);
+        const invalidPdfStudents = pdfStudentIds.filter(sid => !enrolledStudentIds.has(sid));
+        if (invalidPdfStudents.length > 0) {
+            throw new BadRequest_1.BadRequest(`studentPdfs contains students not enrolled in this session: [${invalidPdfStudents.join(", ")}]`);
+        }
+    }
+    const resolvedStudentPdfUpdates = [];
+    if (hasStudentPdfs) {
+        for (const entry of studentPdfs) {
+            const spdf = entry.session_pdf;
+            const sapdf = entry.session_answers_pdf;
+            const tepdf = entry.teacher_explanation_pdf;
+            const savedSpdf = spdf !== undefined
+                ? (spdf === null ? null : spdf.startsWith("http") ? spdf : await (0, handleImages_1.validateAndSavePdf)(req, spdf, "session-pdfs"))
+                : undefined;
+            const savedSapdf = sapdf !== undefined
+                ? (sapdf === null ? null : sapdf.startsWith("http") ? sapdf : await (0, handleImages_1.validateAndSavePdf)(req, sapdf, "session-pdfs"))
+                : undefined;
+            const savedTepdf = tepdf !== undefined
+                ? (tepdf === null ? null : tepdf.startsWith("http") ? tepdf : await (0, handleImages_1.validateAndSavePdf)(req, tepdf, "session-pdfs"))
+                : undefined;
+            resolvedStudentPdfUpdates.push({
+                studentId: entry.studentId,
+                session_pdf: savedSpdf,
+                session_answers_pdf: savedSapdf,
+                teacher_explanation_pdf: savedTepdf,
+            });
+        }
+    }
+    // ── 15. Persist in one transaction ───────────────────────────────────
     await connection_1.db.transaction(async (tx) => {
-        // 13a. Update core session fields
+        // 15a. Update core session fields
         const scheduleFields = isChangingSchedule && targetSchedules.length === 1
             ? {
                 scheduleType: effectiveScheduleType,
@@ -723,26 +932,62 @@ const updateSession = async (req, res) => {
             ...(teacher_material_link && { teacher_material_link }),
             ...(sessionRelationalType && { sessionRelationalType }),
             ...(teacherId && { teacherId }),
+            // Allow explicit null to clear the expiry (permanent access)
+            ...(contentAccessDays !== undefined && {
+                contentAccessDays: contentAccessDays != null ? Number(contentAccessDays) : null,
+            }),
+            // PDF fields – only include if the caller sent them
+            ...(newSessionPdf !== undefined && { session_pdf: newSessionPdf }),
+            ...(newSessionAnswersPdf !== undefined && { session_answers_pdf: newSessionAnswersPdf }),
+            ...(newTeacherExplanationPdf !== undefined && { teacher_explanation_pdf: newTeacherExplanationPdf }),
             ...scheduleFields,
         })
             .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, id));
-        // 13b. Full replace of lessons
+        // 15b. Full replace of lessons
         if (isChangingAcademics) {
             await tx.delete(schema_1.sessionLessons).where((0, drizzle_orm_1.eq)(schema_1.sessionLessons.sessionId, id));
             await tx.insert(schema_1.sessionLessons).values(lessonIds.map((lessonId) => ({ id: (0, crypto_1.randomUUID)(), sessionId: id, lessonId })));
         }
-        // 13c. Full replace of groups
+        // 15c. Full replace of groups
         if (groupIds !== undefined && Array.isArray(groupIds)) {
             await tx.delete(Session_1.sessionGroups).where((0, drizzle_orm_1.eq)(Session_1.sessionGroups.sessionId, id));
             if (hasGroups) {
                 await tx.insert(Session_1.sessionGroups).values(groupIds.map((gId) => ({ id: (0, crypto_1.randomUUID)(), sessionId: id, groupId: gId })));
             }
         }
-        // 13d. Full replace of students (direct + from groups)
+        // 15d. Full replace of students (direct + from groups)
         if (isChangingAudience && uniqueStudentIds) {
             await tx.delete(Session_1.sessionUsers).where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.sessionId, id));
             if (uniqueStudentIds.size > 0) {
                 await tx.insert(Session_1.sessionUsers).values(Array.from(uniqueStudentIds).map(studentId => ({ id: (0, crypto_1.randomUUID)(), sessionId: id, studentId })));
+            }
+        }
+        // 15e. Upsert per-student PDFs (Mistakes sessions)
+        if (hasStudentPdfs) {
+            for (const entry of resolvedStudentPdfUpdates) {
+                const [existing] = await tx
+                    .select({ id: Session_1.sessionStudentPdfs.id })
+                    .from(Session_1.sessionStudentPdfs)
+                    .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.sessionId, id), (0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.studentId, entry.studentId)));
+                if (existing) {
+                    await tx.update(Session_1.sessionStudentPdfs)
+                        .set({
+                        ...(entry.session_pdf !== undefined && { session_pdf: entry.session_pdf }),
+                        ...(entry.session_answers_pdf !== undefined && { session_answers_pdf: entry.session_answers_pdf }),
+                        ...(entry.teacher_explanation_pdf !== undefined && { teacher_explanation_pdf: entry.teacher_explanation_pdf }),
+                    })
+                        .where((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.id, existing.id));
+                }
+                else {
+                    await tx.insert(Session_1.sessionStudentPdfs).values({
+                        id: (0, crypto_1.randomUUID)(),
+                        sessionId: id,
+                        studentId: entry.studentId,
+                        session_pdf: entry.session_pdf ?? null,
+                        session_answers_pdf: entry.session_answers_pdf ?? null,
+                        teacher_explanation_pdf: entry.teacher_explanation_pdf ?? null,
+                    });
+                }
             }
         }
     });
@@ -774,6 +1019,7 @@ const deleteSession = async (req, res) => {
         await tx.delete(schema_1.sessionLessons).where((0, drizzle_orm_1.inArray)(schema_1.sessionLessons.sessionId, sessionIdsToDelete));
         await tx.delete(Session_1.sessionRatings).where((0, drizzle_orm_1.inArray)(Session_1.sessionRatings.sessionId, sessionIdsToDelete));
         await tx.delete(schema_1.sessionAttendance).where((0, drizzle_orm_1.inArray)(schema_1.sessionAttendance.sessionId, sessionIdsToDelete));
+        await tx.delete(Session_1.sessionStudentPdfs).where((0, drizzle_orm_1.inArray)(Session_1.sessionStudentPdfs.sessionId, sessionIdsToDelete));
         // Final delete of the target sessions
         await tx.delete(Session_1.sessions).where((0, drizzle_orm_1.inArray)(Session_1.sessions.id, sessionIdsToDelete));
     });
@@ -856,3 +1102,96 @@ const getStudentsCourseAttendance = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { students: studentsWithAttendance }, 200);
 };
 exports.getStudentsCourseAttendance = getStudentsCourseAttendance;
+/**
+ * POST /admin/sessions/:id/student-pdfs
+ * Upsert (create or update) per-student PDFs for a Mistakes-type session.
+ *
+ * Body:
+ *   studentPdfs: Array<{
+ *     studentId: string,
+ *     session_pdf?: string,        // base64 PDF or existing URL
+ *     session_answers_pdf?: string // base64 PDF or existing URL
+ *   }>
+ */
+const upsertSessionStudentPdfs = async (req, res) => {
+    const { id: sessionId } = req.params;
+    const { studentPdfs } = req.body;
+    if (!sessionId)
+        throw new BadRequest_1.BadRequest("Session ID is required");
+    const [session] = await connection_1.db
+        .select({ id: Session_1.sessions.id, sessionRelationalType: Session_1.sessions.sessionRelationalType })
+        .from(Session_1.sessions)
+        .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, sessionId));
+    if (!session)
+        throw new Errors_1.NotFound("Session not found");
+    if (session.sessionRelationalType !== "Mistakes") {
+        throw new BadRequest_1.BadRequest("Per-student PDFs are only supported for Mistakes-type sessions");
+    }
+    if (!Array.isArray(studentPdfs) || studentPdfs.length === 0) {
+        throw new BadRequest_1.BadRequest("studentPdfs array is required and cannot be empty");
+    }
+    // Fetch enrolled student IDs for validation
+    const enrolledUsers = await connection_1.db
+        .select({ studentId: Session_1.sessionUsers.studentId })
+        .from(Session_1.sessionUsers)
+        .where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.sessionId, sessionId));
+    const enrolledIds = new Set(enrolledUsers.map(u => u.studentId));
+    const pdfStudentIds = studentPdfs.map((p) => p.studentId);
+    const invalidStudents = pdfStudentIds.filter(sid => !enrolledIds.has(sid));
+    if (invalidStudents.length > 0) {
+        throw new BadRequest_1.BadRequest(`Students not enrolled in this session: [${invalidStudents.join(", ")}]`);
+    }
+    for (const entry of studentPdfs) {
+        const spdf = entry.session_pdf;
+        const sapdf = entry.session_answers_pdf;
+        const savedSpdf = spdf !== undefined
+            ? (spdf === null ? null : spdf.startsWith("http") ? spdf : await (0, handleImages_1.validateAndSavePdf)(req, spdf, "session-pdfs"))
+            : undefined;
+        const savedSapdf = sapdf !== undefined
+            ? (sapdf === null ? null : sapdf.startsWith("http") ? sapdf : await (0, handleImages_1.validateAndSavePdf)(req, sapdf, "session-pdfs"))
+            : undefined;
+        const [existing] = await connection_1.db
+            .select({ id: Session_1.sessionStudentPdfs.id })
+            .from(Session_1.sessionStudentPdfs)
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.sessionId, sessionId), (0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.studentId, entry.studentId)));
+        if (existing) {
+            await connection_1.db.update(Session_1.sessionStudentPdfs)
+                .set({
+                ...(savedSpdf !== undefined && { session_pdf: savedSpdf }),
+                ...(savedSapdf !== undefined && { session_answers_pdf: savedSapdf }),
+            })
+                .where((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.id, existing.id));
+        }
+        else {
+            await connection_1.db.insert(Session_1.sessionStudentPdfs).values({
+                id: (0, crypto_1.randomUUID)(),
+                sessionId,
+                studentId: entry.studentId,
+                session_pdf: savedSpdf ?? null,
+                session_answers_pdf: savedSapdf ?? null,
+                teacher_explanation_pdf: null,
+            });
+        }
+    }
+    return (0, response_1.SuccessResponse)(res, { message: "Student PDFs updated successfully" }, 200);
+};
+exports.upsertSessionStudentPdfs = upsertSessionStudentPdfs;
+/**
+ * DELETE /admin/sessions/:id/student-pdfs/:studentId
+ * Remove a per-student PDF row for a Mistakes-type session.
+ */
+const deleteSessionStudentPdf = async (req, res) => {
+    const { id: sessionId, studentId } = req.params;
+    if (!sessionId || !studentId) {
+        throw new BadRequest_1.BadRequest("Session ID and student ID are required");
+    }
+    const [existing] = await connection_1.db
+        .select({ id: Session_1.sessionStudentPdfs.id })
+        .from(Session_1.sessionStudentPdfs)
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.sessionId, sessionId), (0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.studentId, studentId)));
+    if (!existing)
+        throw new Errors_1.NotFound("Student PDF record not found");
+    await connection_1.db.delete(Session_1.sessionStudentPdfs).where((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.id, existing.id));
+    return (0, response_1.SuccessResponse)(res, { message: "Student PDF record deleted successfully" }, 200);
+};
+exports.deleteSessionStudentPdf = deleteSessionStudentPdf;

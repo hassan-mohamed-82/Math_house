@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteChapter = exports.updateChapter = exports.swapChapterOrder = exports.getAllChaptersByCourseId = exports.getAllChapters = exports.getChapterById = exports.createChapter = void 0;
+exports.deleteChapter = exports.updateChapter = exports.swapChapterOrder = exports.getChaptersBySemesterId = exports.getAllChaptersBySemesterId = exports.getAllChaptersByCourseId = exports.getAllChapters = exports.getChapterById = exports.createChapter = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -174,6 +174,28 @@ const getAllChaptersByCourseId = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, { message: "Chapters fetched successfully", chapters: result }, 200);
 };
 exports.getAllChaptersByCourseId = getAllChaptersByCourseId;
+const getAllChaptersBySemesterId = async (req, res) => {
+    const { semesterId } = req.params;
+    const existingSemester = await connection_1.db.select().from(schema_1.semesters).where((0, drizzle_orm_1.eq)(schema_1.semesters.id, semesterId));
+    if (existingSemester.length === 0) {
+        throw new BadRequest_1.BadRequest("Semester not found");
+    }
+    const allChapters = await chapterDetailedQuery()
+        .where((0, drizzle_orm_1.eq)(schema_1.chapters.semesterId, semesterId))
+        .orderBy((0, drizzle_orm_1.asc)(schema_1.chapters.order));
+    const chapterIds = allChapters.map(c => c.chapter.id);
+    let allPrices = [];
+    if (chapterIds.length > 0) {
+        allPrices = await connection_1.db.select().from(schema_1.prices).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.prices.targetId, chapterIds), (0, drizzle_orm_1.eq)(schema_1.prices.targetType, "chapter")));
+    }
+    const result = allChapters.map(c => ({
+        ...c,
+        prices: allPrices.filter(p => p.targetId === c.chapter.id)
+    }));
+    return (0, response_1.SuccessResponse)(res, { message: "Chapters fetched successfully", chapters: result }, 200);
+};
+exports.getAllChaptersBySemesterId = getAllChaptersBySemesterId;
+exports.getChaptersBySemesterId = exports.getAllChaptersBySemesterId;
 const swapChapterOrder = async (req, res) => {
     const { chapterIdA, chapterIdB } = req.body;
     if (!chapterIdA || !chapterIdB) {

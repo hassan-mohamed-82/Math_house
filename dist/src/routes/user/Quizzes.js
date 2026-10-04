@@ -4,6 +4,7 @@ const express_1 = require("express");
 const Quizzes_1 = require("../../controllers/user/Quizzes");
 const catchAsync_1 = require("../../utils/catchAsync");
 const router = (0, express_1.Router)();
+router.get("/remaining-homework", (0, catchAsync_1.catchAsync)(Quizzes_1.getRemainingHomework));
 router.get("/lesson/:lessonId", (0, catchAsync_1.catchAsync)(Quizzes_1.getQuizzesByLessonId));
 router.get("/:quizId", (0, catchAsync_1.catchAsync)(Quizzes_1.getQuizById));
 router.get("/:quizId/questions", (0, catchAsync_1.catchAsync)(Quizzes_1.getQuizQuestions));

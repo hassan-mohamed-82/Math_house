@@ -125,7 +125,7 @@ const submitDiagnosticExam = async (studentId, attemptId, answers) => {
                 //const normalizedSubmit = studentGridInAnswer.trim().toLowerCase();
                 //isCorrect = correctOptions.some(opt => opt.answer.trim().toLowerCase() === normalizedSubmit);
                 // Allow if text matches any valid correct grid-in answer
-                isCorrect = correctOptions.some(opt => (0, checkGridInAnswer_1.isEquivalentGridInAnswer)(studentGridInAnswer, opt.answer));
+                isCorrect = correctOptions.some(opt => opt.answer ? (0, checkGridInAnswer_1.isEquivalentGridInAnswer)(studentGridInAnswer, opt.answer) : false);
             }
         }
         // If no submittedAnswer is found, isCorrect remains false 
@@ -340,25 +340,35 @@ const getStudentAttempts = async (req, res) => {
     const studentId = req.user?.id;
     if (!studentId)
         throw new Errors_2.BadRequest("Not authenticated");
+    const examId = req.query.examId || req.query.diagnosticExamId;
+    const whereCondition = (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.diagnosticExamAttempt.studentId, studentId), examId ? (0, drizzle_orm_1.eq)(schema_1.diagnosticExamAttempt.diagnosticExamId, examId) : undefined);
     const attempts = await connection_1.db
         .select({
         id: schema_1.diagnosticExamAttempt.id,
         diagnosticExamId: schema_1.diagnosticExamAttempt.diagnosticExamId,
+        score: schema_1.diagnosticExamAttempt.score,
         isCompleted: schema_1.diagnosticExamAttempt.isCompleted,
         startedAt: schema_1.diagnosticExamAttempt.startedAt,
         endedAt: schema_1.diagnosticExamAttempt.endedAt,
         diagnosticExam: {
             id: schema_1.diagnosticExam.id,
             title: schema_1.diagnosticExam.title,
-            description: schema_1.diagnosticExam.description
+            description: schema_1.diagnosticExam.description,
+            duration: schema_1.diagnosticExam.duration,
+            totalScore: schema_1.diagnosticExam.totalScore,
+            passScore: schema_1.diagnosticExam.passScore,
+            numberOfQuestions: schema_1.diagnosticExam.numberOfQuestions,
+            courseId: schema_1.diagnosticExam.courseId,
+            courseName: schema_1.courses.name,
         }
     })
         .from(schema_1.diagnosticExamAttempt)
         .leftJoin(schema_1.diagnosticExam, (0, drizzle_orm_1.eq)(schema_1.diagnosticExamAttempt.diagnosticExamId, schema_1.diagnosticExam.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.diagnosticExamAttempt.studentId, studentId))
-        .orderBy(schema_1.diagnosticExamAttempt.startedAt);
+        .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, schema_1.courses.id))
+        .where(whereCondition)
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.diagnosticExamAttempt.startedAt));
     return (0, response_1.SuccessResponse)(res, {
-        message: "Attempts retrieved successfully",
+        message: "Diagnostic exam attempts retrieved successfully",
         data: attempts
     }, 200);
 };
@@ -370,30 +380,51 @@ const getDiagnosticAttemptReview = async (req, res) => {
         questionId: schema_1.studentDiagnosticAnswers.questionId,
         studentAnswerId: schema_1.studentDiagnosticAnswers.studentAnswerId,
         studentGridInAnswer: schema_1.studentDiagnosticAnswers.studentGridInAnswer,
-        isCorrect: schema_1.studentDiagnosticAnswers.isCorrect, // ضفنا دي عشان نعرف السؤال صح ولا غلط
+        isCorrect: schema_1.studentDiagnosticAnswers.isCorrect,
         questionText: schema_1.questions.question,
         questionImage: schema_1.questions.image,
         answerType: schema_1.questions.answerType,
         correctOptionId: schema_1.questionOptions.id,
         correctOptionAnswer: schema_1.questionOptions.answer,
-        explanationPdf: schema_1.questionAnswers.pdf,
-        explanationVideo: schema_1.questionAnswers.video,
-        explanationText: schema_1.questionAnswers.text,
-        explanationImage: schema_1.questionAnswers.image,
         lessonName: schema_1.lessons.name,
         chapterName: schema_1.chapters.name,
         courseName: schema_1.courses.name,
     })
         .from(schema_1.studentDiagnosticAnswers)
         .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.studentDiagnosticAnswers.questionId, schema_1.questions.id))
-        .where((0, drizzle_orm_1.eq)(schema_1.studentDiagnosticAnswers.attemptId, attemptId)
-    // شيلنا شرط (isCorrect, false) عشان يجيب كله
-    )
+        .where((0, drizzle_orm_1.eq)(schema_1.studentDiagnosticAnswers.attemptId, attemptId))
         .leftJoin(schema_1.questionOptions, (0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.questionOptions.questionId, schema_1.studentDiagnosticAnswers.questionId), (0, drizzle_orm_1.eq)(schema_1.questionOptions.isCorrect, true)))
-        .leftJoin(schema_1.questionAnswers, (0, drizzle_orm_1.eq)(schema_1.questionAnswers.questionId, schema_1.studentDiagnosticAnswers.questionId))
         .leftJoin(schema_1.lessons, (0, drizzle_orm_1.eq)(schema_1.questions.lessonId, schema_1.lessons.id))
         .leftJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
         .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.lessons.courseId, schema_1.courses.id));
+    // Fetch all answer objects for the returned questions as an array, grouped by questionId
+    const questionIds = Array.from(new Set(allAnswers.map(a => a.questionId)));
+    let allExplanations = [];
+    if (questionIds.length > 0) {
+        allExplanations = await connection_1.db
+            .select({
+            questionId: schema_1.questionAnswers.questionId,
+            id: schema_1.questionAnswers.id,
+            answerPdf: schema_1.questionAnswers.pdf,
+            answerVideo: schema_1.questionAnswers.video,
+            answerImage: schema_1.questionAnswers.image,
+            answerText: schema_1.questionAnswers.text,
+        })
+            .from(schema_1.questionAnswers)
+            .where((0, drizzle_orm_1.inArray)(schema_1.questionAnswers.questionId, questionIds));
+    }
+    const explanationsMap = new Map();
+    for (const e of allExplanations) {
+        if (!explanationsMap.has(e.questionId))
+            explanationsMap.set(e.questionId, []);
+        explanationsMap.get(e.questionId).push({
+            id: e.id,
+            answerPdf: e.answerPdf,
+            answerVideo: e.answerVideo,
+            answerImage: e.answerImage,
+            answerText: e.answerText,
+        });
+    }
     const uniqueAnswersMap = new Map();
     for (const ans of allAnswers) {
         if (!uniqueAnswersMap.has(ans.questionId)) {
@@ -402,16 +433,11 @@ const getDiagnosticAttemptReview = async (req, res) => {
                 questionText: ans.questionText,
                 questionImage: ans.questionImage,
                 answerType: ans.answerType,
-                isCorrect: ans.isCorrect, // بتظهر هنا في النتيجة النهائية
+                isCorrect: ans.isCorrect,
                 studentSubmittedMCQId: ans.studentAnswerId,
                 studentSubmittedGridInText: ans.studentGridInAnswer,
                 correctAnswers: [],
-                explanationContent: {
-                    pdf: ans.explanationPdf,
-                    video: ans.explanationVideo,
-                    image: ans.explanationImage,
-                    text: ans.explanationText,
-                },
+                answers: explanationsMap.get(ans.questionId) ?? [], // array of [{ id, answerPdf, answerVideo, answerImage, answerText }]
                 recommendationToRecap: ans.isCorrect ? null : {
                     lessonName: ans.lessonName,
                     chapterName: ans.chapterName,

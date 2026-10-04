@@ -21,7 +21,12 @@ const createExam = async (req, res) => {
     switch (examType) {
         case "static":
             const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, rawScoreId, calculators } = req.body;
-            // sections structure: { sectionId: string, sectionOrder: number, questionIds: string[] }[]
+            // sections structure:
+            // { sectionId: string, sectionOrder: number, questionIds: string[],
+            //   duration?: number,        // per-exam override in minutes (null = use Sections.sectionTime)
+            //   breakLimited?: boolean,   // whether the break after this section is time-limited
+            //   maxBreakDuration?: number // max break minutes (only when breakLimited = true)
+            // }[]
             // Validate calculators if provided
             const validatedCalculators = [];
             if (calculators && Array.isArray(calculators)) {
@@ -32,7 +37,7 @@ const createExam = async (req, res) => {
                     validatedCalculators.push(calc);
                 }
             }
-            if (!title || !description || !duration || !totalScore || !passScore || !courseId || !year || !month || !codeId || !sections) {
+            if (!title || !description || !duration || !totalScore || !passScore || !courseId || !codeId || !sections) {
                 throw new BadRequest_1.BadRequest("All fields are required");
             }
             if (!Array.isArray(sections) || sections.length === 0) {
@@ -84,11 +89,18 @@ const createExam = async (req, res) => {
             // Assuming payload: { sectionId: "uuid", questionIds: ["uuid", "uuid"], sectionOrder: 1 }
             sections.forEach((section) => {
                 const examSectionId = (0, crypto_1.randomUUID)();
+                // Validate breakLimited / maxBreakDuration consistency
+                if (section.breakLimited && !section.maxBreakDuration) {
+                    throw new BadRequest_1.BadRequest(`Section order ${section.sectionOrder}: maxBreakDuration is required when breakLimited is true`);
+                }
                 examSectionsToInsert.push({
                     id: examSectionId,
                     examId: examId,
                     sectionId: section.sectionId,
-                    sectionOrder: section.sectionOrder ?? 0 // If not provided, default or handle error
+                    sectionOrder: section.sectionOrder ?? 0,
+                    duration: section.duration ?? null, // null → fallback to Sections.sectionTime
+                    breakLimited: section.breakLimited ?? false,
+                    maxBreakDuration: section.breakLimited ? (section.maxBreakDuration ?? null) : null,
                 });
                 section.questionIds.forEach((qId, index) => {
                     sectionQuestionsToInsert.push({
@@ -111,8 +123,8 @@ const createExam = async (req, res) => {
                     totalScore,
                     passScore,
                     courseId,
-                    year,
-                    Month: month,
+                    year: year || null,
+                    Month: month || null,
                     codeId,
                     isActive: true, // Default
                     examType: "static",
@@ -158,10 +170,10 @@ const updateExam = async (req, res) => {
         updateData.passScore = passScore;
     if (courseId)
         updateData.courseId = courseId;
-    if (year)
-        updateData.year = year;
-    if (month)
-        updateData.Month = month;
+    if (year !== undefined)
+        updateData.year = year || null;
+    if (month !== undefined)
+        updateData.Month = month || null;
     if (codeId)
         updateData.codeId = codeId;
     if (isActive !== undefined)
@@ -229,11 +241,18 @@ const updateExam = async (req, res) => {
             const scorePerQuestion = totalQuestions > 0 ? currentTotalScore / totalQuestions : 0;
             sections.forEach((section) => {
                 const examSectionId = (0, crypto_1.randomUUID)();
+                // Validate breakLimited / maxBreakDuration consistency
+                if (section.breakLimited && !section.maxBreakDuration) {
+                    throw new BadRequest_1.BadRequest(`Section order ${section.sectionOrder}: maxBreakDuration is required when breakLimited is true`);
+                }
                 examSectionsToInsert.push({
                     id: examSectionId,
                     examId: id,
                     sectionId: section.sectionId,
-                    sectionOrder: section.sectionOrder ?? 0
+                    sectionOrder: section.sectionOrder ?? 0,
+                    duration: section.duration ?? null,
+                    breakLimited: section.breakLimited ?? false,
+                    maxBreakDuration: section.breakLimited ? (section.maxBreakDuration ?? null) : null,
                 });
                 section.questionIds.forEach((qId, index) => {
                     sectionQuestionsToInsert.push({
@@ -339,9 +358,13 @@ const getExamById = async (req, res) => {
             id: exams_1.ExamSections.id,
             sectionId: exams_1.ExamSections.sectionId,
             sectionOrder: exams_1.ExamSections.sectionOrder,
+            // Effective duration: use ExamSections.duration if set, else fall back to Sections.sectionTime
+            duration: exams_1.ExamSections.duration,
+            sectionTime: schema_1.Sections.sectionTime,
+            breakLimited: exams_1.ExamSections.breakLimited,
+            maxBreakDuration: exams_1.ExamSections.maxBreakDuration,
             sectionName: schema_1.Sections.sectionName,
             sectionDescription: schema_1.Sections.sectionDescription,
-            sectionTime: schema_1.Sections.sectionTime,
         })
             .from(exams_1.ExamSections)
             .leftJoin(schema_1.Sections, (0, drizzle_orm_1.eq)(exams_1.ExamSections.sectionId, schema_1.Sections.id))
@@ -370,8 +393,13 @@ const getExamById = async (req, res) => {
             // 4. Structure the Response
             const formattedSections = sections.map(section => {
                 const sectionQs = sectionQuestions.filter(sq => sq.sectionId === section.id);
+                const { sectionTime, duration, ...sectionRest } = section;
                 return {
-                    ...section,
+                    ...sectionRest,
+                    // If ExamSections.duration is set, it overrides Sections.sectionTime
+                    effectiveDuration: duration ?? sectionTime,
+                    durationOverride: duration, // The per-exam override (null = using global)
+                    sectionTime, // The global section time (for reference)
                     questions: sectionQs
                 };
             });

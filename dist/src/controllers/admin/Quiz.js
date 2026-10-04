@@ -624,7 +624,7 @@ const getQuizzesByLessonId = async (req, res) => {
         .leftJoin(schema_4.courses, (0, drizzle_orm_1.eq)(schema_1.quizzes.courseId, schema_4.courses.id))
         .leftJoin(schema_5.chapters, (0, drizzle_orm_1.eq)(schema_1.quizzes.chapterId, schema_5.chapters.id))
         .leftJoin(schema_6.lessons, (0, drizzle_orm_1.eq)(schema_1.quizzes.lessonId, schema_6.lessons.id))
-        .leftJoin(schema_7.semesters, (0, drizzle_orm_1.eq)(schema_4.courses.id, schema_7.semesters.courseId))
+        .leftJoin(schema_7.semesters, (0, drizzle_orm_1.eq)(schema_5.chapters.semesterId, schema_7.semesters.id))
         .where((0, drizzle_orm_1.eq)(schema_1.quizzes.lessonId, id))
         .orderBy((0, drizzle_orm_1.desc)(schema_1.quizzes.createdAt));
     const quizzesWithCount = await Promise.all(quizzesList.map(async (quiz) => {
