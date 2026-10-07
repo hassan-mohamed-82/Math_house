@@ -5,7 +5,7 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
 import { chapters, lessons, lessonIdeas, category, courses, teachers, semesters, prices } from "../../models/schema";
-import { handleImageUpdate, validateAndSaveLogo, deleteImage } from "../../utils/handleImages";
+import { handleImageUpdate, validateAndSaveLogo, validateAndSavePdf, deleteImage } from "../../utils/handleImages";
 import { randomUUID } from "crypto";
 
 
@@ -16,6 +16,8 @@ const lessonDetailedQuery = () =>
             name: lessons.name,
             description: lessons.description,
             image: lessons.image,
+            session_pdf: lessons.session_pdf,
+            session_answers_pdf: lessons.session_answers_pdf,
             preRequisition: lessons.preRequisition,
             whatYouGain: lessons.whatYouGain,
             order: lessons.order,
@@ -60,7 +62,7 @@ const lessonDetailedQuery = () =>
         .leftJoin(semesters, eq(chapters.semesterId, semesters.id));
 
 export const createLesson = async (req: Request, res: Response) => {
-    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans } = req.body;
+    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans, session_pdf, session_answers_pdf } = req.body;
 
     if (!name || !chapterId || !teacherId) {
         throw new BadRequest("Name, Chapter ID, and Teacher ID are required");
@@ -110,6 +112,13 @@ export const createLesson = async (req: Request, res: Response) => {
     if (image) {
         imageURL = await validateAndSaveLogo(req, image, "lessons");
     }
+    const resolvePdf = async (pdf: unknown): Promise<string | null> => {
+        if (pdf == null || pdf === "") return null;
+        if (typeof pdf !== "string") throw new BadRequest("PDF fields must be a URL or a base64-encoded PDF");
+        return pdf.startsWith("http") ? pdf : validateAndSavePdf(req, pdf, "lessons");
+    };
+    const sessionPdfUrl = await resolvePdf(session_pdf);
+    const sessionAnswersPdfUrl = await resolvePdf(session_answers_pdf);
 
     const lessonId = randomUUID();
 
@@ -123,6 +132,8 @@ export const createLesson = async (req: Request, res: Response) => {
             teacherId,
             description,
             image: imageURL,
+            session_pdf: sessionPdfUrl,
+            session_answers_pdf: sessionAnswersPdfUrl,
             preRequisition,
             whatYouGain,
             order: nextOrder,
@@ -270,7 +281,7 @@ export const swapLessonOrder = async (req: Request, res: Response) => {
 
 export const updateLesson = async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans } = req.body;
+    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans, session_pdf, session_answers_pdf } = req.body;
 
     const [existingLesson] = await db.select().from(lessons).where(eq(lessons.id, id));
     if (!existingLesson) {
@@ -322,6 +333,20 @@ export const updateLesson = async (req: Request, res: Response) => {
 
     // Handle image update
     const updatedImage = await handleImageUpdate(req, existingLesson.image, image, "lessons");
+    const resolvePdf = async (pdf: unknown, existingPdf: string | null): Promise<string | null | undefined> => {
+        if (pdf === undefined) return undefined;
+        if (pdf === null || pdf === "") {
+            if (existingPdf?.includes("/uploads/")) await deleteImage(existingPdf);
+            return null;
+        }
+        if (typeof pdf !== "string") throw new BadRequest("PDF fields must be a URL, null, or a base64-encoded PDF");
+        if (pdf.startsWith("http")) return pdf;
+        const newPdf = await validateAndSavePdf(req, pdf, "lessons");
+        if (existingPdf?.includes("/uploads/")) await deleteImage(existingPdf);
+        return newPdf;
+    };
+    const updatedSessionPdf = await resolvePdf(session_pdf, existingLesson.session_pdf);
+    const updatedSessionAnswersPdf = await resolvePdf(session_answers_pdf, existingLesson.session_answers_pdf);
 
     await db.transaction(async (tx) => {
         await tx.update(lessons).set({
@@ -334,6 +359,8 @@ export const updateLesson = async (req: Request, res: Response) => {
             image: updatedImage ?? existingLesson.image,
             preRequisition: preRequisition !== undefined ? preRequisition : existingLesson.preRequisition,
             whatYouGain: whatYouGain !== undefined ? whatYouGain : existingLesson.whatYouGain,
+            ...(updatedSessionPdf !== undefined && { session_pdf: updatedSessionPdf }),
+            ...(updatedSessionAnswersPdf !== undefined && { session_answers_pdf: updatedSessionAnswersPdf }),
         }).where(eq(lessons.id, id));
 
         // Update Price Plans
@@ -376,6 +403,8 @@ export const deleteLesson = async (req: Request, res: Response) => {
     if (existingLesson.image) {
         await deleteImage(existingLesson.image);
     }
+    if (existingLesson.session_pdf?.includes("/uploads/")) await deleteImage(existingLesson.session_pdf);
+    if (existingLesson.session_answers_pdf?.includes("/uploads/")) await deleteImage(existingLesson.session_answers_pdf);
 
     await db.delete(prices).where(and(eq(prices.targetId, id), eq(prices.targetType, "lesson")));
     await db.delete(lessons).where(eq(lessons.id, id));
@@ -628,5 +657,4 @@ export const selectLessons = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { data: allLessons.map(l => ({ value: l.id, label: l.name })) }, 200);
 };
-
 

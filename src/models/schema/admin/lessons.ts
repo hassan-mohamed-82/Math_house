@@ -13,6 +13,8 @@ export const lessons = mysqlTable("lessons", {
     chapterId: char("chapter_id", { length: 255 }).notNull().references(() => chapters.id, { onDelete: "cascade" }),
     description: varchar("description", { length: 255 }),
     image: varchar("image", { length: 255 }),
+    session_pdf: varchar("session_pdf", { length: 500 }),
+    session_answers_pdf: varchar("session_answers_pdf", { length: 500 }),
 
     teacherId: char("teacher_id", { length: 255 }).notNull().references(() => teachers.id, { onDelete: "cascade" }),
     order: int("order").notNull(),

@@ -8,6 +8,7 @@ const teacher_1 = require("./teacher");
 const Student_1 = require("./Student");
 const Groups_1 = require("./Groups");
 const lessons_1 = require("./lessons");
+const exams_1 = require("./exams");
 exports.sessions = (0, mysql_core_1.mysqlTable)("sessions", {
     id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
     name: (0, mysql_core_1.varchar)("name", { length: 255 }).notNull(),
@@ -19,6 +20,7 @@ exports.sessions = (0, mysql_core_1.mysqlTable)("sessions", {
     timeFrom: (0, mysql_core_1.time)("time_from").notNull(),
     timeTo: (0, mysql_core_1.time)("time_to").notNull(),
     teacherId: (0, mysql_core_1.char)("teacher_id", { length: 255 }).notNull().references(() => teacher_1.teachers.id, { onDelete: "cascade" }),
+    examId: (0, mysql_core_1.char)("exam_id", { length: 255 }).references(() => exams_1.Exams.id, { onDelete: "set null" }),
     session_link: (0, mysql_core_1.varchar)("session_link", { length: 500 }),
     material_link: (0, mysql_core_1.varchar)("material_link", { length: 500 }),
     teacher_material_link: (0, mysql_core_1.varchar)("teacher_material_link", { length: 500 }),

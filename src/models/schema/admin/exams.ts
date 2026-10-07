@@ -27,6 +27,8 @@ export const Exams = mysqlTable("exams", {
 
     // Calculators allowed for this exam (subset of CALCULATOR_TYPES)
     calculators: json("calculators").$type<string[]>().default([]),
+    session_pdf: varchar("session_pdf", { length: 500 }),
+    session_answers_pdf: varchar("session_answers_pdf", { length: 500 }),
 
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),

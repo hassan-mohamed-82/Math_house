@@ -48,6 +48,8 @@ const lessonDetailedQuery = () => connection_1.db.select({
         name: schema_1.lessons.name,
         description: schema_1.lessons.description,
         image: schema_1.lessons.image,
+        session_pdf: schema_1.lessons.session_pdf,
+        session_answers_pdf: schema_1.lessons.session_answers_pdf,
         preRequisition: schema_1.lessons.preRequisition,
         whatYouGain: schema_1.lessons.whatYouGain,
         order: schema_1.lessons.order,
@@ -90,7 +92,7 @@ const lessonDetailedQuery = () => connection_1.db.select({
     .leftJoin(schema_1.teachers, (0, drizzle_orm_1.eq)(schema_1.lessons.teacherId, schema_1.teachers.id))
     .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.chapters.semesterId, schema_1.semesters.id));
 const createLesson = async (req, res) => {
-    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans } = req.body;
+    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans, session_pdf, session_answers_pdf } = req.body;
     if (!name || !chapterId || !teacherId) {
         throw new BadRequest_1.BadRequest("Name, Chapter ID, and Teacher ID are required");
     }
@@ -133,6 +135,15 @@ const createLesson = async (req, res) => {
     if (image) {
         imageURL = await (0, handleImages_1.validateAndSaveLogo)(req, image, "lessons");
     }
+    const resolvePdf = async (pdf) => {
+        if (pdf == null || pdf === "")
+            return null;
+        if (typeof pdf !== "string")
+            throw new BadRequest_1.BadRequest("PDF fields must be a URL or a base64-encoded PDF");
+        return pdf.startsWith("http") ? pdf : (0, handleImages_1.validateAndSavePdf)(req, pdf, "lessons");
+    };
+    const sessionPdfUrl = await resolvePdf(session_pdf);
+    const sessionAnswersPdfUrl = await resolvePdf(session_answers_pdf);
     const lessonId = (0, crypto_1.randomUUID)();
     await connection_1.db.transaction(async (tx) => {
         await tx.insert(schema_1.lessons).values({
@@ -144,6 +155,8 @@ const createLesson = async (req, res) => {
             teacherId,
             description,
             image: imageURL,
+            session_pdf: sessionPdfUrl,
+            session_answers_pdf: sessionAnswersPdfUrl,
             preRequisition,
             whatYouGain,
             order: nextOrder,
@@ -266,7 +279,7 @@ const swapLessonOrder = async (req, res) => {
 exports.swapLessonOrder = swapLessonOrder;
 const updateLesson = async (req, res) => {
     const { id } = req.params;
-    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans } = req.body;
+    const { name, chapterId, description, image, teacherId, preRequisition, whatYouGain, pricePlans, session_pdf, session_answers_pdf } = req.body;
     const [existingLesson] = await connection_1.db.select().from(schema_1.lessons).where((0, drizzle_orm_1.eq)(schema_1.lessons.id, id));
     if (!existingLesson) {
         throw new Errors_1.NotFound("Lesson not found");
@@ -312,6 +325,25 @@ const updateLesson = async (req, res) => {
     }
     // Handle image update
     const updatedImage = await (0, handleImages_1.handleImageUpdate)(req, existingLesson.image, image, "lessons");
+    const resolvePdf = async (pdf, existingPdf) => {
+        if (pdf === undefined)
+            return undefined;
+        if (pdf === null || pdf === "") {
+            if (existingPdf?.includes("/uploads/"))
+                await (0, handleImages_1.deleteImage)(existingPdf);
+            return null;
+        }
+        if (typeof pdf !== "string")
+            throw new BadRequest_1.BadRequest("PDF fields must be a URL, null, or a base64-encoded PDF");
+        if (pdf.startsWith("http"))
+            return pdf;
+        const newPdf = await (0, handleImages_1.validateAndSavePdf)(req, pdf, "lessons");
+        if (existingPdf?.includes("/uploads/"))
+            await (0, handleImages_1.deleteImage)(existingPdf);
+        return newPdf;
+    };
+    const updatedSessionPdf = await resolvePdf(session_pdf, existingLesson.session_pdf);
+    const updatedSessionAnswersPdf = await resolvePdf(session_answers_pdf, existingLesson.session_answers_pdf);
     await connection_1.db.transaction(async (tx) => {
         await tx.update(schema_1.lessons).set({
             name: name ?? existingLesson.name,
@@ -323,6 +355,8 @@ const updateLesson = async (req, res) => {
             image: updatedImage ?? existingLesson.image,
             preRequisition: preRequisition !== undefined ? preRequisition : existingLesson.preRequisition,
             whatYouGain: whatYouGain !== undefined ? whatYouGain : existingLesson.whatYouGain,
+            ...(updatedSessionPdf !== undefined && { session_pdf: updatedSessionPdf }),
+            ...(updatedSessionAnswersPdf !== undefined && { session_answers_pdf: updatedSessionAnswersPdf }),
         }).where((0, drizzle_orm_1.eq)(schema_1.lessons.id, id));
         // Update Price Plans
         if (pricePlans && pricePlans.length > 0) {
@@ -360,6 +394,10 @@ const deleteLesson = async (req, res) => {
     if (existingLesson.image) {
         await (0, handleImages_1.deleteImage)(existingLesson.image);
     }
+    if (existingLesson.session_pdf?.includes("/uploads/"))
+        await (0, handleImages_1.deleteImage)(existingLesson.session_pdf);
+    if (existingLesson.session_answers_pdf?.includes("/uploads/"))
+        await (0, handleImages_1.deleteImage)(existingLesson.session_answers_pdf);
     await connection_1.db.delete(schema_1.prices).where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.prices.targetId, id), (0, drizzle_orm_1.eq)(schema_1.prices.targetType, "lesson")));
     await connection_1.db.delete(schema_1.lessons).where((0, drizzle_orm_1.eq)(schema_1.lessons.id, id));
     // Re-sequence: decrement order for all lessons after the deleted one in the same chapter

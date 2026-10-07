@@ -32,6 +32,9 @@ Creates a new session.
 | `sessionRelationalType` | String | Yes | The relational type of the session. |
 | `lessonIds` | Array<String> | Yes | Array of Lesson IDs to cover. Must not be empty. |
 | `studentIds` | Array<String> | conditional | Required for `"private"` sessions (must be exactly 1 element). For `"group"` sessions, optional extra student IDs to inject alongside standard group members. |
+| `examId` | String | No | Optional exam ID for `"Exam"` sessions; its saved PDFs are reused. |
+| `session_pdf` | String | No | Session worksheet URL or base64-encoded PDF. Defaults to a linked lesson/exam PDF when omitted. |
+| `session_answers_pdf` | String | No | Teacher-only answer URL or base64-encoded PDF. Defaults to a linked lesson/exam PDF when omitted. |
 
 **Success Response (201 Created):**
 
@@ -116,6 +119,9 @@ Updates an existing session dynamically. Only passing fields that need to be upd
 | `session_link` | String | The link to the online session meeting. |
 | `material_link` | String | The link to the session materials for students. |
 | `teacher_material_link` | String | The link to materials designated for the teacher. |
+| `examId` | String or null | Associate/clear the exam for an `"Exam"` session. |
+| `session_pdf` | String or null | Change or clear the session worksheet. |
+| `session_answers_pdf` | String or null | Change or clear the teacher-only answer PDF. |
 | `lessonIds` | Array<String> | Overwrite mapping of Lesson IDs wrapped by this session. |
 | `studentIds` | Array<String> | Overwrites mapping of Student IDs enrolled. If session is `"group"`, it properly maintains base group members while overriding ad-hoc additions. |
 
@@ -137,6 +143,24 @@ Removes a session along with its associative link mappings (`sessionLessons`, `s
     }
 }
 ```
+
+---
+
+### 1.6 Generate Mistakes PDFs for Selected Students
+
+**`POST /admin/session/:id/student-pdfs`**
+
+Generates two individualized PDFs for a Mistakes session from the selected students' wrong answers in completed or timed-out quizzes linked to the session lessons: a mistakes worksheet (`session_pdf`) and a teacher-only answer key (`session_answers_pdf`). The teacher can separately upload a session-specific explanation PDF.
+
+**Request Body:**
+
+```json
+{
+    "studentIds": ["student-uuid"]
+}
+```
+
+Every selected student must be enrolled in the session and have at least one wrong quiz answer. Re-running generation replaces that student's worksheet and answer key.
 
 ---
 

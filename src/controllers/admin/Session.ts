@@ -11,7 +11,14 @@ import {
     chapters,
     lessons,
     sessionLessons,
-    sessionAttendance
+    sessionAttendance,
+    Exams,
+    quizzes,
+    quizAttempts,
+    studentQuizAnswers,
+    questions,
+    questionOptions,
+    questionAnswers
 } from "../../models/schema";
 import { eq, like, or, and, inArray, sql, asc } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
@@ -19,6 +26,7 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { NotFound } from "../../Errors";
 import { validateAndSavePdf, deleteImage } from "../../utils/handleImages";
+import { createMistakesPdf, MistakePdfQuestion } from "../../utils/mistakesPdf";
 
 // Selections
 export const selectCategory = async (req: Request, res: Response) => {
@@ -194,6 +202,7 @@ export const createSession = async (req: Request, res: Response) => {
         courseId,               // course ID (must belong to subCategoryId)
         chapterIds,             // string[] – chapters
         lessonIds,              // string[] – lessons
+        examId,                 // optional exam for Exam-type sessions
         teacherId,
         session_link,
         material_link,
@@ -203,9 +212,6 @@ export const createSession = async (req: Request, res: Response) => {
         // For all session types (base64-encoded PDF strings or existing URLs):
         session_pdf,            // blank PDF for students & teacher
         session_answers_pdf,    // answers PDF visible to teacher only
-        // For Mistakes sessions – per-student PDFs:
-        // studentPdfs: Array<{ studentId: string, session_pdf?: string, session_answers_pdf?: string }>
-        studentPdfs,
     } = req.body;
 
     // ── 1. Required field presence (General fields) ────────────────────────
@@ -345,6 +351,16 @@ export const createSession = async (req: Request, res: Response) => {
         );
     }
 
+    let linkedExam: typeof Exams.$inferSelect | undefined;
+    if (examId) {
+        if (sessionRelationalType !== "Exam") {
+            throw new BadRequest("examId can only be set for Exam-type sessions");
+        }
+        [linkedExam] = await db.select().from(Exams).where(eq(Exams.id, examId)).limit(1);
+        if (!linkedExam) throw new BadRequest("Exam not found");
+        if (linkedExam.courseId !== courseId) throw new BadRequest("Exam does not belong to the selected course");
+    }
+
     // ── 9. Groups validation ─────────────────────────────────────────────
     if (hasGroups) {
         const groupList = await db.select().from(groups).where(inArray(groups.id, groupIds));
@@ -372,78 +388,38 @@ export const createSession = async (req: Request, res: Response) => {
         groupStudentsList.forEach(gs => uniqueStudentIds.add(gs.studentId));
     }
 
-    // ── 12. Validate Mistakes-type per-student PDFs ───────────────────────
-    // For Mistakes sessions, studentPdfs[] is optional but each entry must target a valid enrolled student.
-    const isMistakesSession = sessionRelationalType === "Mistakes";
-    const hasStudentPdfs = isMistakesSession && Array.isArray(studentPdfs) && studentPdfs.length > 0;
-
-    if (hasStudentPdfs) {
-        const pdfStudentIds: string[] = studentPdfs.map((p: any) => p.studentId);
-        const invalidPdfStudents = pdfStudentIds.filter(sid => !uniqueStudentIds.has(sid));
-        if (invalidPdfStudents.length > 0) {
-            throw new BadRequest(
-                `studentPdfs contains students not enrolled in this session: [${invalidPdfStudents.join(", ")}]`
-            );
-        }
-    }
-
     // ── 13. Process and save session-level PDFs (base64 → disk) ──────────
     let savedSessionPdf: string | null = null;
     let savedSessionAnswersPdf: string | null = null;
 
-    if (session_pdf) {
-        if (session_pdf.startsWith("http")) {
-            savedSessionPdf = session_pdf;
+    const defaultSessionPdf = linkedExam?.session_pdf ?? lessonsList.find(lesson => lesson.session_pdf)?.session_pdf ?? null;
+    const defaultAnswersPdf = linkedExam?.session_answers_pdf ?? lessonsList.find(lesson => lesson.session_answers_pdf)?.session_answers_pdf ?? null;
+    const selectedSessionPdf = session_pdf !== undefined ? session_pdf : defaultSessionPdf;
+    const selectedAnswersPdf = session_answers_pdf !== undefined ? session_answers_pdf : defaultAnswersPdf;
+
+    if (selectedSessionPdf) {
+        if (typeof selectedSessionPdf !== "string") throw new BadRequest("session_pdf must be a URL or base64-encoded PDF");
+        if (selectedSessionPdf.startsWith("http")) {
+            savedSessionPdf = selectedSessionPdf;
         } else {
-            savedSessionPdf = await validateAndSavePdf(req, session_pdf, "session-pdfs");
+            savedSessionPdf = await validateAndSavePdf(req, selectedSessionPdf, "session-pdfs");
         }
     }
 
-    if (session_answers_pdf) {
-        if (session_answers_pdf.startsWith("http")) {
-            savedSessionAnswersPdf = session_answers_pdf;
+    if (selectedAnswersPdf) {
+        if (typeof selectedAnswersPdf !== "string") throw new BadRequest("session_answers_pdf must be a URL or base64-encoded PDF");
+        if (selectedAnswersPdf.startsWith("http")) {
+            savedSessionAnswersPdf = selectedAnswersPdf;
         } else {
-            savedSessionAnswersPdf = await validateAndSavePdf(req, session_answers_pdf, "session-pdfs");
+            savedSessionAnswersPdf = await validateAndSavePdf(req, selectedAnswersPdf, "session-pdfs");
         }
     }
 
-    // ── 14. Process per-student PDFs for Mistakes sessions ───────────────
-    // Resolve per-student PDF URLs before the DB transaction
-    type ResolvedStudentPdf = {
-        studentId: string;
-        session_pdf: string | null;
-        session_answers_pdf: string | null;
-    };
-
-    const resolvedStudentPdfs: ResolvedStudentPdf[] = [];
-
-    if (hasStudentPdfs) {
-        for (const entry of studentPdfs as any[]) {
-            const spdf = entry.session_pdf;
-            const sapdf = entry.session_answers_pdf;
-
-            const savedSpdf = spdf
-                ? (spdf.startsWith("http") ? spdf : await validateAndSavePdf(req, spdf, "session-pdfs"))
-                : null;
-
-            const savedSapdf = sapdf
-                ? (sapdf.startsWith("http") ? sapdf : await validateAndSavePdf(req, sapdf, "session-pdfs"))
-                : null;
-
-            resolvedStudentPdfs.push({
-                studentId: entry.studentId,
-                session_pdf: savedSpdf,
-                session_answers_pdf: savedSapdf,
-            });
-        }
-    }
-
-    // ── 15. Build arrays for Bulk Insertion ───────────────────────────────────
+    // ── 14. Build arrays for Bulk Insertion ───────────────────────────────────
     const sessionsToInsert: any[] = [];
     const lessonInserts: any[] = [];
     const sessionUsersInserts: any[] = [];
     const sessionGroupsInserts: any[] = [];
-    const studentPdfInserts: any[] = [];
 
     for (const schedule of targetSchedules) {
         const sessionId = randomUUID();
@@ -458,6 +434,7 @@ export const createSession = async (req: Request, res: Response) => {
             timeFrom: schedule.from,
             timeTo: schedule.to,
             teacherId,
+            examId: linkedExam?.id ?? null,
             session_link: session_link ?? null,
             material_link: material_link ?? null,
             teacher_material_link: teacher_material_link ?? null,
@@ -497,19 +474,6 @@ export const createSession = async (req: Request, res: Response) => {
             });
         }
 
-        // Per-student PDFs (Mistakes sessions only)
-        if (hasStudentPdfs) {
-            resolvedStudentPdfs.forEach(entry => {
-                studentPdfInserts.push({
-                    id: randomUUID(),
-                    sessionId,
-                    studentId: entry.studentId,
-                    session_pdf: entry.session_pdf,
-                    session_answers_pdf: entry.session_answers_pdf,
-                    teacher_explanation_pdf: null,
-                });
-            });
-        }
     }
 
     // ── 16. Persist everything in one clean transaction ─────────────────────────
@@ -526,9 +490,6 @@ export const createSession = async (req: Request, res: Response) => {
 
         await tx.insert(sessionLessons).values(lessonInserts);
 
-        if (studentPdfInserts.length > 0) {
-            await tx.insert(sessionStudentPdfs).values(studentPdfInserts);
-        }
     });
 
     return SuccessResponse(res, { message: `${sessionsToInsert.length} session(s) created successfully` }, 201);
@@ -547,6 +508,7 @@ export const getAllSessions = async (req: Request, res: Response) => {
         timeFrom: sessions.timeFrom,
         timeTo: sessions.timeTo,
         sessionRelationalType: sessions.sessionRelationalType,
+        examId: sessions.examId,
         session_link: sessions.session_link,
         material_link: sessions.material_link,
         teacher_material_link: sessions.teacher_material_link,
@@ -788,6 +750,7 @@ export const updateSession = async (req: Request, res: Response) => {
         groupIds,               // string[] – full replace of linked groups
         studentIds,             // string[] – full replace of direct students
         sessionRelationalType,
+        examId,
         categoryId,
         subCategoryId,
         courseId,
@@ -815,6 +778,15 @@ export const updateSession = async (req: Request, res: Response) => {
     if (sessionExists.length === 0) throw new NotFound("Session not found");
 
     const currentSession = sessionExists[0];
+    if (examId !== undefined) {
+        if (examId !== null && (sessionRelationalType ?? currentSession.sessionRelationalType) !== "Exam") {
+            throw new BadRequest("examId can only be set for Exam-type sessions");
+        }
+        if (examId !== null) {
+            const [linkedExam] = await db.select({ id: Exams.id }).from(Exams).where(eq(Exams.id, examId)).limit(1);
+            if (!linkedExam) throw new BadRequest("Exam not found");
+        }
+    }
 
     // ── 2. Required fields (only validate what is being changed) ─────────
     // Core identity fields: if any academic field is provided, all must be present
@@ -1120,6 +1092,7 @@ export const updateSession = async (req: Request, res: Response) => {
                 ...(teacher_material_link && { teacher_material_link }),
                 ...(sessionRelationalType && { sessionRelationalType }),
                 ...(teacherId             && { teacherId }),
+                ...(examId !== undefined && { examId }),
                 // Allow explicit null to clear the expiry (permanent access)
                 ...(contentAccessDays !== undefined && {
                     contentAccessDays: contentAccessDays != null ? Number(contentAccessDays) : null,
@@ -1343,89 +1316,197 @@ export const getStudentsCourseAttendance = async (req: Request, res: Response) =
 };
 
 /**
- * POST /admin/sessions/:id/student-pdfs
- * Upsert (create or update) per-student PDFs for a Mistakes-type session.
- *
- * Body:
- *   studentPdfs: Array<{
- *     studentId: string,
- *     session_pdf?: string,        // base64 PDF or existing URL
- *     session_answers_pdf?: string // base64 PDF or existing URL
- *   }>
+ * POST /admin/session/:id/student-pdfs
+ * Generate individualized worksheet and answer PDFs from selected students'
+ * wrong answers in completed quiz attempts for lessons linked to the session.
  */
 export const upsertSessionStudentPdfs = async (req: Request, res: Response) => {
     const { id: sessionId } = req.params;
-    const { studentPdfs } = req.body;
+    const { studentIds } = req.body;
 
     if (!sessionId) throw new BadRequest("Session ID is required");
 
     const [session] = await db
-        .select({ id: sessions.id, sessionRelationalType: sessions.sessionRelationalType })
+        .select({ id: sessions.id, name: sessions.name, sessionRelationalType: sessions.sessionRelationalType })
         .from(sessions)
         .where(eq(sessions.id, sessionId));
 
     if (!session) throw new NotFound("Session not found");
     if (session.sessionRelationalType !== "Mistakes") {
-        throw new BadRequest("Per-student PDFs are only supported for Mistakes-type sessions");
+        throw new BadRequest("Mistakes PDFs can only be generated for Mistakes-type sessions");
     }
 
-    if (!Array.isArray(studentPdfs) || studentPdfs.length === 0) {
-        throw new BadRequest("studentPdfs array is required and cannot be empty");
+    if (!Array.isArray(studentIds) || studentIds.length === 0 || studentIds.some((studentId: unknown) => typeof studentId !== "string")) {
+        throw new BadRequest("studentIds must be a non-empty array of student IDs");
     }
+    const selectedStudentIds = [...new Set<string>(studentIds)];
 
-    // Fetch enrolled student IDs for validation
     const enrolledUsers = await db
         .select({ studentId: sessionUsers.studentId })
         .from(sessionUsers)
         .where(eq(sessionUsers.sessionId, sessionId));
     const enrolledIds = new Set(enrolledUsers.map(u => u.studentId));
 
-    const pdfStudentIds: string[] = studentPdfs.map((p: any) => p.studentId);
-    const invalidStudents = pdfStudentIds.filter(sid => !enrolledIds.has(sid));
+    const invalidStudents = selectedStudentIds.filter(studentId => !enrolledIds.has(studentId));
     if (invalidStudents.length > 0) {
         throw new BadRequest(`Students not enrolled in this session: [${invalidStudents.join(", ")}]`);
     }
 
-    for (const entry of studentPdfs as any[]) {
-        const spdf = entry.session_pdf;
-        const sapdf = entry.session_answers_pdf;
+    const lessonRows = await db
+        .select({ lessonId: sessionLessons.lessonId })
+        .from(sessionLessons)
+        .where(eq(sessionLessons.sessionId, sessionId));
+    const lessonIds = [...new Set(lessonRows.map(row => row.lessonId))];
+    if (lessonIds.length === 0) throw new BadRequest("The Mistakes session has no linked lessons");
 
-        const savedSpdf = spdf !== undefined
-            ? (spdf === null ? null : spdf.startsWith("http") ? spdf : await validateAndSavePdf(req, spdf, "session-pdfs"))
-            : undefined;
+    const selectedOption = alias(questionOptions, "selected_option");
+    const wrongAnswers = await db
+        .select({
+            studentId: quizAttempts.studentId,
+            quizTitle: quizzes.title,
+            questionId: questions.id,
+            question: questions.question,
+            selectedAnswer: selectedOption.answer,
+            gridInAnswer: studentQuizAnswers.gridInAnswer,
+        })
+        .from(studentQuizAnswers)
+        .innerJoin(quizAttempts, eq(studentQuizAnswers.attemptId, quizAttempts.id))
+        .innerJoin(quizzes, eq(quizAttempts.quizId, quizzes.id))
+        .innerJoin(questions, eq(studentQuizAnswers.questionId, questions.id))
+        .leftJoin(selectedOption, eq(studentQuizAnswers.selectedOptionId, selectedOption.id))
+        .where(and(
+            inArray(quizAttempts.studentId, selectedStudentIds),
+            inArray(quizzes.lessonId, lessonIds),
+            eq(studentQuizAnswers.isCorrect, false),
+            or(eq(quizAttempts.status, "completed"), eq(quizAttempts.status, "timed_out"))
+        ));
 
-        const savedSapdf = sapdf !== undefined
-            ? (sapdf === null ? null : sapdf.startsWith("http") ? sapdf : await validateAndSavePdf(req, sapdf, "session-pdfs"))
-            : undefined;
+    const questionIds = [...new Set(wrongAnswers.map(answer => answer.questionId))];
+    const [options, explanations] = questionIds.length > 0
+        ? await Promise.all([
+            db.select({
+                questionId: questionOptions.questionId,
+                answer: questionOptions.answer,
+                isCorrect: questionOptions.isCorrect,
+            }).from(questionOptions).where(inArray(questionOptions.questionId, questionIds)),
+            db.select({
+                questionId: questionAnswers.questionId,
+                text: questionAnswers.text,
+                pdf: questionAnswers.pdf,
+                video: questionAnswers.video,
+            }).from(questionAnswers).where(inArray(questionAnswers.questionId, questionIds)),
+        ])
+        : [[], []];
 
-        const [existing] = await db
-            .select({ id: sessionStudentPdfs.id })
-            .from(sessionStudentPdfs)
-            .where(and(
-                eq(sessionStudentPdfs.sessionId, sessionId),
-                eq(sessionStudentPdfs.studentId, entry.studentId)
-            ));
+    const mistakesByStudent = new Map<string, MistakePdfQuestion[]>();
+    for (const studentId of selectedStudentIds) mistakesByStudent.set(studentId, []);
 
-        if (existing) {
-            await db.update(sessionStudentPdfs)
-                .set({
-                    ...(savedSpdf !== undefined  && { session_pdf:         savedSpdf }),
-                    ...(savedSapdf !== undefined && { session_answers_pdf: savedSapdf }),
-                })
-                .where(eq(sessionStudentPdfs.id, existing.id));
-        } else {
-            await db.insert(sessionStudentPdfs).values({
+    for (const answer of wrongAnswers) {
+        const correctAnswers = options
+            .filter(option => option.questionId === answer.questionId && option.isCorrect)
+            .map(option => option.answer)
+            .filter((value): value is string => !!value);
+        const questionAnswersForQuestion = explanations
+            .filter(item => item.questionId === answer.questionId);
+        const explanationText = questionAnswersForQuestion
+            .map(item => [
+                item.text,
+                item.pdf ? `Answer PDF: ${item.pdf}` : null,
+                item.video ? `Answer video: ${item.video}` : null,
+            ].filter(Boolean).join("\n"))
+            .filter(Boolean)
+            .join("\n\n");
+
+        mistakesByStudent.get(answer.studentId)!.push({
+            quizTitle: answer.quizTitle,
+            question: answer.question ?? "",
+            selectedAnswer: answer.selectedAnswer ?? answer.gridInAnswer ?? "No answer recorded",
+            correctAnswer: correctAnswers.join(" / ") || questionAnswersForQuestion.find(item => item.text)?.text || "",
+            explanation: explanationText,
+        });
+    }
+
+    const studentsWithoutMistakes = selectedStudentIds.filter(studentId => mistakesByStudent.get(studentId)!.length === 0);
+    if (studentsWithoutMistakes.length > 0) {
+        throw new BadRequest(`No wrong answers found in completed session quizzes for students: [${studentsWithoutMistakes.join(", ")}]`);
+    }
+
+    const generatedRows: Array<{
+        id: string;
+        sessionId: string;
+        studentId: string;
+        session_pdf: string;
+        session_answers_pdf: string;
+        teacher_explanation_pdf: null;
+    }> = [];
+    const uploadedUrls: string[] = [];
+    const replacedUrls: Array<string | null> = [];
+
+    try {
+        for (const studentId of selectedStudentIds) {
+            const mistakes = mistakesByStudent.get(studentId)!;
+            const worksheet = await createMistakesPdf(`${session.name} - Mistakes`, mistakes, false);
+            const answerKey = await createMistakesPdf(`${session.name} - Mistakes Answers`, mistakes, true);
+            const sessionPdf = await validateAndSavePdf(req, `data:application/pdf;base64,${worksheet.toString("base64")}`, "session-pdfs");
+            uploadedUrls.push(sessionPdf);
+            const answersPdf = await validateAndSavePdf(req, `data:application/pdf;base64,${answerKey.toString("base64")}`, "session-pdfs");
+            uploadedUrls.push(answersPdf);
+            generatedRows.push({
                 id: randomUUID(),
                 sessionId,
-                studentId: entry.studentId,
-                session_pdf: savedSpdf ?? null,
-                session_answers_pdf: savedSapdf ?? null,
+                studentId,
+                session_pdf: sessionPdf,
+                session_answers_pdf: answersPdf,
                 teacher_explanation_pdf: null,
             });
         }
-    }
 
-    return SuccessResponse(res, { message: "Student PDFs updated successfully" }, 200);
+        await db.transaction(async tx => {
+            for (const row of generatedRows) {
+                const [existing] = await tx
+                    .select({
+                        id: sessionStudentPdfs.id,
+                        session_pdf: sessionStudentPdfs.session_pdf,
+                        session_answers_pdf: sessionStudentPdfs.session_answers_pdf,
+                        teacher_explanation_pdf: sessionStudentPdfs.teacher_explanation_pdf,
+                    })
+                    .from(sessionStudentPdfs)
+                    .where(and(
+                        eq(sessionStudentPdfs.sessionId, sessionId),
+                        eq(sessionStudentPdfs.studentId, row.studentId)
+                    ));
+
+                if (existing) {
+                    replacedUrls.push(
+                        existing.session_pdf,
+                        existing.session_answers_pdf,
+                        existing.teacher_explanation_pdf
+                    );
+                    await tx.update(sessionStudentPdfs).set({
+                        session_pdf: row.session_pdf,
+                        session_answers_pdf: row.session_answers_pdf,
+                        teacher_explanation_pdf: null,
+                    }).where(eq(sessionStudentPdfs.id, existing.id));
+                } else {
+                    await tx.insert(sessionStudentPdfs).values(row);
+                }
+            }
+        });
+    } catch (error) {
+        await Promise.all(uploadedUrls.map(url => deleteImage(url)));
+        throw error;
+    }
+    await Promise.all(replacedUrls
+        .filter((url): url is string => !!url && url.includes("/uploads/"))
+        .map(url => deleteImage(url)));
+
+    return SuccessResponse(res, {
+        message: "Student mistakes PDFs generated successfully",
+        students: generatedRows.map(row => ({
+            studentId: row.studentId,
+            mistakesCount: mistakesByStudent.get(row.studentId)!.length,
+        })),
+    }, 200);
 };
 
 /**

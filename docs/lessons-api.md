@@ -28,6 +28,10 @@ Creates a new lesson. `categoryId` and `courseId` are auto-derived from the chap
 | `image`          | string | ❌        | Base64 encoded image                            |
 | `preRequisition` | string | ❌        | Pre-requisition text                            |
 | `whatYouGain`    | string | ❌        | What you'll gain text                           |
+| `session_pdf` | string | ❌ | Reusable session worksheet: URL or base64-encoded PDF |
+| `session_answers_pdf` | string | ❌ | Reusable teacher-only answers: URL or base64-encoded PDF |
+
+These fields are returned in lesson read responses. On update, omit a field to leave it unchanged or pass `null` to clear it.
 
 **Success Response (200):**
 

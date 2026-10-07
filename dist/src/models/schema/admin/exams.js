@@ -26,6 +26,8 @@ exports.Exams = (0, mysql_core_1.mysqlTable)("exams", {
     codeId: (0, mysql_core_1.char)("code_id", { length: 255 }).notNull().references(() => examCodes_1.examCodes.id, { onDelete: "cascade" }),
     // Calculators allowed for this exam (subset of CALCULATOR_TYPES)
     calculators: (0, mysql_core_1.json)("calculators").$type().default([]),
+    session_pdf: (0, mysql_core_1.varchar)("session_pdf", { length: 500 }),
+    session_answers_pdf: (0, mysql_core_1.varchar)("session_answers_pdf", { length: 500 }),
     createdAt: (0, mysql_core_1.timestamp)("created_at").defaultNow(),
     updatedAt: (0, mysql_core_1.timestamp)("updated_at").defaultNow().onUpdateNow(),
 });

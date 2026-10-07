@@ -9,6 +9,7 @@ const BadRequest_1 = require("../../Errors/BadRequest");
 const crypto_1 = require("crypto");
 const schema_1 = require("../../models/schema");
 const calculators_1 = require("../../constants/calculators");
+const handleImages_1 = require("../../utils/handleImages");
 const selectionOptions = async (req, res) => {
     const All_examCodes = await connection_1.db.select({ id: schema_1.examCodes.id, code: schema_1.examCodes.code }).from(schema_1.examCodes);
     const All_sections = await connection_1.db.select({ id: schema_1.Sections.id, sectionName: schema_1.Sections.sectionName }).from(schema_1.Sections);
@@ -20,7 +21,7 @@ const createExam = async (req, res) => {
     const { examType } = req.body;
     switch (examType) {
         case "static":
-            const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, rawScoreId, calculators } = req.body;
+            const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, rawScoreId, calculators, session_pdf, session_answers_pdf } = req.body;
             // sections structure:
             // { sectionId: string, sectionOrder: number, questionIds: string[],
             //   duration?: number,        // per-exam override in minutes (null = use Sections.sectionTime)
@@ -80,6 +81,15 @@ const createExam = async (req, res) => {
             }
             // 3. Prepare Bulk Insert Data
             const examId = (0, crypto_1.randomUUID)();
+            const resolvePdf = async (pdf) => {
+                if (pdf == null || pdf === "")
+                    return null;
+                if (typeof pdf !== "string")
+                    throw new BadRequest_1.BadRequest("PDF fields must be a URL or a base64-encoded PDF");
+                return pdf.startsWith("http") ? pdf : (0, handleImages_1.validateAndSavePdf)(req, pdf, "exams");
+            };
+            const sessionPdfUrl = await resolvePdf(session_pdf);
+            const sessionAnswersPdfUrl = await resolvePdf(session_answers_pdf);
             const examSectionsToInsert = [];
             const sectionQuestionsToInsert = [];
             // Calculate score per question
@@ -130,6 +140,8 @@ const createExam = async (req, res) => {
                     examType: "static",
                     rawScoreId: existingRawScore[0].id,
                     calculators: validatedCalculators,
+                    session_pdf: sessionPdfUrl,
+                    session_answers_pdf: sessionAnswersPdfUrl,
                 });
                 // Bulk Insert Exam Sections
                 if (examSectionsToInsert.length > 0) {
@@ -151,13 +163,36 @@ const createExam = async (req, res) => {
 exports.createExam = createExam;
 const updateExam = async (req, res) => {
     const { id } = req.params;
-    const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, isActive, rawScoreId, calculators } = req.body;
+    const { title, description, duration, totalScore, passScore, courseId, year, month, codeId, sections, isActive, rawScoreId, calculators, session_pdf, session_answers_pdf } = req.body;
     const existingExam = await connection_1.db.select().from(exams_1.Exams).where((0, drizzle_orm_1.eq)(exams_1.Exams.id, id));
     if (existingExam.length === 0) {
         throw new BadRequest_1.BadRequest("Exam not found");
     }
     // Prepare update data for top-level fields
     const updateData = {};
+    const resolvePdf = async (pdf, existingPdf) => {
+        if (pdf === undefined)
+            return undefined;
+        if (pdf === null || pdf === "") {
+            if (existingPdf?.includes("/uploads/"))
+                await (0, handleImages_1.deleteImage)(existingPdf);
+            return null;
+        }
+        if (typeof pdf !== "string")
+            throw new BadRequest_1.BadRequest("PDF fields must be a URL, null, or a base64-encoded PDF");
+        if (pdf.startsWith("http"))
+            return pdf;
+        const newPdf = await (0, handleImages_1.validateAndSavePdf)(req, pdf, "exams");
+        if (existingPdf?.includes("/uploads/"))
+            await (0, handleImages_1.deleteImage)(existingPdf);
+        return newPdf;
+    };
+    const updatedSessionPdf = await resolvePdf(session_pdf, existingExam[0].session_pdf);
+    const updatedSessionAnswersPdf = await resolvePdf(session_answers_pdf, existingExam[0].session_answers_pdf);
+    if (updatedSessionPdf !== undefined)
+        updateData.session_pdf = updatedSessionPdf;
+    if (updatedSessionAnswersPdf !== undefined)
+        updateData.session_answers_pdf = updatedSessionAnswersPdf;
     if (title)
         updateData.title = title;
     if (description)
@@ -288,6 +323,8 @@ const getAllExams = async (req, res) => {
         Month: exams_1.Exams.Month,
         isActive: exams_1.Exams.isActive,
         calculators: exams_1.Exams.calculators,
+        session_pdf: exams_1.Exams.session_pdf,
+        session_answers_pdf: exams_1.Exams.session_answers_pdf,
         createdAt: exams_1.Exams.createdAt,
         updatedAt: exams_1.Exams.updatedAt,
         // Joins
@@ -329,6 +366,8 @@ const getExamById = async (req, res) => {
         Month: exams_1.Exams.Month,
         isActive: exams_1.Exams.isActive,
         calculators: exams_1.Exams.calculators,
+        session_pdf: exams_1.Exams.session_pdf,
+        session_answers_pdf: exams_1.Exams.session_answers_pdf,
         createdAt: exams_1.Exams.createdAt,
         updatedAt: exams_1.Exams.updatedAt,
         courseId: exams_1.Exams.courseId,
@@ -462,6 +501,8 @@ const getExamsByCourseId = async (req, res) => {
         Month: exams_1.Exams.Month,
         isActive: exams_1.Exams.isActive,
         calculators: exams_1.Exams.calculators,
+        session_pdf: exams_1.Exams.session_pdf,
+        session_answers_pdf: exams_1.Exams.session_answers_pdf,
         createdAt: exams_1.Exams.createdAt,
         updatedAt: exams_1.Exams.updatedAt,
         // Joins

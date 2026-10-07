@@ -5,6 +5,7 @@ import { teachers } from "./teacher";
 import { Student } from "./Student";
 import { groups } from "./Groups";
 import { lessons } from "./lessons";
+import { Exams } from "./exams";
 
 export const sessions = mysqlTable("sessions", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -20,6 +21,7 @@ export const sessions = mysqlTable("sessions", {
     timeTo:   time("time_to").notNull(),
 
     teacherId: char("teacher_id", { length: 255 }).notNull().references(() => teachers.id, { onDelete: "cascade" }),
+    examId: char("exam_id", { length: 255 }).references(() => Exams.id, { onDelete: "set null" }),
 
     session_link:          varchar("session_link",          { length: 500 }),
     material_link:         varchar("material_link",         { length: 500 }),

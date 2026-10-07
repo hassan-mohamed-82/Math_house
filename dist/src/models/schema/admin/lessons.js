@@ -15,6 +15,8 @@ exports.lessons = (0, mysql_core_1.mysqlTable)("lessons", {
     chapterId: (0, mysql_core_1.char)("chapter_id", { length: 255 }).notNull().references(() => chapters_1.chapters.id, { onDelete: "cascade" }),
     description: (0, mysql_core_1.varchar)("description", { length: 255 }),
     image: (0, mysql_core_1.varchar)("image", { length: 255 }),
+    session_pdf: (0, mysql_core_1.varchar)("session_pdf", { length: 500 }),
+    session_answers_pdf: (0, mysql_core_1.varchar)("session_answers_pdf", { length: 500 }),
     teacherId: (0, mysql_core_1.char)("teacher_id", { length: 255 }).notNull().references(() => teacher_1.teachers.id, { onDelete: "cascade" }),
     order: (0, mysql_core_1.int)("order").notNull(),
     preRequisition: (0, mysql_core_1.varchar)("pre_requisition", { length: 255 }),
