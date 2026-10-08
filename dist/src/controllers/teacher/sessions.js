@@ -13,6 +13,7 @@ const Errors_1 = require("../../Errors");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const handleImages_1 = require("../../utils/handleImages");
 const services_1 = require("../../drive/services/services");
+const sessionMaterials_1 = require("../../utils/sessionMaterials");
 // ── helpers ──────────────────────────────────────────────────────────────────
 const getTeacherId = (req) => {
     if (!req.user?.id)
@@ -215,14 +216,21 @@ const getAllTeacherSessions = async (req, res) => {
         .where((0, drizzle_orm_1.eq)(Session_1.sessions.teacherId, teacherId))
         .orderBy((0, drizzle_orm_1.desc)(Session_1.sessions.sessionDate), (0, drizzle_orm_1.desc)(Session_1.sessions.timeFrom));
     const sessionIds = rawSessions.map(s => s.id);
-    const resourcesBySession = await fetchSessionResources(sessionIds);
-    const ratingsBySession = await fetchSessionRatings(sessionIds);
+    const [resourcesBySession, ratingsBySession, materialsBySession] = await Promise.all([
+        fetchSessionResources(sessionIds),
+        fetchSessionRatings(sessionIds),
+        (0, sessionMaterials_1.resolveSessionMaterials)(sessionIds),
+    ]);
     const result = rawSessions.map(s => {
         const ratings = ratingsBySession.get(s.id) || [];
         const overallSum = ratings.reduce((sum, r) => sum + (Number(r.overallRating) || 0), 0);
         const averageRating = ratings.length > 0 ? Number((overallSum / ratings.length).toFixed(2)) : null;
+        const mat = materialsBySession.get(s.id) || (0, sessionMaterials_1.emptySessionMaterials)();
         return {
             ...s,
+            session_pdf: mat.session_pdf,
+            session_answers_pdf: mat.session_answers_pdf,
+            materials: mat.materials,
             lessons: resourcesBySession.get(s.id) || [],
             averageRating,
             totalRatedStudents: ratings.length,
@@ -269,14 +277,21 @@ const getUpcomingTeacherSessions = async (req, res) => {
                 )`))
         .orderBy((0, drizzle_orm_1.asc)(Session_1.sessions.sessionDate), (0, drizzle_orm_1.asc)(Session_1.sessions.timeFrom));
     const sessionIds = rawSessions.map(s => s.id);
-    const resourcesBySession = await fetchSessionResources(sessionIds);
-    const ratingsBySession = await fetchSessionRatings(sessionIds);
+    const [resourcesBySession, ratingsBySession, materialsBySession] = await Promise.all([
+        fetchSessionResources(sessionIds),
+        fetchSessionRatings(sessionIds),
+        (0, sessionMaterials_1.resolveSessionMaterials)(sessionIds),
+    ]);
     const result = rawSessions.map(s => {
         const ratings = ratingsBySession.get(s.id) || [];
         const overallSum = ratings.reduce((sum, r) => sum + (Number(r.overallRating) || 0), 0);
         const averageRating = ratings.length > 0 ? Number((overallSum / ratings.length).toFixed(2)) : null;
+        const mat = materialsBySession.get(s.id) || (0, sessionMaterials_1.emptySessionMaterials)();
         return {
             ...s,
+            session_pdf: mat.session_pdf,
+            session_answers_pdf: mat.session_answers_pdf,
+            materials: mat.materials,
             lessons: resourcesBySession.get(s.id) || [],
             averageRating,
             totalRatedStudents: ratings.length,
@@ -323,14 +338,21 @@ const getPastTeacherSessions = async (req, res) => {
                 )`))
         .orderBy((0, drizzle_orm_1.desc)(Session_1.sessions.sessionDate), (0, drizzle_orm_1.desc)(Session_1.sessions.timeFrom));
     const sessionIds = rawSessions.map(s => s.id);
-    const resourcesBySession = await fetchSessionResources(sessionIds);
-    const ratingsBySession = await fetchSessionRatings(sessionIds);
+    const [resourcesBySession, ratingsBySession, materialsBySession] = await Promise.all([
+        fetchSessionResources(sessionIds),
+        fetchSessionRatings(sessionIds),
+        (0, sessionMaterials_1.resolveSessionMaterials)(sessionIds),
+    ]);
     const result = rawSessions.map(s => {
         const ratings = ratingsBySession.get(s.id) || [];
         const overallSum = ratings.reduce((sum, r) => sum + (Number(r.overallRating) || 0), 0);
         const averageRating = ratings.length > 0 ? Number((overallSum / ratings.length).toFixed(2)) : null;
+        const mat = materialsBySession.get(s.id) || (0, sessionMaterials_1.emptySessionMaterials)();
         return {
             ...s,
+            session_pdf: mat.session_pdf,
+            session_answers_pdf: mat.session_answers_pdf,
+            materials: mat.materials,
             lessons: resourcesBySession.get(s.id) || [],
             averageRating,
             totalRatedStudents: ratings.length,
@@ -417,10 +439,15 @@ const getTeacherSessionById = async (req, res) => {
             .innerJoin(Student_1.Student, (0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.studentId, Student_1.Student.id))
             .where((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.sessionId, id));
     }
+    const materialsMap = await (0, sessionMaterials_1.resolveSessionMaterials)([id]);
+    const mat = materialsMap.get(id) || (0, sessionMaterials_1.emptySessionMaterials)();
     return (0, response_1.SuccessResponse)(res, {
         message: "Session fetched successfully",
         session: {
             ...session,
+            session_pdf: mat.session_pdf,
+            session_answers_pdf: mat.session_answers_pdf,
+            materials: mat.materials,
             lessons: resourcesBySession.get(id) || [],
             groups: linkedGroups,
             studentsCount: allStudentIds.size,
@@ -448,6 +475,8 @@ const getSessionStudents = async (req, res) => {
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(Session_1.sessions.id, sessionId), (0, drizzle_orm_1.eq)(Session_1.sessions.teacherId, teacherId)));
     if (!session)
         throw new Errors_1.NotFound("Session not found");
+    const materialsMap = await (0, sessionMaterials_1.resolveSessionMaterials)([sessionId]);
+    const effective = materialsMap.get(sessionId) || (0, sessionMaterials_1.emptySessionMaterials)();
     // 1. Direct students
     const directRows = await connection_1.db
         .select({
@@ -479,9 +508,10 @@ const getSessionStudents = async (req, res) => {
         return (0, response_1.SuccessResponse)(res, {
             message: "No students enrolled in this session",
             count: 0,
-            session_pdf: session.session_pdf,
-            session_answers_pdf: session.session_answers_pdf,
+            session_pdf: effective.session_pdf,
+            session_answers_pdf: effective.session_answers_pdf,
             teacher_explanation_pdf: session.teacher_explanation_pdf,
+            materials: effective.materials,
             students: [],
         }, 200);
     }
@@ -596,8 +626,8 @@ const getSessionStudents = async (req, res) => {
                 : { status: "not_marked", attendedAt: null },
             rating,
             pdfs: {
-                session_pdf: studentPdf?.session_pdf ?? session.session_pdf ?? null,
-                session_answers_pdf: studentPdf?.session_answers_pdf ?? session.session_answers_pdf ?? null,
+                session_pdf: studentPdf?.session_pdf ?? effective.session_pdf ?? null,
+                session_answers_pdf: studentPdf?.session_answers_pdf ?? effective.session_answers_pdf ?? null,
                 teacher_explanation_pdf: studentPdf?.teacher_explanation_pdf ?? session.teacher_explanation_pdf ?? null,
             },
         };
@@ -605,9 +635,10 @@ const getSessionStudents = async (req, res) => {
     return (0, response_1.SuccessResponse)(res, {
         message: "Session students fetched successfully",
         count: formattedStudents.length,
-        session_pdf: session.session_pdf,
-        session_answers_pdf: session.session_answers_pdf,
+        session_pdf: effective.session_pdf,
+        session_answers_pdf: effective.session_answers_pdf,
         teacher_explanation_pdf: session.teacher_explanation_pdf,
+        materials: effective.materials,
         students: formattedStudents,
     }, 200);
 };
@@ -669,8 +700,8 @@ const uploadTeacherExplanationPdf = async (req, res) => {
                 id: (0, crypto_1.randomUUID)(),
                 sessionId,
                 studentId,
-                session_pdf: session.session_pdf,
-                session_answers_pdf: session.session_answers_pdf,
+                session_pdf: null,
+                session_answers_pdf: null,
                 teacher_explanation_pdf: savedPdfUrl,
             });
         }

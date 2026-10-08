@@ -12,7 +12,8 @@ const response_1 = require("../../utils/response");
 const BadRequest_1 = require("../../Errors/BadRequest");
 const Errors_1 = require("../../Errors");
 const handleImages_1 = require("../../utils/handleImages");
-const mistakesPdf_1 = require("../../utils/mistakesPdf");
+const sessionMaterials_1 = require("../../utils/sessionMaterials");
+const mistakesGenerator_1 = require("../../utils/mistakesGenerator");
 // Selections
 const selectCategory = async (req, res) => {
     const parentCategories = await connection_1.db
@@ -307,10 +308,8 @@ const createSession = async (req, res) => {
     // ── 13. Process and save session-level PDFs (base64 → disk) ──────────
     let savedSessionPdf = null;
     let savedSessionAnswersPdf = null;
-    const defaultSessionPdf = linkedExam?.session_pdf ?? lessonsList.find(lesson => lesson.session_pdf)?.session_pdf ?? null;
-    const defaultAnswersPdf = linkedExam?.session_answers_pdf ?? lessonsList.find(lesson => lesson.session_answers_pdf)?.session_answers_pdf ?? null;
-    const selectedSessionPdf = session_pdf !== undefined ? session_pdf : defaultSessionPdf;
-    const selectedAnswersPdf = session_answers_pdf !== undefined ? session_answers_pdf : defaultAnswersPdf;
+    const selectedSessionPdf = session_pdf || null;
+    const selectedAnswersPdf = session_answers_pdf || null;
     if (selectedSessionPdf) {
         if (typeof selectedSessionPdf !== "string")
             throw new BadRequest_1.BadRequest("session_pdf must be a URL or base64-encoded PDF");
@@ -396,6 +395,40 @@ const createSession = async (req, res) => {
         }
         await tx.insert(schema_1.sessionLessons).values(lessonInserts);
     });
+    if (sessionRelationalType === "Mistakes") {
+        const targetStudentIds = hasStudents ? [...new Set(studentIds)] : Array.from(uniqueStudentIds);
+        const mistakeSessionsResults = [];
+        let mistakesError;
+        try {
+            for (const s of sessionsToInsert) {
+                const target = {
+                    id: s.id,
+                    name: s.name,
+                    sessionDate: s.sessionDate,
+                    timeFrom: s.timeFrom,
+                    lessonIds: lessonIds,
+                };
+                const { generated, skipped } = await (0, mistakesGenerator_1.generateMistakesPdfs)(req, target, targetStudentIds);
+                mistakeSessionsResults.push({
+                    sessionId: s.id,
+                    sessionName: s.name,
+                    generated,
+                    skipped,
+                });
+            }
+        }
+        catch (err) {
+            console.error("Failed to generate mistakes PDFs:", err);
+            mistakesError = err?.message || "Failed to generate mistakes PDFs";
+        }
+        return (0, response_1.SuccessResponse)(res, {
+            message: `${sessionsToInsert.length} session(s) created successfully`,
+            mistakes: {
+                sessions: mistakeSessionsResults,
+                ...(mistakesError ? { error: mistakesError } : {}),
+            },
+        }, 201);
+    }
     return (0, response_1.SuccessResponse)(res, { message: `${sessionsToInsert.length} session(s) created successfully` }, 201);
 };
 exports.createSession = createSession;
@@ -431,26 +464,29 @@ const getAllSessions = async (req, res) => {
         .orderBy(Session_1.sessions.createdAt);
     // For each session, attach a lightweight groups + students summary
     const sessionIds = sessionsList.map(s => s.id);
-    const groupsSummary = sessionIds.length > 0
-        ? await connection_1.db.select({
-            sessionId: Session_1.sessionGroups.sessionId,
-            groupId: Groups_1.groups.id,
-            groupName: Groups_1.groups.name,
-        })
-            .from(Session_1.sessionGroups)
-            .innerJoin(Groups_1.groups, (0, drizzle_orm_1.eq)(Session_1.sessionGroups.groupId, Groups_1.groups.id))
-            .where((0, drizzle_orm_1.inArray)(Session_1.sessionGroups.sessionId, sessionIds))
-        : [];
-    const studentsSummary = sessionIds.length > 0
-        ? await connection_1.db.select({
-            sessionId: Session_1.sessionUsers.sessionId,
-            studentId: schema_1.Student.id,
-            studentName: (0, drizzle_orm_1.sql) `CONCAT(${schema_1.Student.firstname}, ' ', ${schema_1.Student.lastname})`.as("studentName"),
-        })
-            .from(Session_1.sessionUsers)
-            .innerJoin(schema_1.Student, (0, drizzle_orm_1.eq)(Session_1.sessionUsers.studentId, schema_1.Student.id))
-            .where((0, drizzle_orm_1.inArray)(Session_1.sessionUsers.sessionId, sessionIds))
-        : [];
+    const [materialsMap, groupsSummary, studentsSummary] = await Promise.all([
+        (0, sessionMaterials_1.resolveSessionMaterials)(sessionIds),
+        sessionIds.length > 0
+            ? connection_1.db.select({
+                sessionId: Session_1.sessionGroups.sessionId,
+                groupId: Groups_1.groups.id,
+                groupName: Groups_1.groups.name,
+            })
+                .from(Session_1.sessionGroups)
+                .innerJoin(Groups_1.groups, (0, drizzle_orm_1.eq)(Session_1.sessionGroups.groupId, Groups_1.groups.id))
+                .where((0, drizzle_orm_1.inArray)(Session_1.sessionGroups.sessionId, sessionIds))
+            : Promise.resolve([]),
+        sessionIds.length > 0
+            ? connection_1.db.select({
+                sessionId: Session_1.sessionUsers.sessionId,
+                studentId: schema_1.Student.id,
+                studentName: (0, drizzle_orm_1.sql) `CONCAT(${schema_1.Student.firstname}, ' ', ${schema_1.Student.lastname})`.as("studentName"),
+            })
+                .from(Session_1.sessionUsers)
+                .innerJoin(schema_1.Student, (0, drizzle_orm_1.eq)(Session_1.sessionUsers.studentId, schema_1.Student.id))
+                .where((0, drizzle_orm_1.inArray)(Session_1.sessionUsers.sessionId, sessionIds))
+            : Promise.resolve([]),
+    ]);
     // Map summaries by sessionId
     const groupsBySession = new Map();
     groupsSummary.forEach(g => {
@@ -464,13 +500,27 @@ const getAllSessions = async (req, res) => {
             studentsBySession.set(s.sessionId, []);
         studentsBySession.get(s.sessionId).push({ id: s.studentId, name: s.studentName });
     });
-    const result = sessionsList.map(session => ({
-        ...session,
-        groups: groupsBySession.get(session.id) ?? [],
-        groupCount: groupsBySession.get(session.id)?.length ?? 0,
-        students: studentsBySession.get(session.id) ?? [],
-        studentCount: studentsBySession.get(session.id)?.length ?? 0,
-    }));
+    const result = sessionsList.map(session => {
+        const mat = materialsMap.get(session.id) || (0, sessionMaterials_1.emptySessionMaterials)();
+        const effectiveSessionPdfs = mat.materials
+            .filter(material => material.session_pdf)
+            .map(({ source, sourceId, name, session_pdf }) => ({ source, sourceId, name, pdf: session_pdf }));
+        const effectiveSessionAnswersPdfs = mat.materials
+            .filter(material => material.session_answers_pdf)
+            .map(({ source, sourceId, name, session_answers_pdf }) => ({ source, sourceId, name, pdf: session_answers_pdf }));
+        return {
+            ...session,
+            effective_session_pdf: mat.session_pdf,
+            effective_session_answers_pdf: mat.session_answers_pdf,
+            effective_session_pdfs: effectiveSessionPdfs,
+            effective_session_answers_pdfs: effectiveSessionAnswersPdfs,
+            materials: mat.materials,
+            groups: groupsBySession.get(session.id) ?? [],
+            groupCount: groupsBySession.get(session.id)?.length ?? 0,
+            students: studentsBySession.get(session.id) ?? [],
+            studentCount: studentsBySession.get(session.id)?.length ?? 0,
+        };
+    });
     return (0, response_1.SuccessResponse)(res, { sessions: result }, 200);
 };
 exports.getAllSessions = getAllSessions;
@@ -601,9 +651,22 @@ const getSessionById = async (req, res) => {
             .innerJoin(schema_1.Student, (0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.studentId, schema_1.Student.id))
             .where((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.sessionId, id));
     }
+    const materialsMap = await (0, sessionMaterials_1.resolveSessionMaterials)([id]);
+    const mat = materialsMap.get(id) || (0, sessionMaterials_1.emptySessionMaterials)();
+    const effectiveSessionPdfs = mat.materials
+        .filter(material => material.session_pdf)
+        .map(({ source, sourceId, name, session_pdf }) => ({ source, sourceId, name, pdf: session_pdf }));
+    const effectiveSessionAnswersPdfs = mat.materials
+        .filter(material => material.session_answers_pdf)
+        .map(({ source, sourceId, name, session_answers_pdf }) => ({ source, sourceId, name, pdf: session_answers_pdf }));
     return (0, response_1.SuccessResponse)(res, {
         session: {
             ...session[0],
+            effective_session_pdf: mat.session_pdf,
+            effective_session_answers_pdf: mat.session_answers_pdf,
+            effective_session_pdfs: effectiveSessionPdfs,
+            effective_session_answers_pdfs: effectiveSessionAnswersPdfs,
+            materials: mat.materials,
             recurringDays: recurringDays.length > 0 ? recurringDays : undefined,
             groups: sessionGroupsData,
             lessons: sessionLessonsData,
@@ -1089,7 +1152,6 @@ const getStudentsCourseAttendance = async (req, res) => {
 };
 exports.getStudentsCourseAttendance = getStudentsCourseAttendance;
 /**
- * POST /admin/session/:id/student-pdfs
  * Generate individualized worksheet and answer PDFs from selected students'
  * wrong answers in completed quiz attempts for lessons linked to the session.
  */
@@ -1099,7 +1161,13 @@ const upsertSessionStudentPdfs = async (req, res) => {
     if (!sessionId)
         throw new BadRequest_1.BadRequest("Session ID is required");
     const [session] = await connection_1.db
-        .select({ id: Session_1.sessions.id, name: Session_1.sessions.name, sessionRelationalType: Session_1.sessions.sessionRelationalType })
+        .select({
+        id: Session_1.sessions.id,
+        name: Session_1.sessions.name,
+        sessionDate: Session_1.sessions.sessionDate,
+        timeFrom: Session_1.sessions.timeFrom,
+        sessionRelationalType: Session_1.sessions.sessionRelationalType,
+    })
         .from(Session_1.sessions)
         .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, sessionId));
     if (!session)
@@ -1107,18 +1175,29 @@ const upsertSessionStudentPdfs = async (req, res) => {
     if (session.sessionRelationalType !== "Mistakes") {
         throw new BadRequest_1.BadRequest("Mistakes PDFs can only be generated for Mistakes-type sessions");
     }
-    if (!Array.isArray(studentIds) || studentIds.length === 0 || studentIds.some((studentId) => typeof studentId !== "string")) {
-        throw new BadRequest_1.BadRequest("studentIds must be a non-empty array of student IDs");
-    }
-    const selectedStudentIds = [...new Set(studentIds)];
     const enrolledUsers = await connection_1.db
         .select({ studentId: Session_1.sessionUsers.studentId })
         .from(Session_1.sessionUsers)
         .where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.sessionId, sessionId));
-    const enrolledIds = new Set(enrolledUsers.map(u => u.studentId));
-    const invalidStudents = selectedStudentIds.filter(studentId => !enrolledIds.has(studentId));
-    if (invalidStudents.length > 0) {
-        throw new BadRequest_1.BadRequest(`Students not enrolled in this session: [${invalidStudents.join(", ")}]`);
+    const enrolledIds = enrolledUsers.map(u => u.studentId);
+    if (enrolledIds.length === 0) {
+        throw new BadRequest_1.BadRequest("No students enrolled in this session");
+    }
+    let targetStudentIds;
+    if (studentIds !== undefined) {
+        if (!Array.isArray(studentIds) || studentIds.length === 0 || studentIds.some((s) => typeof s !== "string")) {
+            throw new BadRequest_1.BadRequest("studentIds must be a non-empty array of student IDs");
+        }
+        const selectedStudentIds = [...new Set(studentIds)];
+        const enrolledSet = new Set(enrolledIds);
+        const invalidStudents = selectedStudentIds.filter(sId => !enrolledSet.has(sId));
+        if (invalidStudents.length > 0) {
+            throw new BadRequest_1.BadRequest(`Students not enrolled in this session: [${invalidStudents.join(", ")}]`);
+        }
+        targetStudentIds = selectedStudentIds;
+    }
+    else {
+        targetStudentIds = enrolledIds;
     }
     const lessonRows = await connection_1.db
         .select({ lessonId: schema_1.sessionLessons.lessonId })
@@ -1127,127 +1206,18 @@ const upsertSessionStudentPdfs = async (req, res) => {
     const lessonIds = [...new Set(lessonRows.map(row => row.lessonId))];
     if (lessonIds.length === 0)
         throw new BadRequest_1.BadRequest("The Mistakes session has no linked lessons");
-    const selectedOption = (0, mysql_core_1.alias)(schema_1.questionOptions, "selected_option");
-    const wrongAnswers = await connection_1.db
-        .select({
-        studentId: schema_1.quizAttempts.studentId,
-        quizTitle: schema_1.quizzes.title,
-        questionId: schema_1.questions.id,
-        question: schema_1.questions.question,
-        selectedAnswer: selectedOption.answer,
-        gridInAnswer: schema_1.studentQuizAnswers.gridInAnswer,
-    })
-        .from(schema_1.studentQuizAnswers)
-        .innerJoin(schema_1.quizAttempts, (0, drizzle_orm_1.eq)(schema_1.studentQuizAnswers.attemptId, schema_1.quizAttempts.id))
-        .innerJoin(schema_1.quizzes, (0, drizzle_orm_1.eq)(schema_1.quizAttempts.quizId, schema_1.quizzes.id))
-        .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.studentQuizAnswers.questionId, schema_1.questions.id))
-        .leftJoin(selectedOption, (0, drizzle_orm_1.eq)(schema_1.studentQuizAnswers.selectedOptionId, selectedOption.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.quizAttempts.studentId, selectedStudentIds), (0, drizzle_orm_1.inArray)(schema_1.quizzes.lessonId, lessonIds), (0, drizzle_orm_1.eq)(schema_1.studentQuizAnswers.isCorrect, false), (0, drizzle_orm_1.or)((0, drizzle_orm_1.eq)(schema_1.quizAttempts.status, "completed"), (0, drizzle_orm_1.eq)(schema_1.quizAttempts.status, "timed_out"))));
-    const questionIds = [...new Set(wrongAnswers.map(answer => answer.questionId))];
-    const [options, explanations] = questionIds.length > 0
-        ? await Promise.all([
-            connection_1.db.select({
-                questionId: schema_1.questionOptions.questionId,
-                answer: schema_1.questionOptions.answer,
-                isCorrect: schema_1.questionOptions.isCorrect,
-            }).from(schema_1.questionOptions).where((0, drizzle_orm_1.inArray)(schema_1.questionOptions.questionId, questionIds)),
-            connection_1.db.select({
-                questionId: schema_1.questionAnswers.questionId,
-                text: schema_1.questionAnswers.text,
-                pdf: schema_1.questionAnswers.pdf,
-                video: schema_1.questionAnswers.video,
-            }).from(schema_1.questionAnswers).where((0, drizzle_orm_1.inArray)(schema_1.questionAnswers.questionId, questionIds)),
-        ])
-        : [[], []];
-    const mistakesByStudent = new Map();
-    for (const studentId of selectedStudentIds)
-        mistakesByStudent.set(studentId, []);
-    for (const answer of wrongAnswers) {
-        const correctAnswers = options
-            .filter(option => option.questionId === answer.questionId && option.isCorrect)
-            .map(option => option.answer)
-            .filter((value) => !!value);
-        const questionAnswersForQuestion = explanations
-            .filter(item => item.questionId === answer.questionId);
-        const explanationText = questionAnswersForQuestion
-            .map(item => [
-            item.text,
-            item.pdf ? `Answer PDF: ${item.pdf}` : null,
-            item.video ? `Answer video: ${item.video}` : null,
-        ].filter(Boolean).join("\n"))
-            .filter(Boolean)
-            .join("\n\n");
-        mistakesByStudent.get(answer.studentId).push({
-            quizTitle: answer.quizTitle,
-            question: answer.question ?? "",
-            selectedAnswer: answer.selectedAnswer ?? answer.gridInAnswer ?? "No answer recorded",
-            correctAnswer: correctAnswers.join(" / ") || questionAnswersForQuestion.find(item => item.text)?.text || "",
-            explanation: explanationText,
-        });
-    }
-    const studentsWithoutMistakes = selectedStudentIds.filter(studentId => mistakesByStudent.get(studentId).length === 0);
-    if (studentsWithoutMistakes.length > 0) {
-        throw new BadRequest_1.BadRequest(`No wrong answers found in completed session quizzes for students: [${studentsWithoutMistakes.join(", ")}]`);
-    }
-    const generatedRows = [];
-    const uploadedUrls = [];
-    const replacedUrls = [];
-    try {
-        for (const studentId of selectedStudentIds) {
-            const mistakes = mistakesByStudent.get(studentId);
-            const worksheet = await (0, mistakesPdf_1.createMistakesPdf)(`${session.name} - Mistakes`, mistakes, false);
-            const answerKey = await (0, mistakesPdf_1.createMistakesPdf)(`${session.name} - Mistakes Answers`, mistakes, true);
-            const sessionPdf = await (0, handleImages_1.validateAndSavePdf)(req, `data:application/pdf;base64,${worksheet.toString("base64")}`, "session-pdfs");
-            uploadedUrls.push(sessionPdf);
-            const answersPdf = await (0, handleImages_1.validateAndSavePdf)(req, `data:application/pdf;base64,${answerKey.toString("base64")}`, "session-pdfs");
-            uploadedUrls.push(answersPdf);
-            generatedRows.push({
-                id: (0, crypto_1.randomUUID)(),
-                sessionId,
-                studentId,
-                session_pdf: sessionPdf,
-                session_answers_pdf: answersPdf,
-                teacher_explanation_pdf: null,
-            });
-        }
-        await connection_1.db.transaction(async (tx) => {
-            for (const row of generatedRows) {
-                const [existing] = await tx
-                    .select({
-                    id: Session_1.sessionStudentPdfs.id,
-                    session_pdf: Session_1.sessionStudentPdfs.session_pdf,
-                    session_answers_pdf: Session_1.sessionStudentPdfs.session_answers_pdf,
-                    teacher_explanation_pdf: Session_1.sessionStudentPdfs.teacher_explanation_pdf,
-                })
-                    .from(Session_1.sessionStudentPdfs)
-                    .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.sessionId, sessionId), (0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.studentId, row.studentId)));
-                if (existing) {
-                    replacedUrls.push(existing.session_pdf, existing.session_answers_pdf, existing.teacher_explanation_pdf);
-                    await tx.update(Session_1.sessionStudentPdfs).set({
-                        session_pdf: row.session_pdf,
-                        session_answers_pdf: row.session_answers_pdf,
-                        teacher_explanation_pdf: null,
-                    }).where((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.id, existing.id));
-                }
-                else {
-                    await tx.insert(Session_1.sessionStudentPdfs).values(row);
-                }
-            }
-        });
-    }
-    catch (error) {
-        await Promise.all(uploadedUrls.map(url => (0, handleImages_1.deleteImage)(url)));
-        throw error;
-    }
-    await Promise.all(replacedUrls
-        .filter((url) => !!url && url.includes("/uploads/"))
-        .map(url => (0, handleImages_1.deleteImage)(url)));
+    const target = {
+        id: session.id,
+        name: session.name,
+        sessionDate: session.sessionDate ? String(session.sessionDate) : null,
+        timeFrom: session.timeFrom,
+        lessonIds,
+    };
+    const { generated, skipped } = await (0, mistakesGenerator_1.generateMistakesPdfs)(req, target, targetStudentIds);
     return (0, response_1.SuccessResponse)(res, {
         message: "Student mistakes PDFs generated successfully",
-        students: generatedRows.map(row => ({
-            studentId: row.studentId,
-            mistakesCount: mistakesByStudent.get(row.studentId).length,
-        })),
+        students: generated,
+        skipped,
     }, 200);
 };
 exports.upsertSessionStudentPdfs = upsertSessionStudentPdfs;

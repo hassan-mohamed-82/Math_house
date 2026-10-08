@@ -604,10 +604,18 @@ export const getAllSessions = async (req: Request, res: Response) => {
 
     const result = sessionsList.map(session => {
         const mat = materialsMap.get(session.id) || emptySessionMaterials();
+        const effectiveSessionPdfs = mat.materials
+            .filter(material => material.session_pdf)
+            .map(({ source, sourceId, name, session_pdf }) => ({ source, sourceId, name, pdf: session_pdf }));
+        const effectiveSessionAnswersPdfs = mat.materials
+            .filter(material => material.session_answers_pdf)
+            .map(({ source, sourceId, name, session_answers_pdf }) => ({ source, sourceId, name, pdf: session_answers_pdf }));
         return {
             ...session,
             effective_session_pdf: mat.session_pdf,
             effective_session_answers_pdf: mat.session_answers_pdf,
+            effective_session_pdfs: effectiveSessionPdfs,
+            effective_session_answers_pdfs: effectiveSessionAnswersPdfs,
             materials: mat.materials,
             groups:        groupsBySession.get(session.id)   ?? [],
             groupCount:    groupsBySession.get(session.id)?.length  ?? 0,
@@ -765,12 +773,20 @@ export const getSessionById = async (req: Request, res: Response) => {
 
     const materialsMap = await resolveSessionMaterials([id]);
     const mat = materialsMap.get(id) || emptySessionMaterials();
+    const effectiveSessionPdfs = mat.materials
+        .filter(material => material.session_pdf)
+        .map(({ source, sourceId, name, session_pdf }) => ({ source, sourceId, name, pdf: session_pdf }));
+    const effectiveSessionAnswersPdfs = mat.materials
+        .filter(material => material.session_answers_pdf)
+        .map(({ source, sourceId, name, session_answers_pdf }) => ({ source, sourceId, name, pdf: session_answers_pdf }));
 
     return SuccessResponse(res, {
         session: {
             ...session[0],
             effective_session_pdf: mat.session_pdf,
             effective_session_answers_pdf: mat.session_answers_pdf,
+            effective_session_pdfs: effectiveSessionPdfs,
+            effective_session_answers_pdfs: effectiveSessionAnswersPdfs,
             materials: mat.materials,
             recurringDays: recurringDays.length > 0 ? recurringDays : undefined,
             groups: sessionGroupsData,
@@ -1462,4 +1478,4 @@ export const deleteSessionStudentPdf = async (req: Request, res: Response) => {
     await db.delete(sessionStudentPdfs).where(eq(sessionStudentPdfs.id, existing.id));
 
     return SuccessResponse(res, { message: "Student PDF record deleted successfully" }, 200);
-};
+};
