@@ -11,6 +11,7 @@ import { NotFound, UnauthorizedError } from "../../Errors";
 import { BadRequest } from "../../Errors/BadRequest";
 import { validateAndSavePdf, deleteImage } from "../../utils/handleImages";
 import { generateSecureStreamUrl } from "../../drive/services/services";
+import { resolveSessionMaterials, emptySessionMaterials } from "../../utils/sessionMaterials";
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -235,16 +236,23 @@ export const getAllTeacherSessions = async (req: Request, res: Response) => {
         .orderBy(desc(sessions.sessionDate), desc(sessions.timeFrom));
 
     const sessionIds = rawSessions.map(s => s.id);
-    const resourcesBySession = await fetchSessionResources(sessionIds);
-    const ratingsBySession = await fetchSessionRatings(sessionIds);
+    const [resourcesBySession, ratingsBySession, materialsBySession] = await Promise.all([
+        fetchSessionResources(sessionIds),
+        fetchSessionRatings(sessionIds),
+        resolveSessionMaterials(sessionIds),
+    ]);
 
     const result = rawSessions.map(s => {
         const ratings = ratingsBySession.get(s.id) || [];
         const overallSum = ratings.reduce((sum, r) => sum + (Number(r.overallRating) || 0), 0);
         const averageRating = ratings.length > 0 ? Number((overallSum / ratings.length).toFixed(2)) : null;
+        const mat = materialsBySession.get(s.id) || emptySessionMaterials();
 
         return {
             ...s,
+            session_pdf: mat.session_pdf,
+            session_answers_pdf: mat.session_answers_pdf,
+            materials: mat.materials,
             lessons: resourcesBySession.get(s.id) || [],
             averageRating,
             totalRatedStudents: ratings.length,
@@ -299,16 +307,23 @@ export const getUpcomingTeacherSessions = async (req: Request, res: Response) =>
         .orderBy(asc(sessions.sessionDate), asc(sessions.timeFrom));
 
     const sessionIds = rawSessions.map(s => s.id);
-    const resourcesBySession = await fetchSessionResources(sessionIds);
-    const ratingsBySession = await fetchSessionRatings(sessionIds);
+    const [resourcesBySession, ratingsBySession, materialsBySession] = await Promise.all([
+        fetchSessionResources(sessionIds),
+        fetchSessionRatings(sessionIds),
+        resolveSessionMaterials(sessionIds),
+    ]);
 
     const result = rawSessions.map(s => {
         const ratings = ratingsBySession.get(s.id) || [];
         const overallSum = ratings.reduce((sum, r) => sum + (Number(r.overallRating) || 0), 0);
         const averageRating = ratings.length > 0 ? Number((overallSum / ratings.length).toFixed(2)) : null;
+        const mat = materialsBySession.get(s.id) || emptySessionMaterials();
 
         return {
             ...s,
+            session_pdf: mat.session_pdf,
+            session_answers_pdf: mat.session_answers_pdf,
+            materials: mat.materials,
             lessons: resourcesBySession.get(s.id) || [],
             averageRating,
             totalRatedStudents: ratings.length,
@@ -363,16 +378,23 @@ export const getPastTeacherSessions = async (req: Request, res: Response) => {
         .orderBy(desc(sessions.sessionDate), desc(sessions.timeFrom));
 
     const sessionIds = rawSessions.map(s => s.id);
-    const resourcesBySession = await fetchSessionResources(sessionIds);
-    const ratingsBySession = await fetchSessionRatings(sessionIds);
+    const [resourcesBySession, ratingsBySession, materialsBySession] = await Promise.all([
+        fetchSessionResources(sessionIds),
+        fetchSessionRatings(sessionIds),
+        resolveSessionMaterials(sessionIds),
+    ]);
 
     const result = rawSessions.map(s => {
         const ratings = ratingsBySession.get(s.id) || [];
         const overallSum = ratings.reduce((sum, r) => sum + (Number(r.overallRating) || 0), 0);
         const averageRating = ratings.length > 0 ? Number((overallSum / ratings.length).toFixed(2)) : null;
+        const mat = materialsBySession.get(s.id) || emptySessionMaterials();
 
         return {
             ...s,
+            session_pdf: mat.session_pdf,
+            session_answers_pdf: mat.session_answers_pdf,
+            materials: mat.materials,
             lessons: resourcesBySession.get(s.id) || [],
             averageRating,
             totalRatedStudents: ratings.length,
@@ -468,10 +490,16 @@ export const getTeacherSessionById = async (req: Request, res: Response) => {
             .where(eq(sessionStudentPdfs.sessionId, id));
     }
 
+    const materialsMap = await resolveSessionMaterials([id]);
+    const mat = materialsMap.get(id) || emptySessionMaterials();
+
     return SuccessResponse(res, {
         message: "Session fetched successfully",
         session: {
             ...session,
+            session_pdf: mat.session_pdf,
+            session_answers_pdf: mat.session_answers_pdf,
+            materials: mat.materials,
             lessons: resourcesBySession.get(id) || [],
             groups: linkedGroups,
             studentsCount: allStudentIds.size,
@@ -500,6 +528,9 @@ export const getSessionStudents = async (req: Request, res: Response) => {
         .where(and(eq(sessions.id, sessionId), eq(sessions.teacherId, teacherId)));
 
     if (!session) throw new NotFound("Session not found");
+
+    const materialsMap = await resolveSessionMaterials([sessionId]);
+    const effective = materialsMap.get(sessionId) || emptySessionMaterials();
 
     // 1. Direct students
     const directRows = await db
@@ -536,9 +567,10 @@ export const getSessionStudents = async (req: Request, res: Response) => {
         return SuccessResponse(res, {
             message: "No students enrolled in this session",
             count: 0,
-            session_pdf: session.session_pdf,
-            session_answers_pdf: session.session_answers_pdf,
+            session_pdf: effective.session_pdf,
+            session_answers_pdf: effective.session_answers_pdf,
             teacher_explanation_pdf: session.teacher_explanation_pdf,
+            materials: effective.materials,
             students: [],
         }, 200);
     }
@@ -672,8 +704,8 @@ export const getSessionStudents = async (req: Request, res: Response) => {
                 : { status: "not_marked", attendedAt: null },
             rating,
             pdfs: {
-                session_pdf: studentPdf?.session_pdf ?? session.session_pdf ?? null,
-                session_answers_pdf: studentPdf?.session_answers_pdf ?? session.session_answers_pdf ?? null,
+                session_pdf: studentPdf?.session_pdf ?? effective.session_pdf ?? null,
+                session_answers_pdf: studentPdf?.session_answers_pdf ?? effective.session_answers_pdf ?? null,
                 teacher_explanation_pdf: studentPdf?.teacher_explanation_pdf ?? session.teacher_explanation_pdf ?? null,
             },
         };
@@ -682,9 +714,10 @@ export const getSessionStudents = async (req: Request, res: Response) => {
     return SuccessResponse(res, {
         message: "Session students fetched successfully",
         count: formattedStudents.length,
-        session_pdf: session.session_pdf,
-        session_answers_pdf: session.session_answers_pdf,
+        session_pdf: effective.session_pdf,
+        session_answers_pdf: effective.session_answers_pdf,
         teacher_explanation_pdf: session.teacher_explanation_pdf,
+        materials: effective.materials,
         students: formattedStudents,
     }, 200);
 };
@@ -755,8 +788,8 @@ export const uploadTeacherExplanationPdf = async (req: Request, res: Response) =
                 id: randomUUID(),
                 sessionId,
                 studentId,
-                session_pdf: session.session_pdf,
-                session_answers_pdf: session.session_answers_pdf,
+                session_pdf: null,
+                session_answers_pdf: null,
                 teacher_explanation_pdf: savedPdfUrl,
             });
         }

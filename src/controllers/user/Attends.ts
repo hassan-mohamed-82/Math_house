@@ -12,8 +12,11 @@ import { eq, and, or, inArray, sql, gt, asc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 import { generateSecureStreamUrl } from "../../drive/services/services";
+import { resolveSessionMaterials, emptySessionMaterials, SessionMaterialsResult } from "../../utils/sessionMaterials";
 
 // ── config ────────────────────────────────────────────────────────────────────
+
+export const STUDENTS_SEE_ANSWERS_AFTER_ATTENDING = true;
 
 /** Students may join this many minutes before the session starts (until timeTo). */
 const JOIN_OPEN_BEFORE_MIN = 15;
@@ -105,24 +108,78 @@ const enrolledSessionsFilter = (studentId: string) =>
         )
     );
 
-/**
- * PDFs the student sees. For "Mistakes" sessions the personal PDF wins,
- * otherwise (or if the personal field is empty) fall back to the session-level one.
- * session_answers_pdf is never exposed to students.
- */
+type StudentPdfRow = {
+    sessionId: string;
+    session_pdf: string | null;
+    session_answers_pdf: string | null;
+    teacher_explanation_pdf: string | null;
+};
+
+async function fetchStudentPdfRows(studentId: string, sessionIds: string[]): Promise<Map<string, StudentPdfRow>> {
+    const studentPdfMap = new Map<string, StudentPdfRow>();
+    if (sessionIds.length === 0) return studentPdfMap;
+
+    const rows = await db
+        .select({
+            sessionId: sessionStudentPdfs.sessionId,
+            session_pdf: sessionStudentPdfs.session_pdf,
+            session_answers_pdf: sessionStudentPdfs.session_answers_pdf,
+            teacher_explanation_pdf: sessionStudentPdfs.teacher_explanation_pdf,
+        })
+        .from(sessionStudentPdfs)
+        .where(and(
+            eq(sessionStudentPdfs.studentId, studentId),
+            inArray(sessionStudentPdfs.sessionId, sessionIds)
+        ));
+
+    rows.forEach(r => {
+        studentPdfMap.set(r.sessionId, r);
+    });
+
+    return studentPdfMap;
+}
+
 const resolvePdfs = (
-    s: { sessionRelationalType: string | null; session_pdf: string | null; teacher_explanation_pdf: string | null },
-    studentPdf?: { session_pdf: string | null; teacher_explanation_pdf: string | null }
+    session: { teacher_explanation_pdf?: string | null },
+    isAttended: boolean,
+    effective: SessionMaterialsResult,
+    studentPdf?: StudentPdfRow | null
 ) => {
-    if (s.sessionRelationalType === "Mistakes" && studentPdf) {
+    if (!isAttended) {
         return {
-            session_pdf: studentPdf.session_pdf ?? s.session_pdf ?? null,
-            teacher_explanation_pdf: studentPdf.teacher_explanation_pdf ?? s.teacher_explanation_pdf ?? null,
+            session_pdf: null,
+            session_answers_pdf: null,
+            teacher_explanation_pdf: null,
+            materials: [],
+            materialsLocked: true,
         };
     }
+
+    const hasPersonalWorksheet = Boolean(studentPdf?.session_pdf);
+    const resolvedSessionPdf = hasPersonalWorksheet ? studentPdf!.session_pdf : effective.session_pdf;
+
+    let resolvedAnswersPdf: string | null = null;
+    if (STUDENTS_SEE_ANSWERS_AFTER_ATTENDING) {
+        resolvedAnswersPdf = hasPersonalWorksheet ? (studentPdf?.session_answers_pdf ?? null) : effective.session_answers_pdf;
+    }
+
+    const resolvedExplanationPdf = studentPdf?.teacher_explanation_pdf ?? session.teacher_explanation_pdf ?? null;
+
+    let resolvedMaterials: any[] = [];
+    if (!hasPersonalWorksheet) {
+        if (STUDENTS_SEE_ANSWERS_AFTER_ATTENDING) {
+            resolvedMaterials = effective.materials;
+        } else {
+            resolvedMaterials = effective.materials.map(m => ({ ...m, session_answers_pdf: null }));
+        }
+    }
+
     return {
-        session_pdf: s.session_pdf ?? null,
-        teacher_explanation_pdf: s.teacher_explanation_pdf ?? null,
+        session_pdf: resolvedSessionPdf,
+        session_answers_pdf: resolvedAnswersPdf,
+        teacher_explanation_pdf: resolvedExplanationPdf,
+        materials: resolvedMaterials,
+        materialsLocked: false,
     };
 };
 
@@ -171,7 +228,9 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
             timeTo: sessions.timeTo,
             sessionLink: sessions.session_link,
             sessionRelationalType: sessions.sessionRelationalType,
-            session_pdf: sessions.session_pdf,
+            teacher_explanation_pdf: sessions.teacher_explanation_pdf,
+            attendanceStatus: sessionAttendance.status,
+            attendedAt: sessionAttendance.attendedAt,
             lesson: {
                 id: lessons.id,
                 name: lessons.name,
@@ -186,6 +245,10 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
             },
         })
         .from(sessions)
+        .leftJoin(sessionAttendance, and(
+            eq(sessionAttendance.sessionId, sessions.id),
+            eq(sessionAttendance.studentId, studentId)
+        ))
         .leftJoin(sessionLessons, eq(sessions.id, sessionLessons.sessionId))
         .leftJoin(lessons, eq(sessionLessons.lessonId, lessons.id))
         .leftJoin(chapters, eq(lessons.chapterId, chapters.id))
@@ -200,8 +263,11 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
         .orderBy(sql`${sessions.sessionDate} ASC, ${sessions.timeFrom} ASC`);
 
     const sessionsMap = new Map<string, any>();
+    const sessionIds: string[] = [];
+
     rawSessions.forEach((row) => {
         if (!sessionsMap.has(row.id)) {
+            sessionIds.push(row.id);
             sessionsMap.set(row.id, {
                 id: row.id,
                 name: row.name,
@@ -210,7 +276,9 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
                 timeTo: row.timeTo,
                 sessionLink: row.sessionLink,
                 sessionRelationalType: row.sessionRelationalType,
-                session_pdf: row.session_pdf,
+                teacher_explanation_pdf: row.teacher_explanation_pdf,
+                attendanceStatus: row.attendanceStatus || "not_marked",
+                attendedAt: row.attendedAt,
                 lessons: [],
             });
         }
@@ -226,30 +294,34 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
         }
     });
 
-    // Personalised blank PDFs for Mistakes sessions
-    const sessionIds = Array.from(sessionsMap.keys());
-    const studentPdfMap = new Map<string, string | null>();
-    if (sessionIds.length > 0) {
-        const studentPdfs = await db
-            .select({
-                sessionId: sessionStudentPdfs.sessionId,
-                session_pdf: sessionStudentPdfs.session_pdf,
-            })
-            .from(sessionStudentPdfs)
-            .where(and(
-                eq(sessionStudentPdfs.studentId, studentId),
-                inArray(sessionStudentPdfs.sessionId, sessionIds)
-            ));
+    const [materialsMap, studentPdfsMap] = await Promise.all([
+        resolveSessionMaterials(sessionIds),
+        fetchStudentPdfRows(studentId, sessionIds),
+    ]);
 
-        studentPdfs.forEach(sp => studentPdfMap.set(sp.sessionId, sp.session_pdf));
-    }
+    const formattedSessions: any[] = [];
+    sessionIds.forEach((sessionId) => {
+        const s = sessionsMap.get(sessionId);
+        if (!s) return;
+        const isAttended = s.attendanceStatus === "present";
+        const effective = materialsMap.get(sessionId) || emptySessionMaterials();
+        const studentPdf = studentPdfsMap.get(sessionId);
+        const pdfData = resolvePdfs(s, isAttended, effective, studentPdf);
 
-    const formattedSessions = Array.from(sessionsMap.values()).map((s: any) => ({
-        ...s,
-        session_pdf: s.sessionRelationalType === "Mistakes"
-            ? (studentPdfMap.get(s.id) ?? s.session_pdf ?? null)
-            : (s.session_pdf ?? null),
-    }));
+        formattedSessions.push({
+            id: s.id,
+            name: s.name,
+            sessionDate: s.sessionDate,
+            timeFrom: s.timeFrom,
+            timeTo: s.timeTo,
+            sessionLink: s.sessionLink,
+            sessionRelationalType: s.sessionRelationalType,
+            attendanceStatus: s.attendanceStatus,
+            attendedAt: s.attendedAt,
+            ...pdfData,
+            lessons: s.lessons,
+        });
+    });
 
     return SuccessResponse(res, formattedSessions);
 };
@@ -273,7 +345,6 @@ export const getSessionHistory = async (req: Request, res: Response) => {
             sessionLink: sessions.session_link,
             materialLink: sessions.material_link,
             sessionRelationalType: sessions.sessionRelationalType,
-            session_pdf: sessions.session_pdf,
             teacher_explanation_pdf: sessions.teacher_explanation_pdf,
             attendanceStatus: sessionAttendance.status,
             attendedAt: sessionAttendance.attendedAt,
@@ -312,8 +383,11 @@ export const getSessionHistory = async (req: Request, res: Response) => {
         .orderBy(sql`${sessions.sessionDate} DESC, ${sessions.timeFrom} DESC`);
 
     const pastSessionsMap = new Map<string, any>();
+    const pastSessionIds: string[] = [];
+
     rawPastSessions.forEach((row) => {
         if (!pastSessionsMap.has(row.id)) {
+            pastSessionIds.push(row.id);
             pastSessionsMap.set(row.id, {
                 id: row.id,
                 name: row.name,
@@ -323,7 +397,6 @@ export const getSessionHistory = async (req: Request, res: Response) => {
                 sessionLink: row.sessionLink,
                 materialLink: row.materialLink,
                 sessionRelationalType: row.sessionRelationalType,
-                session_pdf: row.session_pdf,
                 teacher_explanation_pdf: row.teacher_explanation_pdf,
                 attendanceStatus: row.attendanceStatus || "not_marked",
                 attendedAt: row.attendedAt,
@@ -342,54 +415,51 @@ export const getSessionHistory = async (req: Request, res: Response) => {
         }
     });
 
-    const pastSessionIds = Array.from(pastSessionsMap.keys());
+    const [materialsMap, studentPdfsMap] = await Promise.all([
+        resolveSessionMaterials(pastSessionIds),
+        fetchStudentPdfRows(studentId, pastSessionIds),
+    ]);
 
-    // 1. Per-student PDFs (Mistakes sessions)
-    const studentPdfMap = new Map<string, { session_pdf: string | null; teacher_explanation_pdf: string | null }>();
-    if (pastSessionIds.length > 0) {
-        const studentPdfs = await db
-            .select({
-                sessionId: sessionStudentPdfs.sessionId,
-                session_pdf: sessionStudentPdfs.session_pdf,
-                teacher_explanation_pdf: sessionStudentPdfs.teacher_explanation_pdf,
-            })
-            .from(sessionStudentPdfs)
-            .where(and(
-                eq(sessionStudentPdfs.studentId, studentId),
-                inArray(sessionStudentPdfs.sessionId, pastSessionIds)
-            ));
-
-        studentPdfs.forEach(sp =>
-            studentPdfMap.set(sp.sessionId, {
-                session_pdf: sp.session_pdf,
-                teacher_explanation_pdf: sp.teacher_explanation_pdf,
-            })
-        );
-    }
-
-    // 2. Ideas for lessons of attended sessions (permanent access once attended)
-    const attendedLessonIds = new Set<string>();
-    pastSessionsMap.forEach((s: any) => {
-        if (s.attendanceStatus === "present") {
-            s.lessons.forEach((l: any) => l.id && attendedLessonIds.add(l.id));
+    const attendedLessonIds: string[] = [];
+    pastSessionIds.forEach((sId) => {
+        const s = pastSessionsMap.get(sId);
+        if (s && s.attendanceStatus === "present") {
+            s.lessons.forEach((l: any) => {
+                if (l.id && !attendedLessonIds.includes(l.id)) {
+                    attendedLessonIds.push(l.id);
+                }
+            });
         }
     });
-    const ideasByLesson = await fetchIdeasByLesson(Array.from(attendedLessonIds));
+    const ideasByLesson = await fetchIdeasByLesson(attendedLessonIds);
 
-    // 3. Final response
-    const formattedSessions = Array.from(pastSessionsMap.values()).map((s: any) => {
+    const formattedSessions: any[] = [];
+    pastSessionIds.forEach((sId) => {
+        const s = pastSessionsMap.get(sId);
+        if (!s) return;
         const isAttended = s.attendanceStatus === "present";
-        const pdfs = resolvePdfs(s, studentPdfMap.get(s.id));
+        const effective = materialsMap.get(sId) || emptySessionMaterials();
+        const studentPdf = studentPdfsMap.get(sId);
+        const pdfData = resolvePdfs(s, isAttended, effective, studentPdf);
 
-        return {
-            ...s,
-            ...pdfs,
+        formattedSessions.push({
+            id: s.id,
+            name: s.name,
+            sessionDate: s.sessionDate,
+            timeFrom: s.timeFrom,
+            timeTo: s.timeTo,
+            sessionLink: s.sessionLink,
+            materialLink: s.materialLink,
+            sessionRelationalType: s.sessionRelationalType,
+            attendanceStatus: s.attendanceStatus,
+            attendedAt: s.attendedAt,
+            ...pdfData,
             lessons: s.lessons.map((l: any) => ({
                 ...l,
                 ideas: isAttended ? (ideasByLesson.get(l.id) || []) : [],
                 ideasLocked: !isAttended,
             })),
-        };
+        });
     });
 
     return SuccessResponse(res, formattedSessions);
@@ -412,7 +482,6 @@ export const getSessionDetails = async (req: Request, res: Response) => {
             sessionLink: sessions.session_link,
             materialLink: sessions.material_link,
             sessionRelationalType: sessions.sessionRelationalType,
-            session_pdf: sessions.session_pdf,
             teacher_explanation_pdf: sessions.teacher_explanation_pdf,
             teacherId: sessions.teacherId,
         })
@@ -447,21 +516,14 @@ export const getSessionDetails = async (req: Request, res: Response) => {
 
     const isAttended = attendance?.status === "present";
 
-    // PDFs (personal for Mistakes, else session-level)
-    let studentPdf: { session_pdf: string | null; teacher_explanation_pdf: string | null } | undefined;
-    if (session.sessionRelationalType === "Mistakes") {
-        [studentPdf] = await db
-            .select({
-                session_pdf: sessionStudentPdfs.session_pdf,
-                teacher_explanation_pdf: sessionStudentPdfs.teacher_explanation_pdf,
-            })
-            .from(sessionStudentPdfs)
-            .where(and(
-                eq(sessionStudentPdfs.sessionId, sessionId),
-                eq(sessionStudentPdfs.studentId, studentId)
-            ));
-    }
-    const pdfs = resolvePdfs(session, studentPdf);
+    const [materialsMap, studentPdfsMap] = await Promise.all([
+        resolveSessionMaterials([sessionId]),
+        fetchStudentPdfRows(studentId, [sessionId]),
+    ]);
+
+    const effective = materialsMap.get(sessionId) || emptySessionMaterials();
+    const studentPdf = studentPdfsMap.get(sessionId);
+    const pdfData = resolvePdfs(session, isAttended, effective, studentPdf);
 
     // Lessons
     const sessionLessonRows = await db
@@ -485,7 +547,7 @@ export const getSessionDetails = async (req: Request, res: Response) => {
         .from(sessionLessons)
         .innerJoin(lessons, eq(sessionLessons.lessonId, lessons.id))
         .leftJoin(chapters, eq(lessons.chapterId, chapters.id))
-        .leftJoin(courses, eq(lessons.courseId, courses.id))
+        .leftJoin(courses, eq(chapters.courseId, courses.id))
         .where(eq(sessionLessons.sessionId, sessionId));
 
     const ideasByLesson = isAttended
@@ -513,7 +575,7 @@ export const getSessionDetails = async (req: Request, res: Response) => {
             sessionLink: session.sessionLink,
             materialLink: session.materialLink,
             sessionRelationalType: session.sessionRelationalType,
-            ...pdfs,
+            ...pdfData,
             teacher: teacher ?? null,
             attendance: attendance
                 ? { status: attendance.status, attendedAt: attendance.attendedAt }
