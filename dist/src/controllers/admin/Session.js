@@ -169,11 +169,23 @@ const createSession = async (req, res) => {
         !sessionRelationalType ||
         !categoryId ||
         !subCategoryId ||
-        !courseId ||
-        !Array.isArray(chapterIds) || chapterIds.length === 0 ||
-        !Array.isArray(lessonIds) || lessonIds.length === 0) {
-        throw new BadRequest_1.BadRequest("Missing or invalid required fields: name, scheduleType, teacherId, sessionRelationalType, categoryId, subCategoryId, courseId, chapterIds[], lessonIds[]");
+        !courseId) {
+        throw new BadRequest_1.BadRequest("Missing or invalid required fields: name, scheduleType, teacherId, sessionRelationalType, categoryId, subCategoryId, courseId");
     }
+    if (chapterIds !== undefined && !Array.isArray(chapterIds)) {
+        throw new BadRequest_1.BadRequest("chapterIds must be an array");
+    }
+    if (sessionRelationalType !== "Exam" && (!Array.isArray(chapterIds) || chapterIds.length === 0)) {
+        throw new BadRequest_1.BadRequest("chapterIds[] is required and cannot be empty for non-Exam sessions");
+    }
+    const effectiveChapterIds = Array.isArray(chapterIds) ? chapterIds : [];
+    if (lessonIds !== undefined && !Array.isArray(lessonIds)) {
+        throw new BadRequest_1.BadRequest("lessonIds must be an array");
+    }
+    if (sessionRelationalType !== "Exam" && (!Array.isArray(lessonIds) || lessonIds.length === 0)) {
+        throw new BadRequest_1.BadRequest("lessonIds[] is required and cannot be empty for non-Exam sessions");
+    }
+    const effectiveLessonIds = Array.isArray(lessonIds) ? lessonIds : [];
     // ── 2. At least groups or students must be provided ───────────────────
     const hasGroups = Array.isArray(groupIds) && groupIds.length > 0;
     const hasStudents = Array.isArray(studentIds) && studentIds.length > 0;
@@ -253,23 +265,28 @@ const createSession = async (req, res) => {
         throw new BadRequest_1.BadRequest("Course does not belong to the selected sub-category");
     }
     // ── 7. Chapters validation ────────────────────────────────────────────
-    const chaptersList = await connection_1.db.select().from(schema_1.chapters).where((0, drizzle_orm_1.inArray)(schema_1.chapters.id, chapterIds));
-    if (chaptersList.length !== chapterIds.length) {
-        throw new BadRequest_1.BadRequest("One or more chapters not found");
-    }
-    const invalidChapters = chaptersList.filter(ch => ch.courseId !== courseId || ch.categoryId !== subCategoryId);
-    if (invalidChapters.length > 0) {
-        throw new BadRequest_1.BadRequest(`Chapters [${invalidChapters.map(c => c.id).join(", ")}] do not belong to the selected course / sub-category`);
+    if (effectiveChapterIds.length > 0) {
+        const chaptersList = await connection_1.db.select().from(schema_1.chapters).where((0, drizzle_orm_1.inArray)(schema_1.chapters.id, effectiveChapterIds));
+        if (chaptersList.length !== effectiveChapterIds.length) {
+            throw new BadRequest_1.BadRequest("One or more chapters not found");
+        }
+        const invalidChapters = chaptersList.filter(ch => ch.courseId !== courseId || ch.categoryId !== subCategoryId);
+        if (invalidChapters.length > 0) {
+            throw new BadRequest_1.BadRequest(`Chapters [${invalidChapters.map(c => c.id).join(", ")}] do not belong to the selected course / sub-category`);
+        }
     }
     // ── 8. Lessons validation ─────────────────────────────────────────────
-    const lessonsList = await connection_1.db.select().from(schema_1.lessons).where((0, drizzle_orm_1.inArray)(schema_1.lessons.id, lessonIds));
-    if (lessonsList.length !== lessonIds.length) {
-        throw new BadRequest_1.BadRequest("One or more lessons not found");
-    }
-    const chapterIdSet = new Set(chapterIds);
-    const invalidLessons = lessonsList.filter(l => l.courseId !== courseId || l.categoryId !== subCategoryId || !chapterIdSet.has(l.chapterId));
-    if (invalidLessons.length > 0) {
-        throw new BadRequest_1.BadRequest(`Lessons [${invalidLessons.map(l => l.id).join(", ")}] do not belong to the selected course / chapters / sub-category`);
+    if (effectiveLessonIds.length > 0) {
+        const lessonsList = await connection_1.db.select().from(schema_1.lessons).where((0, drizzle_orm_1.inArray)(schema_1.lessons.id, effectiveLessonIds));
+        if (lessonsList.length !== effectiveLessonIds.length) {
+            throw new BadRequest_1.BadRequest("One or more lessons not found");
+        }
+        const chapterIdSet = new Set(effectiveChapterIds);
+        const invalidLessons = lessonsList.filter(l => l.courseId !== courseId || l.categoryId !== subCategoryId ||
+            (chapterIdSet.size > 0 && !chapterIdSet.has(l.chapterId)));
+        if (invalidLessons.length > 0) {
+            throw new BadRequest_1.BadRequest(`Lessons [${invalidLessons.map(l => l.id).join(", ")}] do not belong to the selected course / chapters / sub-category`);
+        }
     }
     let linkedExam;
     if (examId) {
@@ -358,7 +375,7 @@ const createSession = async (req, res) => {
             teacher_explanation_pdf: null,
         });
         // ربط الدروس بالحصة الحالية
-        lessonIds.forEach((lessonId) => {
+        effectiveLessonIds.forEach((lessonId) => {
             lessonInserts.push({
                 id: (0, crypto_1.randomUUID)(),
                 sessionId,
@@ -393,7 +410,9 @@ const createSession = async (req, res) => {
         if (sessionUsersInserts.length > 0) {
             await tx.insert(Session_1.sessionUsers).values(sessionUsersInserts);
         }
-        await tx.insert(schema_1.sessionLessons).values(lessonInserts);
+        if (lessonInserts.length > 0) {
+            await tx.insert(schema_1.sessionLessons).values(lessonInserts);
+        }
     });
     if (sessionRelationalType === "Mistakes") {
         const targetStudentIds = hasStudents ? [...new Set(studentIds)] : Array.from(uniqueStudentIds);
@@ -406,7 +425,7 @@ const createSession = async (req, res) => {
                     name: s.name,
                     sessionDate: s.sessionDate,
                     timeFrom: s.timeFrom,
-                    lessonIds: lessonIds,
+                    lessonIds: effectiveLessonIds,
                 };
                 const { generated, skipped } = await (0, mistakesGenerator_1.generateMistakesPdfs)(req, target, targetStudentIds);
                 mistakeSessionsResults.push({
