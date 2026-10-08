@@ -1,7 +1,7 @@
 import PDFDocument from "pdfkit";
 
 export type MistakePdfQuestion = {
-    quizTitle: string;
+    sourceTitle: string;
     question: string;
     selectedAnswer: string;
     correctAnswer: string;
@@ -24,7 +24,7 @@ export const createMistakesPdf = (
     document.moveDown();
 
     questions.forEach((item, index) => {
-        document.fontSize(12).font("Helvetica-Bold").text(`${index + 1}. ${item.quizTitle}`);
+        document.fontSize(12).font("Helvetica-Bold").text(`${index + 1}. ${item.sourceTitle}`);
         document.font("Helvetica").text(item.question || "Question text unavailable");
         if (includeAnswers) {
             document.moveDown(0.3).font("Helvetica-Bold").text("Student answer:");

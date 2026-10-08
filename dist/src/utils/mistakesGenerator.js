@@ -27,82 +27,45 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
             ? target.sessionDate.toISOString().split("T")[0]
             : String(target.sessionDate).split("T")[0])
         : null;
-    // 1. Qualifying attended sessions and lessons per student
-    const attendedLessonRows = await connection_1.db
-        .select({
-        studentId: Session_1.sessionAttendance.studentId,
-        lessonId: Session_1.sessionLessons.lessonId,
-    })
-        .from(Session_1.sessionAttendance)
-        .innerJoin(Session_1.sessions, (0, drizzle_orm_1.eq)(Session_1.sessionAttendance.sessionId, Session_1.sessions.id))
-        .innerJoin(Session_1.sessionLessons, (0, drizzle_orm_1.eq)(Session_1.sessions.id, Session_1.sessionLessons.sessionId))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(Session_1.sessionAttendance.studentId, uniqueStudentIds), (0, drizzle_orm_1.eq)(Session_1.sessionAttendance.status, "present"), (0, drizzle_orm_1.sql) `${Session_1.sessions.id} <> ${target.id}`, (0, drizzle_orm_1.sql) `COALESCE(${Session_1.sessions.sessionRelationalType}, '') <> 'Mistakes'`, sessionDateStr
-        ? (0, drizzle_orm_1.sql) `(${Session_1.sessions.sessionDate} < ${sessionDateStr} OR (${Session_1.sessions.sessionDate} = ${sessionDateStr} AND ${Session_1.sessions.timeTo} <= ${target.timeFrom}))`
-        : undefined, (0, drizzle_orm_1.inArray)(Session_1.sessionLessons.lessonId, target.lessonIds)));
-    const studentQualifyingLessons = new Map();
-    attendedLessonRows.forEach(row => {
-        if (!studentQualifyingLessons.has(row.studentId)) {
-            studentQualifyingLessons.set(row.studentId, new Set());
-        }
-        studentQualifyingLessons.get(row.studentId).add(row.lessonId);
-    });
-    const studentsWithLessons = [];
-    uniqueStudentIds.forEach(studentId => {
-        const lessonsSet = studentQualifyingLessons.get(studentId);
-        if (!lessonsSet || lessonsSet.size === 0) {
-            skipped.push({ studentId, reason: "No qualifying attended sessions for selected lessons" });
-        }
-        else {
-            studentsWithLessons.push(studentId);
-        }
-    });
-    if (studentsWithLessons.length === 0) {
-        return { generated, skipped };
-    }
-    const allQualifyingLessonIdsSet = new Set();
-    studentsWithLessons.forEach(studentId => {
-        studentQualifyingLessons.get(studentId).forEach(lId => allQualifyingLessonIdsSet.add(lId));
-    });
-    const allQualifyingLessonIds = Array.from(allQualifyingLessonIdsSet);
-    // 2. Fetch completed/timed_out quiz attempts
+    // 1. Fetch completed/timed_out exam answers for the selected lessons.
     const selectedOption = (0, mysql_core_1.alias)(schema_1.questionOptions, "selected_option");
     const answers = await connection_1.db
         .select({
-        studentId: schema_1.quizAttempts.studentId,
-        attemptId: schema_1.quizAttempts.id,
-        startedAt: schema_1.quizAttempts.startedAt,
-        quizTitle: schema_1.quizzes.title,
-        lessonId: schema_1.quizzes.lessonId,
+        studentId: schema_1.examAttempts.studentId,
+        attemptId: schema_1.examAttempts.id,
+        startedAt: schema_1.examAttempts.startedAt,
+        endedAt: schema_1.examAttempts.endedAt,
+        examTitle: schema_1.Exams.title,
+        lessonId: schema_1.questions.lessonId,
         questionId: schema_1.questions.id,
         question: schema_1.questions.question,
         questionImage: schema_1.questions.image,
         selectedAnswer: selectedOption.answer,
-        gridInAnswer: schema_1.studentQuizAnswers.gridInAnswer,
-        isCorrect: schema_1.studentQuizAnswers.isCorrect,
-        createdAt: schema_1.studentQuizAnswers.createdAt,
+        gridInAnswer: schema_1.studentAnswers.gridInAnswer,
+        isCorrect: schema_1.studentAnswers.isCorrect,
+        createdAt: schema_1.studentAnswers.createdAt,
     })
-        .from(schema_1.studentQuizAnswers)
-        .innerJoin(schema_1.quizAttempts, (0, drizzle_orm_1.eq)(schema_1.studentQuizAnswers.attemptId, schema_1.quizAttempts.id))
-        .innerJoin(schema_1.quizzes, (0, drizzle_orm_1.eq)(schema_1.quizAttempts.quizId, schema_1.quizzes.id))
-        .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.studentQuizAnswers.questionId, schema_1.questions.id))
-        .leftJoin(selectedOption, (0, drizzle_orm_1.eq)(schema_1.studentQuizAnswers.selectedOptionId, selectedOption.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.quizAttempts.studentId, studentsWithLessons), (0, drizzle_orm_1.inArray)(schema_1.quizAttempts.status, ["completed", "timed_out"]), (0, drizzle_orm_1.inArray)(schema_1.quizzes.lessonId, allQualifyingLessonIds)))
-        .orderBy((0, drizzle_orm_1.asc)(schema_1.quizAttempts.startedAt), (0, drizzle_orm_1.asc)(schema_1.studentQuizAnswers.createdAt));
-    // 3. For each (student, question), only the latest answer counts
+        .from(schema_1.studentAnswers)
+        .innerJoin(schema_1.examAttempts, (0, drizzle_orm_1.eq)(schema_1.studentAnswers.attemptId, schema_1.examAttempts.id))
+        .innerJoin(schema_1.Exams, (0, drizzle_orm_1.eq)(schema_1.examAttempts.examId, schema_1.Exams.id))
+        .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.studentAnswers.questionId, schema_1.questions.id))
+        .leftJoin(selectedOption, (0, drizzle_orm_1.eq)(schema_1.studentAnswers.selectedOptionId, selectedOption.id))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.examAttempts.studentId, uniqueStudentIds), (0, drizzle_orm_1.inArray)(schema_1.examAttempts.status, ["completed", "timed_out"]), (0, drizzle_orm_1.inArray)(schema_1.questions.lessonId, target.lessonIds), sessionDateStr
+        ? (0, drizzle_orm_1.sql) `COALESCE(${schema_1.examAttempts.endedAt}, ${schema_1.examAttempts.startedAt}) <= CONCAT(${sessionDateStr}, ' ', ${target.timeFrom})`
+        : undefined))
+        .orderBy((0, drizzle_orm_1.asc)(schema_1.examAttempts.startedAt), (0, drizzle_orm_1.asc)(schema_1.studentAnswers.createdAt));
+    // 2. For each (student, question), only the latest exam answer counts.
     const latestAnswersByStudent = new Map();
-    studentsWithLessons.forEach(studentId => {
+    uniqueStudentIds.forEach(studentId => {
         latestAnswersByStudent.set(studentId, new Map());
     });
     answers.forEach(ans => {
-        if (!ans.lessonId || !studentQualifyingLessons.get(ans.studentId)?.has(ans.lessonId)) {
-            return;
-        }
         latestAnswersByStudent.get(ans.studentId).set(ans.questionId, ans);
     });
-    // 4. Identify wrong answers per student
+    // 3. Identify wrong exam answers per student.
     const studentWrongAnswers = new Map();
     const allWrongQuestionIds = new Set();
-    studentsWithLessons.forEach(studentId => {
+    uniqueStudentIds.forEach(studentId => {
         const studentMap = latestAnswersByStudent.get(studentId);
         const wrongList = [];
         studentMap.forEach(ans => {
@@ -112,7 +75,7 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
             }
         });
         if (wrongList.length === 0) {
-            skipped.push({ studentId, reason: "No quiz mistakes found" });
+            skipped.push({ studentId, reason: "No exam mistakes found for the selected lessons" });
         }
         else {
             studentWrongAnswers.set(studentId, wrongList);
@@ -122,7 +85,7 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
     if (candidateStudentIds.length === 0) {
         return { generated, skipped };
     }
-    // 5. Fetch correct options and explanations for all wrong questions
+    // 4. Fetch correct options and explanations for all wrong questions.
     const wrongQuestionIdsArray = Array.from(allWrongQuestionIds);
     const [options, explanations] = await Promise.all([
         connection_1.db.select({
@@ -137,7 +100,7 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
             video: schema_1.questionAnswers.video,
         }).from(schema_1.questionAnswers).where((0, drizzle_orm_1.inArray)(schema_1.questionAnswers.questionId, wrongQuestionIdsArray)),
     ]);
-    // 6. Generate PDFs and upsert
+    // 5. Generate PDFs and upsert.
     const uploadedUrls = [];
     const replacedUrls = [];
     const toUpsert = [];
@@ -162,7 +125,7 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
                     .join("\n\n");
                 const questionText = ans.question || (ans.questionImage ? `Image: ${ans.questionImage}` : "");
                 return {
-                    quizTitle: ans.quizTitle,
+                    sourceTitle: ans.examTitle,
                     question: questionText,
                     selectedAnswer: ans.selectedAnswer ?? ans.gridInAnswer ?? "No answer recorded",
                     correctAnswer: correctAnswer || "Correct answer unavailable",

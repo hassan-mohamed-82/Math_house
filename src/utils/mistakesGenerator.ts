@@ -1,11 +1,11 @@
 import { Request } from "express";
 import { randomUUID } from "crypto";
 import { db } from "../models/connection";
-import { sessions, sessionLessons, sessionAttendance, sessionStudentPdfs } from "../models/schema/admin/Session";
+import { sessionStudentPdfs } from "../models/schema/admin/Session";
 import {
-    quizzes,
-    quizAttempts,
-    studentQuizAnswers,
+    Exams,
+    examAttempts,
+    studentAnswers,
     questions,
     questionOptions,
     questionAnswers,
@@ -54,102 +54,55 @@ export const generateMistakesPdfs = async (
             : String(target.sessionDate).split("T")[0])
         : null;
 
-    // 1. Qualifying attended sessions and lessons per student
-    const attendedLessonRows = await db
-        .select({
-            studentId: sessionAttendance.studentId,
-            lessonId: sessionLessons.lessonId,
-        })
-        .from(sessionAttendance)
-        .innerJoin(sessions, eq(sessionAttendance.sessionId, sessions.id))
-        .innerJoin(sessionLessons, eq(sessions.id, sessionLessons.sessionId))
-        .where(and(
-            inArray(sessionAttendance.studentId, uniqueStudentIds),
-            eq(sessionAttendance.status, "present"),
-            sql`${sessions.id} <> ${target.id}`,
-            sql`COALESCE(${sessions.sessionRelationalType}, '') <> 'Mistakes'`,
-            sessionDateStr
-                ? sql`(${sessions.sessionDate} < ${sessionDateStr} OR (${sessions.sessionDate} = ${sessionDateStr} AND ${sessions.timeTo} <= ${target.timeFrom}))`
-                : undefined,
-            inArray(sessionLessons.lessonId, target.lessonIds)
-        ));
-
-    const studentQualifyingLessons = new Map<string, Set<string>>();
-    attendedLessonRows.forEach(row => {
-        if (!studentQualifyingLessons.has(row.studentId)) {
-            studentQualifyingLessons.set(row.studentId, new Set<string>());
-        }
-        studentQualifyingLessons.get(row.studentId)!.add(row.lessonId);
-    });
-
-    const studentsWithLessons: string[] = [];
-    uniqueStudentIds.forEach(studentId => {
-        const lessonsSet = studentQualifyingLessons.get(studentId);
-        if (!lessonsSet || lessonsSet.size === 0) {
-            skipped.push({ studentId, reason: "No qualifying attended sessions for selected lessons" });
-        } else {
-            studentsWithLessons.push(studentId);
-        }
-    });
-
-    if (studentsWithLessons.length === 0) {
-        return { generated, skipped };
-    }
-
-    const allQualifyingLessonIdsSet = new Set<string>();
-    studentsWithLessons.forEach(studentId => {
-        studentQualifyingLessons.get(studentId)!.forEach(lId => allQualifyingLessonIdsSet.add(lId));
-    });
-    const allQualifyingLessonIds = Array.from(allQualifyingLessonIdsSet);
-
-    // 2. Fetch completed/timed_out quiz attempts
+    // 1. Fetch completed/timed_out exam answers for the selected lessons.
     const selectedOption = alias(questionOptions, "selected_option");
 
     const answers = await db
         .select({
-            studentId: quizAttempts.studentId,
-            attemptId: quizAttempts.id,
-            startedAt: quizAttempts.startedAt,
-            quizTitle: quizzes.title,
-            lessonId: quizzes.lessonId,
+            studentId: examAttempts.studentId,
+            attemptId: examAttempts.id,
+            startedAt: examAttempts.startedAt,
+            endedAt: examAttempts.endedAt,
+            examTitle: Exams.title,
+            lessonId: questions.lessonId,
             questionId: questions.id,
             question: questions.question,
             questionImage: questions.image,
             selectedAnswer: selectedOption.answer,
-            gridInAnswer: studentQuizAnswers.gridInAnswer,
-            isCorrect: studentQuizAnswers.isCorrect,
-            createdAt: studentQuizAnswers.createdAt,
+            gridInAnswer: studentAnswers.gridInAnswer,
+            isCorrect: studentAnswers.isCorrect,
+            createdAt: studentAnswers.createdAt,
         })
-        .from(studentQuizAnswers)
-        .innerJoin(quizAttempts, eq(studentQuizAnswers.attemptId, quizAttempts.id))
-        .innerJoin(quizzes, eq(quizAttempts.quizId, quizzes.id))
-        .innerJoin(questions, eq(studentQuizAnswers.questionId, questions.id))
-        .leftJoin(selectedOption, eq(studentQuizAnswers.selectedOptionId, selectedOption.id))
+        .from(studentAnswers)
+        .innerJoin(examAttempts, eq(studentAnswers.attemptId, examAttempts.id))
+        .innerJoin(Exams, eq(examAttempts.examId, Exams.id))
+        .innerJoin(questions, eq(studentAnswers.questionId, questions.id))
+        .leftJoin(selectedOption, eq(studentAnswers.selectedOptionId, selectedOption.id))
         .where(and(
-            inArray(quizAttempts.studentId, studentsWithLessons),
-            inArray(quizAttempts.status, ["completed", "timed_out"]),
-            inArray(quizzes.lessonId, allQualifyingLessonIds)
+            inArray(examAttempts.studentId, uniqueStudentIds),
+            inArray(examAttempts.status, ["completed", "timed_out"]),
+            inArray(questions.lessonId, target.lessonIds),
+            sessionDateStr
+                ? sql`COALESCE(${examAttempts.endedAt}, ${examAttempts.startedAt}) <= CONCAT(${sessionDateStr}, ' ', ${target.timeFrom})`
+                : undefined
         ))
-        .orderBy(asc(quizAttempts.startedAt), asc(studentQuizAnswers.createdAt));
+        .orderBy(asc(examAttempts.startedAt), asc(studentAnswers.createdAt));
 
-    // 3. For each (student, question), only the latest answer counts
+    // 2. For each (student, question), only the latest exam answer counts.
     const latestAnswersByStudent = new Map<string, Map<string, typeof answers[0]>>();
-    studentsWithLessons.forEach(studentId => {
+    uniqueStudentIds.forEach(studentId => {
         latestAnswersByStudent.set(studentId, new Map());
     });
 
     answers.forEach(ans => {
-        if (!ans.lessonId || !studentQualifyingLessons.get(ans.studentId)?.has(ans.lessonId)) {
-            return;
-        }
         latestAnswersByStudent.get(ans.studentId)!.set(ans.questionId, ans);
     });
 
-    // 4. Identify wrong answers per student
+    // 3. Identify wrong exam answers per student.
     const studentWrongAnswers = new Map<string, Array<typeof answers[0]>>();
     const allWrongQuestionIds = new Set<string>();
 
-    studentsWithLessons.forEach(studentId => {
+    uniqueStudentIds.forEach(studentId => {
         const studentMap = latestAnswersByStudent.get(studentId)!;
         const wrongList: Array<typeof answers[0]> = [];
         studentMap.forEach(ans => {
@@ -160,7 +113,7 @@ export const generateMistakesPdfs = async (
         });
 
         if (wrongList.length === 0) {
-            skipped.push({ studentId, reason: "No quiz mistakes found" });
+            skipped.push({ studentId, reason: "No exam mistakes found for the selected lessons" });
         } else {
             studentWrongAnswers.set(studentId, wrongList);
         }
@@ -171,7 +124,7 @@ export const generateMistakesPdfs = async (
         return { generated, skipped };
     }
 
-    // 5. Fetch correct options and explanations for all wrong questions
+    // 4. Fetch correct options and explanations for all wrong questions.
     const wrongQuestionIdsArray = Array.from(allWrongQuestionIds);
     const [options, explanations] = await Promise.all([
         db.select({
@@ -187,7 +140,7 @@ export const generateMistakesPdfs = async (
         }).from(questionAnswers).where(inArray(questionAnswers.questionId, wrongQuestionIdsArray)),
     ]);
 
-    // 6. Generate PDFs and upsert
+    // 5. Generate PDFs and upsert.
     const uploadedUrls: string[] = [];
     const replacedUrls: Array<string | null> = [];
 
@@ -224,7 +177,7 @@ export const generateMistakesPdfs = async (
                 const questionText = ans.question || (ans.questionImage ? `Image: ${ans.questionImage}` : "");
 
                 return {
-                    quizTitle: ans.quizTitle,
+                    sourceTitle: ans.examTitle,
                     question: questionText,
                     selectedAnswer: ans.selectedAnswer ?? ans.gridInAnswer ?? "No answer recorded",
                     correctAnswer: correctAnswer || "Correct answer unavailable",
