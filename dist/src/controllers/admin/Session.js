@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteSessionStudentPdf = exports.upsertSessionStudentPdfs = exports.getStudentsCourseAttendance = exports.deleteSession = exports.updateSession = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.selectGroups = exports.selectTeachers = exports.selectStudents = exports.selectLesson = exports.selectChapter = exports.selectCourse = exports.selectSubCategory = exports.selectCategory = void 0;
+exports.deleteSessionStudentPdf = exports.upsertSessionStudentPdfs = exports.getStudentsCourseAttendance = exports.deleteSession = exports.updateSession = exports.regenerateMistakesSessionPdfs = exports.getSessionById = exports.getAllSessions = exports.createSession = exports.selectGroups = exports.selectTeachers = exports.selectStudents = exports.selectLesson = exports.selectChapter = exports.selectCourse = exports.selectSubCategory = exports.selectCategory = void 0;
 const crypto_1 = require("crypto");
 const connection_1 = require("../../models/connection");
 const Session_1 = require("../../models/schema/admin/Session");
@@ -423,16 +423,13 @@ const createSession = async (req, res) => {
                 const target = {
                     id: s.id,
                     name: s.name,
-                    sessionDate: s.sessionDate,
-                    timeFrom: s.timeFrom,
                     lessonIds: effectiveLessonIds,
                 };
-                const { generated, skipped } = await (0, mistakesGenerator_1.generateMistakesPdfs)(req, target, targetStudentIds);
+                const result = await (0, mistakesGenerator_1.generateMistakesPdfs)(req, target, targetStudentIds);
                 mistakeSessionsResults.push({
                     sessionId: s.id,
                     sessionName: s.name,
-                    generated,
-                    skipped,
+                    ...result,
                 });
             }
         }
@@ -483,7 +480,7 @@ const getAllSessions = async (req, res) => {
         .orderBy(Session_1.sessions.createdAt);
     // For each session, attach a lightweight groups + students summary
     const sessionIds = sessionsList.map(s => s.id);
-    const [materialsMap, groupsSummary, studentsSummary] = await Promise.all([
+    const [materialsMap, groupsSummary, studentsSummary, studentPdfsSummary] = await Promise.all([
         (0, sessionMaterials_1.resolveSessionMaterials)(sessionIds),
         sessionIds.length > 0
             ? connection_1.db.select({
@@ -505,6 +502,21 @@ const getAllSessions = async (req, res) => {
                 .innerJoin(schema_1.Student, (0, drizzle_orm_1.eq)(Session_1.sessionUsers.studentId, schema_1.Student.id))
                 .where((0, drizzle_orm_1.inArray)(Session_1.sessionUsers.sessionId, sessionIds))
             : Promise.resolve([]),
+        sessionIds.length > 0
+            ? connection_1.db.select({
+                sessionId: Session_1.sessionStudentPdfs.sessionId,
+                studentId: schema_1.Student.id,
+                studentName: (0, drizzle_orm_1.sql) `CONCAT(${schema_1.Student.firstname}, ' ', ${schema_1.Student.lastname})`.as("studentName"),
+                session_pdf: Session_1.sessionStudentPdfs.session_pdf,
+                session_answers_pdf: Session_1.sessionStudentPdfs.session_answers_pdf,
+                teacher_explanation_pdf: Session_1.sessionStudentPdfs.teacher_explanation_pdf,
+                createdAt: Session_1.sessionStudentPdfs.createdAt,
+                updatedAt: Session_1.sessionStudentPdfs.updatedAt,
+            })
+                .from(Session_1.sessionStudentPdfs)
+                .innerJoin(schema_1.Student, (0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.studentId, schema_1.Student.id))
+                .where((0, drizzle_orm_1.inArray)(Session_1.sessionStudentPdfs.sessionId, sessionIds))
+            : Promise.resolve([]),
     ]);
     // Map summaries by sessionId
     const groupsBySession = new Map();
@@ -519,8 +531,15 @@ const getAllSessions = async (req, res) => {
             studentsBySession.set(s.sessionId, []);
         studentsBySession.get(s.sessionId).push({ id: s.studentId, name: s.studentName });
     });
+    const studentPdfsBySession = new Map();
+    studentPdfsSummary.forEach(pdf => {
+        if (!studentPdfsBySession.has(pdf.sessionId))
+            studentPdfsBySession.set(pdf.sessionId, []);
+        studentPdfsBySession.get(pdf.sessionId).push(pdf);
+    });
     const result = sessionsList.map(session => {
         const mat = materialsMap.get(session.id) || (0, sessionMaterials_1.emptySessionMaterials)();
+        const sessionStudentPdfs = studentPdfsBySession.get(session.id) ?? [];
         const effectiveSessionPdfs = mat.materials
             .filter(material => material.session_pdf)
             .map(({ source, sourceId, name, session_pdf }) => ({ source, sourceId, name, pdf: session_pdf }));
@@ -538,6 +557,9 @@ const getAllSessions = async (req, res) => {
             groupCount: groupsBySession.get(session.id)?.length ?? 0,
             students: studentsBySession.get(session.id) ?? [],
             studentCount: studentsBySession.get(session.id)?.length ?? 0,
+            studentPdfs: session.sessionRelationalType === "Mistakes"
+                ? sessionStudentPdfs
+                : undefined,
         };
     });
     return (0, response_1.SuccessResponse)(res, { sessions: result }, 200);
@@ -696,6 +718,55 @@ const getSessionById = async (req, res) => {
     }, 200);
 };
 exports.getSessionById = getSessionById;
+const regenerateMistakesSessionPdfs = async (req, res) => {
+    const { id } = req.params;
+    const [session] = await connection_1.db
+        .select({
+        id: Session_1.sessions.id,
+        name: Session_1.sessions.name,
+        sessionDate: Session_1.sessions.sessionDate,
+        timeFrom: Session_1.sessions.timeFrom,
+        sessionRelationalType: Session_1.sessions.sessionRelationalType,
+    })
+        .from(Session_1.sessions)
+        .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, id))
+        .limit(1);
+    if (!session)
+        throw new Errors_1.NotFound("Session not found");
+    if (session.sessionRelationalType !== "Mistakes") {
+        throw new BadRequest_1.BadRequest("Mistakes PDFs can only be generated for Mistakes-type sessions");
+    }
+    const [lessonRows, directStudentRows, groupRows] = await Promise.all([
+        connection_1.db.select({ lessonId: schema_1.sessionLessons.lessonId })
+            .from(schema_1.sessionLessons)
+            .where((0, drizzle_orm_1.eq)(schema_1.sessionLessons.sessionId, id)),
+        connection_1.db.select({ studentId: Session_1.sessionUsers.studentId })
+            .from(Session_1.sessionUsers)
+            .where((0, drizzle_orm_1.eq)(Session_1.sessionUsers.sessionId, id)),
+        connection_1.db.select({ groupId: Session_1.sessionGroups.groupId })
+            .from(Session_1.sessionGroups)
+            .where((0, drizzle_orm_1.eq)(Session_1.sessionGroups.sessionId, id)),
+    ]);
+    const studentIds = new Set(directStudentRows.map(row => row.studentId));
+    const groupIds = [...new Set(groupRows.map(row => row.groupId))];
+    if (groupIds.length > 0) {
+        const groupStudentRows = await connection_1.db
+            .select({ studentId: Groups_1.groupStudents.studentId })
+            .from(Groups_1.groupStudents)
+            .where((0, drizzle_orm_1.inArray)(Groups_1.groupStudents.groupId, groupIds));
+        groupStudentRows.forEach(row => studentIds.add(row.studentId));
+    }
+    const result = await (0, mistakesGenerator_1.generateMistakesPdfs)(req, {
+        id: session.id,
+        name: session.name,
+        lessonIds: [...new Set(lessonRows.map(row => row.lessonId))],
+    }, [...studentIds]);
+    return (0, response_1.SuccessResponse)(res, {
+        sessionId: session.id,
+        ...result,
+    });
+};
+exports.regenerateMistakesSessionPdfs = regenerateMistakesSessionPdfs;
 const updateSession = async (req, res) => {
     const { id } = req.params;
     const { name, scheduleType, // "once" | "repeat"
@@ -1171,8 +1242,8 @@ const getStudentsCourseAttendance = async (req, res) => {
 };
 exports.getStudentsCourseAttendance = getStudentsCourseAttendance;
 /**
- * Generate individualized worksheet and answer PDFs from selected students'
- * wrong answers in completed quiz attempts for lessons linked to the session.
+ * Generate combined worksheet and answer PDFs from selected students' wrong
+ * answers in completed exams for lessons linked to the session.
  */
 const upsertSessionStudentPdfs = async (req, res) => {
     const { id: sessionId } = req.params;
@@ -1228,15 +1299,12 @@ const upsertSessionStudentPdfs = async (req, res) => {
     const target = {
         id: session.id,
         name: session.name,
-        sessionDate: session.sessionDate ? String(session.sessionDate) : null,
-        timeFrom: session.timeFrom,
         lessonIds,
     };
-    const { generated, skipped } = await (0, mistakesGenerator_1.generateMistakesPdfs)(req, target, targetStudentIds);
+    const result = await (0, mistakesGenerator_1.generateMistakesPdfs)(req, target, targetStudentIds);
     return (0, response_1.SuccessResponse)(res, {
-        message: "Student mistakes PDFs generated successfully",
-        students: generated,
-        skipped,
+        message: "Combined mistakes PDFs generated successfully",
+        ...result,
     }, 200);
 };
 exports.upsertSessionStudentPdfs = upsertSessionStudentPdfs;

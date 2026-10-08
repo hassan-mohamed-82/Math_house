@@ -11,6 +11,7 @@ import {
     getStudentsCourseAttendance,
     getAllSessions,
     getSessionById,
+    regenerateMistakesSessionPdfs,
     createSession,
     updateSession,
     deleteSession,
@@ -35,11 +36,12 @@ router.post("/students/attendance", requirePermission("sessions", "View"), catch
 router.get("/", requirePermission("sessions", "View"), catchAsync(getAllSessions));
 router.post("/", requirePermission("sessions", "Add"), catchAsync(createSession));
 router.get("/:id", requirePermission("sessions", "View"), catchAsync(getSessionById));
+router.post("/:id/generate-mistakes", requirePermission("sessions", "Edit"), catchAsync(regenerateMistakesSessionPdfs));
 router.put("/:id", requirePermission("sessions", "Edit"), catchAsync(updateSession));
 router.delete("/:id", requirePermission("sessions", "Delete"), catchAsync(deleteSession));
 
-// ── Per-student PDFs (Mistakes sessions) ──────────────────────────────────────
-// POST   /admin/sessions/:id/student-pdfs             — upsert per-student PDFs
+// ── Mistakes-session PDFs ─────────────────────────────────────────────────────
+// POST   /admin/sessions/:id/student-pdfs             — generate one combined PDF pair
 router.post("/:id/student-pdfs", requirePermission("sessions", "Edit"), catchAsync(upsertSessionStudentPdfs));
 // DELETE /admin/sessions/:id/student-pdfs/:studentId  — remove a student's PDF row
 router.delete("/:id/student-pdfs/:studentId", requirePermission("sessions", "Edit"), catchAsync(deleteSessionStudentPdf));

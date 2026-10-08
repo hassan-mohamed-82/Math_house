@@ -17,10 +17,11 @@ router.post("/students/attendance", (0, requirePermission_1.requirePermission)("
 router.get("/", (0, requirePermission_1.requirePermission)("sessions", "View"), (0, catchAsync_1.catchAsync)(Session_1.getAllSessions));
 router.post("/", (0, requirePermission_1.requirePermission)("sessions", "Add"), (0, catchAsync_1.catchAsync)(Session_1.createSession));
 router.get("/:id", (0, requirePermission_1.requirePermission)("sessions", "View"), (0, catchAsync_1.catchAsync)(Session_1.getSessionById));
+router.post("/:id/generate-mistakes", (0, requirePermission_1.requirePermission)("sessions", "Edit"), (0, catchAsync_1.catchAsync)(Session_1.regenerateMistakesSessionPdfs));
 router.put("/:id", (0, requirePermission_1.requirePermission)("sessions", "Edit"), (0, catchAsync_1.catchAsync)(Session_1.updateSession));
 router.delete("/:id", (0, requirePermission_1.requirePermission)("sessions", "Delete"), (0, catchAsync_1.catchAsync)(Session_1.deleteSession));
-// ── Per-student PDFs (Mistakes sessions) ──────────────────────────────────────
-// POST   /admin/sessions/:id/student-pdfs             — upsert per-student PDFs
+// ── Mistakes-session PDFs ─────────────────────────────────────────────────────
+// POST   /admin/sessions/:id/student-pdfs             — generate one combined PDF pair
 router.post("/:id/student-pdfs", (0, requirePermission_1.requirePermission)("sessions", "Edit"), (0, catchAsync_1.catchAsync)(Session_1.upsertSessionStudentPdfs));
 // DELETE /admin/sessions/:id/student-pdfs/:studentId  — remove a student's PDF row
 router.delete("/:id/student-pdfs/:studentId", (0, requirePermission_1.requirePermission)("sessions", "Edit"), (0, catchAsync_1.catchAsync)(Session_1.deleteSessionStudentPdf));

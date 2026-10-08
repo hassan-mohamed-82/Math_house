@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generateMistakesPdfs = void 0;
-const crypto_1 = require("crypto");
 const connection_1 = require("../models/connection");
 const Session_1 = require("../models/schema/admin/Session");
 const schema_1 = require("../models/schema");
@@ -13,25 +12,28 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
     const uniqueStudentIds = Array.from(new Set(studentIds));
     const generated = [];
     const skipped = [];
+    const emptyResult = () => ({
+        generated,
+        skipped,
+        mistakesCount: 0,
+        session_pdf: null,
+        session_answers_pdf: null,
+    });
     if (uniqueStudentIds.length === 0) {
-        return { generated, skipped };
+        return emptyResult();
     }
     if (!target.lessonIds || target.lessonIds.length === 0) {
         uniqueStudentIds.forEach(studentId => {
             skipped.push({ studentId, reason: "No lessons linked to session" });
         });
-        return { generated, skipped };
+        return emptyResult();
     }
-    const sessionDateStr = target.sessionDate
-        ? (target.sessionDate instanceof Date
-            ? target.sessionDate.toISOString().split("T")[0]
-            : String(target.sessionDate).split("T")[0])
-        : null;
     // 1. Fetch completed/timed_out exam answers for the selected lessons.
     const selectedOption = (0, mysql_core_1.alias)(schema_1.questionOptions, "selected_option");
     const answers = await connection_1.db
         .select({
         studentId: schema_1.examAttempts.studentId,
+        studentName: (0, drizzle_orm_1.sql) `CONCAT(${schema_1.Student.firstname}, ' ', ${schema_1.Student.lastname})`,
         attemptId: schema_1.examAttempts.id,
         startedAt: schema_1.examAttempts.startedAt,
         endedAt: schema_1.examAttempts.endedAt,
@@ -47,12 +49,11 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
     })
         .from(schema_1.studentAnswers)
         .innerJoin(schema_1.examAttempts, (0, drizzle_orm_1.eq)(schema_1.studentAnswers.attemptId, schema_1.examAttempts.id))
+        .innerJoin(schema_1.Student, (0, drizzle_orm_1.eq)(schema_1.examAttempts.studentId, schema_1.Student.id))
         .innerJoin(schema_1.Exams, (0, drizzle_orm_1.eq)(schema_1.examAttempts.examId, schema_1.Exams.id))
         .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.studentAnswers.questionId, schema_1.questions.id))
         .leftJoin(selectedOption, (0, drizzle_orm_1.eq)(schema_1.studentAnswers.selectedOptionId, selectedOption.id))
-        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.examAttempts.studentId, uniqueStudentIds), (0, drizzle_orm_1.inArray)(schema_1.examAttempts.status, ["completed", "timed_out"]), (0, drizzle_orm_1.inArray)(schema_1.questions.lessonId, target.lessonIds), sessionDateStr
-        ? (0, drizzle_orm_1.sql) `COALESCE(${schema_1.examAttempts.endedAt}, ${schema_1.examAttempts.startedAt}) <= CONCAT(${sessionDateStr}, ' ', ${target.timeFrom})`
-        : undefined))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.examAttempts.studentId, uniqueStudentIds), (0, drizzle_orm_1.inArray)(schema_1.examAttempts.status, ["completed", "timed_out"]), (0, drizzle_orm_1.inArray)(schema_1.questions.lessonId, target.lessonIds)))
         .orderBy((0, drizzle_orm_1.asc)(schema_1.examAttempts.startedAt), (0, drizzle_orm_1.asc)(schema_1.studentAnswers.createdAt));
     // 2. For each (student, question), only the latest exam answer counts.
     const latestAnswersByStudent = new Map();
@@ -83,7 +84,7 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
     });
     const candidateStudentIds = Array.from(studentWrongAnswers.keys());
     if (candidateStudentIds.length === 0) {
-        return { generated, skipped };
+        return emptyResult();
     }
     // 4. Fetch correct options and explanations for all wrong questions.
     const wrongQuestionIdsArray = Array.from(allWrongQuestionIds);
@@ -100,14 +101,31 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
             video: schema_1.questionAnswers.video,
         }).from(schema_1.questionAnswers).where((0, drizzle_orm_1.inArray)(schema_1.questionAnswers.questionId, wrongQuestionIdsArray)),
     ]);
-    // 5. Generate PDFs and upsert.
+    // 5. Generate one combined PDF pair for the session.
     const uploadedUrls = [];
-    const replacedUrls = [];
-    const toUpsert = [];
+    const mistakes = [];
+    let totalMistakes = 0;
+    const [existingSession] = await connection_1.db
+        .select({
+        session_pdf: Session_1.sessions.session_pdf,
+        session_answers_pdf: Session_1.sessions.session_answers_pdf,
+    })
+        .from(Session_1.sessions)
+        .where((0, drizzle_orm_1.eq)(Session_1.sessions.id, target.id))
+        .limit(1);
+    const existingStudentPdfs = await connection_1.db
+        .select({
+        session_pdf: Session_1.sessionStudentPdfs.session_pdf,
+        session_answers_pdf: Session_1.sessionStudentPdfs.session_answers_pdf,
+    })
+        .from(Session_1.sessionStudentPdfs)
+        .where((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.sessionId, target.id));
+    let sessionPdfUrl;
+    let answersPdfUrl;
     try {
         for (const studentId of candidateStudentIds) {
             const wrongList = studentWrongAnswers.get(studentId);
-            const mistakes = wrongList.map(ans => {
+            const studentMistakes = wrongList.map(ans => {
                 const correctList = options
                     .filter(o => o.questionId === ans.questionId && o.isCorrect)
                     .map(o => o.answer)
@@ -125,6 +143,7 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
                     .join("\n\n");
                 const questionText = ans.question || (ans.questionImage ? `Image: ${ans.questionImage}` : "");
                 return {
+                    studentName: ans.studentName,
                     sourceTitle: ans.examTitle,
                     question: questionText,
                     selectedAnswer: ans.selectedAnswer ?? ans.gridInAnswer ?? "No answer recorded",
@@ -132,49 +151,26 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
                     explanation: explanationText,
                 };
             });
-            const worksheetBuffer = await (0, mistakesPdf_1.createMistakesPdf)(`${target.name} - Mistakes`, mistakes, false);
-            const answersBuffer = await (0, mistakesPdf_1.createMistakesPdf)(`${target.name} - Mistakes Answers`, mistakes, true);
-            const sessionPdfUrl = await (0, handleImages_1.validateAndSavePdf)(req, `data:application/pdf;base64,${worksheetBuffer.toString("base64")}`, "session-pdfs");
-            uploadedUrls.push(sessionPdfUrl);
-            const answersPdfUrl = await (0, handleImages_1.validateAndSavePdf)(req, `data:application/pdf;base64,${answersBuffer.toString("base64")}`, "session-pdfs");
-            uploadedUrls.push(answersPdfUrl);
-            toUpsert.push({
-                studentId,
+            mistakes.push(...studentMistakes);
+            totalMistakes += studentMistakes.length;
+            generated.push({ studentId, mistakesCount: studentMistakes.length });
+        }
+        const worksheetBuffer = await (0, mistakesPdf_1.createMistakesPdf)(`${target.name} - Mistakes`, mistakes, false);
+        const answersBuffer = await (0, mistakesPdf_1.createMistakesPdf)(`${target.name} - Mistakes Answers`, mistakes, true);
+        sessionPdfUrl = await (0, handleImages_1.validateAndSavePdf)(req, `data:application/pdf;base64,${worksheetBuffer.toString("base64")}`, "session-pdfs");
+        uploadedUrls.push(sessionPdfUrl);
+        answersPdfUrl = await (0, handleImages_1.validateAndSavePdf)(req, `data:application/pdf;base64,${answersBuffer.toString("base64")}`, "session-pdfs");
+        uploadedUrls.push(answersPdfUrl);
+        await connection_1.db.transaction(async (tx) => {
+            await tx.update(Session_1.sessions).set({
                 session_pdf: sessionPdfUrl,
                 session_answers_pdf: answersPdfUrl,
-                mistakesCount: mistakes.length,
-            });
-        }
-        // Upsert in one transaction
-        await connection_1.db.transaction(async (tx) => {
-            for (const item of toUpsert) {
-                const [existing] = await tx
-                    .select({
-                    id: Session_1.sessionStudentPdfs.id,
-                    session_pdf: Session_1.sessionStudentPdfs.session_pdf,
-                    session_answers_pdf: Session_1.sessionStudentPdfs.session_answers_pdf,
-                    teacher_explanation_pdf: Session_1.sessionStudentPdfs.teacher_explanation_pdf,
-                })
-                    .from(Session_1.sessionStudentPdfs)
-                    .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.sessionId, target.id), (0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.studentId, item.studentId)));
-                if (existing) {
-                    replacedUrls.push(existing.session_pdf, existing.session_answers_pdf, existing.teacher_explanation_pdf);
-                    await tx.update(Session_1.sessionStudentPdfs).set({
-                        session_pdf: item.session_pdf,
-                        session_answers_pdf: item.session_answers_pdf,
-                        teacher_explanation_pdf: null,
-                    }).where((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.id, existing.id));
-                }
-                else {
-                    await tx.insert(Session_1.sessionStudentPdfs).values({
-                        id: (0, crypto_1.randomUUID)(),
-                        sessionId: target.id,
-                        studentId: item.studentId,
-                        session_pdf: item.session_pdf,
-                        session_answers_pdf: item.session_answers_pdf,
-                        teacher_explanation_pdf: null,
-                    });
-                }
+            }).where((0, drizzle_orm_1.eq)(Session_1.sessions.id, target.id));
+            if (existingStudentPdfs.length > 0) {
+                await tx.update(Session_1.sessionStudentPdfs).set({
+                    session_pdf: null,
+                    session_answers_pdf: null,
+                }).where((0, drizzle_orm_1.eq)(Session_1.sessionStudentPdfs.sessionId, target.id));
             }
         });
     }
@@ -182,16 +178,20 @@ const generateMistakesPdfs = async (req, target, studentIds) => {
         await Promise.all(uploadedUrls.map(url => (0, handleImages_1.deleteImage)(url)));
         throw error;
     }
-    // After successful commit, delete replaced old files
-    await Promise.all(replacedUrls
+    await Promise.all([
+        existingSession?.session_pdf,
+        existingSession?.session_answers_pdf,
+        ...existingStudentPdfs.flatMap(pdf => [pdf.session_pdf, pdf.session_answers_pdf]),
+    ]
+        .filter((url, index, urls) => !!url && urls.indexOf(url) === index)
         .filter((url) => !!url && url.includes("/uploads/"))
         .map(url => (0, handleImages_1.deleteImage)(url)));
-    toUpsert.forEach(item => {
-        generated.push({
-            studentId: item.studentId,
-            mistakesCount: item.mistakesCount,
-        });
-    });
-    return { generated, skipped };
+    return {
+        generated,
+        skipped,
+        mistakesCount: totalMistakes,
+        session_pdf: sessionPdfUrl,
+        session_answers_pdf: answersPdfUrl,
+    };
 };
 exports.generateMistakesPdfs = generateMistakesPdfs;

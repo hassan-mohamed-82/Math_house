@@ -87,17 +87,16 @@ export const sessionAttendance = mysqlTable("session_attendance", {
 ]);
 
 /**
- * Per-student PDFs for "Mistakes"-type sessions.
+ * Optional per-student overrides and teacher explanations for "Mistakes" sessions.
  *
- * For Mistakes sessions the admin can target specific students with their own
- * blank PDF (session_pdf) and answers PDF (session_answers_pdf).
- * The teacher can then upload a personalised explanation PDF (teacher_explanation_pdf)
- * per student after reviewing their mistakes.
+ * Generated mistakes worksheets and answer keys are combined for all students
+ * and stored on the session itself. This table supports individual overrides
+ * and teacher explanations after reviewing a student's mistakes.
  *
  * Flow:
- *  Admin  →  creates rows here with session_pdf + session_answers_pdf
- *  Teacher → reads session_pdf + session_answers_pdf, then uploads teacher_explanation_pdf
- *  Student → sees session_pdf + teacher_explanation_pdf (once teacher uploads it)
+ *  Admin  →  may add a per-student override
+ *  Teacher → may upload a personalised teacher_explanation_pdf
+ *  Student → receives the shared session PDF, or their individual override
  */
 export const sessionStudentPdfs = mysqlTable("session_student_pdfs", {
     id:        char("id",         { length: 36 }).primaryKey().default(sql`(UUID())`),

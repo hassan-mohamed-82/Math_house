@@ -1,9 +1,9 @@
 import { Request } from "express";
-import { randomUUID } from "crypto";
 import { db } from "../models/connection";
-import { sessionStudentPdfs } from "../models/schema/admin/Session";
+import { sessions, sessionStudentPdfs } from "../models/schema/admin/Session";
 import {
     Exams,
+    Student,
     examAttempts,
     studentAnswers,
     questions,
@@ -18,14 +18,15 @@ import { createMistakesPdf, MistakePdfQuestion } from "./mistakesPdf";
 export type MistakesTarget = {
     id: string;
     name: string;
-    sessionDate: string | Date | null;
-    timeFrom: string;
     lessonIds: string[];
 };
 
 export type GenerateMistakesResult = {
     generated: Array<{ studentId: string; mistakesCount: number }>;
     skipped: Array<{ studentId: string; reason: string }>;
+    mistakesCount: number;
+    session_pdf: string | null;
+    session_answers_pdf: string | null;
 };
 
 export const generateMistakesPdfs = async (
@@ -36,23 +37,24 @@ export const generateMistakesPdfs = async (
     const uniqueStudentIds = Array.from(new Set(studentIds));
     const generated: Array<{ studentId: string; mistakesCount: number }> = [];
     const skipped: Array<{ studentId: string; reason: string }> = [];
+    const emptyResult = (): GenerateMistakesResult => ({
+        generated,
+        skipped,
+        mistakesCount: 0,
+        session_pdf: null,
+        session_answers_pdf: null,
+    });
 
     if (uniqueStudentIds.length === 0) {
-        return { generated, skipped };
+        return emptyResult();
     }
 
     if (!target.lessonIds || target.lessonIds.length === 0) {
         uniqueStudentIds.forEach(studentId => {
             skipped.push({ studentId, reason: "No lessons linked to session" });
         });
-        return { generated, skipped };
+        return emptyResult();
     }
-
-    const sessionDateStr = target.sessionDate
-        ? (target.sessionDate instanceof Date
-            ? target.sessionDate.toISOString().split("T")[0]
-            : String(target.sessionDate).split("T")[0])
-        : null;
 
     // 1. Fetch completed/timed_out exam answers for the selected lessons.
     const selectedOption = alias(questionOptions, "selected_option");
@@ -60,6 +62,7 @@ export const generateMistakesPdfs = async (
     const answers = await db
         .select({
             studentId: examAttempts.studentId,
+            studentName: sql<string>`CONCAT(${Student.firstname}, ' ', ${Student.lastname})`,
             attemptId: examAttempts.id,
             startedAt: examAttempts.startedAt,
             endedAt: examAttempts.endedAt,
@@ -75,16 +78,14 @@ export const generateMistakesPdfs = async (
         })
         .from(studentAnswers)
         .innerJoin(examAttempts, eq(studentAnswers.attemptId, examAttempts.id))
+        .innerJoin(Student, eq(examAttempts.studentId, Student.id))
         .innerJoin(Exams, eq(examAttempts.examId, Exams.id))
         .innerJoin(questions, eq(studentAnswers.questionId, questions.id))
         .leftJoin(selectedOption, eq(studentAnswers.selectedOptionId, selectedOption.id))
         .where(and(
             inArray(examAttempts.studentId, uniqueStudentIds),
             inArray(examAttempts.status, ["completed", "timed_out"]),
-            inArray(questions.lessonId, target.lessonIds),
-            sessionDateStr
-                ? sql`COALESCE(${examAttempts.endedAt}, ${examAttempts.startedAt}) <= CONCAT(${sessionDateStr}, ' ', ${target.timeFrom})`
-                : undefined
+            inArray(questions.lessonId, target.lessonIds)
         ))
         .orderBy(asc(examAttempts.startedAt), asc(studentAnswers.createdAt));
 
@@ -121,7 +122,7 @@ export const generateMistakesPdfs = async (
 
     const candidateStudentIds = Array.from(studentWrongAnswers.keys());
     if (candidateStudentIds.length === 0) {
-        return { generated, skipped };
+        return emptyResult();
     }
 
     // 4. Fetch correct options and explanations for all wrong questions.
@@ -140,22 +141,32 @@ export const generateMistakesPdfs = async (
         }).from(questionAnswers).where(inArray(questionAnswers.questionId, wrongQuestionIdsArray)),
     ]);
 
-    // 5. Generate PDFs and upsert.
+    // 5. Generate one combined PDF pair for the session.
     const uploadedUrls: string[] = [];
-    const replacedUrls: Array<string | null> = [];
-
-    type UpsertItem = {
-        studentId: string;
-        session_pdf: string;
-        session_answers_pdf: string;
-        mistakesCount: number;
-    };
-    const toUpsert: UpsertItem[] = [];
+    const mistakes: MistakePdfQuestion[] = [];
+    let totalMistakes = 0;
+    const [existingSession] = await db
+        .select({
+            session_pdf: sessions.session_pdf,
+            session_answers_pdf: sessions.session_answers_pdf,
+        })
+        .from(sessions)
+        .where(eq(sessions.id, target.id))
+        .limit(1);
+    const existingStudentPdfs = await db
+        .select({
+            session_pdf: sessionStudentPdfs.session_pdf,
+            session_answers_pdf: sessionStudentPdfs.session_answers_pdf,
+        })
+        .from(sessionStudentPdfs)
+        .where(eq(sessionStudentPdfs.sessionId, target.id));
+    let sessionPdfUrl: string;
+    let answersPdfUrl: string;
 
     try {
         for (const studentId of candidateStudentIds) {
             const wrongList = studentWrongAnswers.get(studentId)!;
-            const mistakes: MistakePdfQuestion[] = wrongList.map(ans => {
+            const studentMistakes: MistakePdfQuestion[] = wrongList.map(ans => {
                 const correctList = options
                     .filter(o => o.questionId === ans.questionId && o.isCorrect)
                     .map(o => o.answer)
@@ -177,6 +188,7 @@ export const generateMistakesPdfs = async (
                 const questionText = ans.question || (ans.questionImage ? `Image: ${ans.questionImage}` : "");
 
                 return {
+                    studentName: ans.studentName,
                     sourceTitle: ans.examTitle,
                     question: questionText,
                     selectedAnswer: ans.selectedAnswer ?? ans.gridInAnswer ?? "No answer recorded",
@@ -185,68 +197,39 @@ export const generateMistakesPdfs = async (
                 };
             });
 
-            const worksheetBuffer = await createMistakesPdf(`${target.name} - Mistakes`, mistakes, false);
-            const answersBuffer = await createMistakesPdf(`${target.name} - Mistakes Answers`, mistakes, true);
-
-            const sessionPdfUrl = await validateAndSavePdf(
-                req,
-                `data:application/pdf;base64,${worksheetBuffer.toString("base64")}`,
-                "session-pdfs"
-            );
-            uploadedUrls.push(sessionPdfUrl);
-
-            const answersPdfUrl = await validateAndSavePdf(
-                req,
-                `data:application/pdf;base64,${answersBuffer.toString("base64")}`,
-                "session-pdfs"
-            );
-            uploadedUrls.push(answersPdfUrl);
-
-            toUpsert.push({
-                studentId,
-                session_pdf: sessionPdfUrl,
-                session_answers_pdf: answersPdfUrl,
-                mistakesCount: mistakes.length,
-            });
+            mistakes.push(...studentMistakes);
+            totalMistakes += studentMistakes.length;
+            generated.push({ studentId, mistakesCount: studentMistakes.length });
         }
 
-        // Upsert in one transaction
-        await db.transaction(async (tx) => {
-            for (const item of toUpsert) {
-                const [existing] = await tx
-                    .select({
-                        id: sessionStudentPdfs.id,
-                        session_pdf: sessionStudentPdfs.session_pdf,
-                        session_answers_pdf: sessionStudentPdfs.session_answers_pdf,
-                        teacher_explanation_pdf: sessionStudentPdfs.teacher_explanation_pdf,
-                    })
-                    .from(sessionStudentPdfs)
-                    .where(and(
-                        eq(sessionStudentPdfs.sessionId, target.id),
-                        eq(sessionStudentPdfs.studentId, item.studentId)
-                    ));
+        const worksheetBuffer = await createMistakesPdf(`${target.name} - Mistakes`, mistakes, false);
+        const answersBuffer = await createMistakesPdf(`${target.name} - Mistakes Answers`, mistakes, true);
 
-                if (existing) {
-                    replacedUrls.push(
-                        existing.session_pdf,
-                        existing.session_answers_pdf,
-                        existing.teacher_explanation_pdf
-                    );
-                    await tx.update(sessionStudentPdfs).set({
-                        session_pdf: item.session_pdf,
-                        session_answers_pdf: item.session_answers_pdf,
-                        teacher_explanation_pdf: null,
-                    }).where(eq(sessionStudentPdfs.id, existing.id));
-                } else {
-                    await tx.insert(sessionStudentPdfs).values({
-                        id: randomUUID(),
-                        sessionId: target.id,
-                        studentId: item.studentId,
-                        session_pdf: item.session_pdf,
-                        session_answers_pdf: item.session_answers_pdf,
-                        teacher_explanation_pdf: null,
-                    });
-                }
+        sessionPdfUrl = await validateAndSavePdf(
+            req,
+            `data:application/pdf;base64,${worksheetBuffer.toString("base64")}`,
+            "session-pdfs"
+        );
+        uploadedUrls.push(sessionPdfUrl);
+
+        answersPdfUrl = await validateAndSavePdf(
+            req,
+            `data:application/pdf;base64,${answersBuffer.toString("base64")}`,
+            "session-pdfs"
+        );
+        uploadedUrls.push(answersPdfUrl);
+
+        await db.transaction(async tx => {
+            await tx.update(sessions).set({
+                session_pdf: sessionPdfUrl,
+                session_answers_pdf: answersPdfUrl,
+            }).where(eq(sessions.id, target.id));
+
+            if (existingStudentPdfs.length > 0) {
+                await tx.update(sessionStudentPdfs).set({
+                    session_pdf: null,
+                    session_answers_pdf: null,
+                }).where(eq(sessionStudentPdfs.sessionId, target.id));
             }
         });
     } catch (error) {
@@ -254,19 +237,22 @@ export const generateMistakesPdfs = async (
         throw error;
     }
 
-    // After successful commit, delete replaced old files
     await Promise.all(
-        replacedUrls
+        [
+            existingSession?.session_pdf,
+            existingSession?.session_answers_pdf,
+            ...existingStudentPdfs.flatMap(pdf => [pdf.session_pdf, pdf.session_answers_pdf]),
+        ]
+            .filter((url, index, urls): url is string => !!url && urls.indexOf(url) === index)
             .filter((url): url is string => !!url && url.includes("/uploads/"))
             .map(url => deleteImage(url))
     );
 
-    toUpsert.forEach(item => {
-        generated.push({
-            studentId: item.studentId,
-            mistakesCount: item.mistakesCount,
-        });
-    });
-
-    return { generated, skipped };
+    return {
+        generated,
+        skipped,
+        mistakesCount: totalMistakes,
+        session_pdf: sessionPdfUrl,
+        session_answers_pdf: answersPdfUrl,
+    };
 };

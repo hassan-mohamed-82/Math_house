@@ -14,7 +14,7 @@ const createMistakesPdf = (title, questions, includeAnswers) => new Promise((res
     document.fontSize(18).text(title, { underline: true });
     document.moveDown();
     questions.forEach((item, index) => {
-        document.fontSize(12).font("Helvetica-Bold").text(`${index + 1}. ${item.sourceTitle}`);
+        document.fontSize(12).font("Helvetica-Bold").text(`${index + 1}. ${item.studentName} - ${item.sourceTitle}`);
         document.font("Helvetica").text(item.question || "Question text unavailable");
         if (includeAnswers) {
             document.moveDown(0.3).font("Helvetica-Bold").text("Student answer:");

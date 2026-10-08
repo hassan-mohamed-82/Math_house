@@ -513,6 +513,9 @@ export const createSession = async (req: Request, res: Response) => {
             sessionName: string;
             generated: Array<{ studentId: string; mistakesCount: number }>;
             skipped: Array<{ studentId: string; reason: string }>;
+            mistakesCount: number;
+            session_pdf: string | null;
+            session_answers_pdf: string | null;
         }> = [];
         let mistakesError: string | undefined;
 
@@ -521,16 +524,14 @@ export const createSession = async (req: Request, res: Response) => {
                 const target = {
                     id: s.id,
                     name: s.name,
-                    sessionDate: s.sessionDate,
-                    timeFrom: s.timeFrom,
                     lessonIds: effectiveLessonIds,
                 };
-                const { generated, skipped } = await generateMistakesPdfs(req, target, targetStudentIds);
+                const result = await generateMistakesPdfs(req, target, targetStudentIds);
+
                 mistakeSessionsResults.push({
                     sessionId: s.id,
                     sessionName: s.name,
-                    generated,
-                    skipped,
+                    ...result,
                 });
             }
         } catch (err: any) {
@@ -586,7 +587,7 @@ export const getAllSessions = async (req: Request, res: Response) => {
     // For each session, attach a lightweight groups + students summary
     const sessionIds = sessionsList.map(s => s.id);
 
-    const [materialsMap, groupsSummary, studentsSummary] = await Promise.all([
+    const [materialsMap, groupsSummary, studentsSummary, studentPdfsSummary] = await Promise.all([
         resolveSessionMaterials(sessionIds),
         sessionIds.length > 0
             ? db.select({
@@ -608,6 +609,21 @@ export const getAllSessions = async (req: Request, res: Response) => {
                 .innerJoin(Student, eq(sessionUsers.studentId, Student.id))
                 .where(inArray(sessionUsers.sessionId, sessionIds))
             : Promise.resolve([]),
+        sessionIds.length > 0
+            ? db.select({
+                sessionId: sessionStudentPdfs.sessionId,
+                studentId: Student.id,
+                studentName: sql<string>`CONCAT(${Student.firstname}, ' ', ${Student.lastname})`.as("studentName"),
+                session_pdf: sessionStudentPdfs.session_pdf,
+                session_answers_pdf: sessionStudentPdfs.session_answers_pdf,
+                teacher_explanation_pdf: sessionStudentPdfs.teacher_explanation_pdf,
+                createdAt: sessionStudentPdfs.createdAt,
+                updatedAt: sessionStudentPdfs.updatedAt,
+            })
+                .from(sessionStudentPdfs)
+                .innerJoin(Student, eq(sessionStudentPdfs.studentId, Student.id))
+                .where(inArray(sessionStudentPdfs.sessionId, sessionIds))
+            : Promise.resolve([]),
     ]);
 
     // Map summaries by sessionId
@@ -623,12 +639,31 @@ export const getAllSessions = async (req: Request, res: Response) => {
         studentsBySession.get(s.sessionId)!.push({ id: s.studentId, name: s.studentName });
     });
 
+    const studentPdfsBySession = new Map<string, Array<(typeof studentPdfsSummary)[number]>>();
+    studentPdfsSummary.forEach(pdf => {
+        if (!studentPdfsBySession.has(pdf.sessionId)) studentPdfsBySession.set(pdf.sessionId, []);
+        studentPdfsBySession.get(pdf.sessionId)!.push(pdf);
+    });
+
     const result = sessionsList.map(session => {
         const mat = materialsMap.get(session.id) || emptySessionMaterials();
-        const effectiveSessionPdfs = mat.materials
+        const sessionStudentPdfs = studentPdfsBySession.get(session.id) ?? [];
+        const effectiveSessionPdfs: Array<{
+            source: string;
+            sourceId: string;
+            name: string;
+            pdf: string | null;
+            studentId?: string;
+        }> = mat.materials
             .filter(material => material.session_pdf)
             .map(({ source, sourceId, name, session_pdf }) => ({ source, sourceId, name, pdf: session_pdf }));
-        const effectiveSessionAnswersPdfs = mat.materials
+        const effectiveSessionAnswersPdfs: Array<{
+            source: string;
+            sourceId: string;
+            name: string;
+            pdf: string | null;
+            studentId?: string;
+        }> = mat.materials
             .filter(material => material.session_answers_pdf)
             .map(({ source, sourceId, name, session_answers_pdf }) => ({ source, sourceId, name, pdf: session_answers_pdf }));
         return {
@@ -642,6 +677,9 @@ export const getAllSessions = async (req: Request, res: Response) => {
             groupCount:    groupsBySession.get(session.id)?.length  ?? 0,
             students:      studentsBySession.get(session.id) ?? [],
             studentCount:  studentsBySession.get(session.id)?.length ?? 0,
+            studentPdfs: session.sessionRelationalType === "Mistakes"
+                ? sessionStudentPdfs
+                : undefined,
         };
     });
 
@@ -794,13 +832,24 @@ export const getSessionById = async (req: Request, res: Response) => {
 
     const materialsMap = await resolveSessionMaterials([id]);
     const mat = materialsMap.get(id) || emptySessionMaterials();
-    const effectiveSessionPdfs = mat.materials
+    const effectiveSessionPdfs: Array<{
+        source: string;
+        sourceId: string;
+        name: string;
+        pdf: string | null;
+        studentId?: string;
+    }> = mat.materials
         .filter(material => material.session_pdf)
         .map(({ source, sourceId, name, session_pdf }) => ({ source, sourceId, name, pdf: session_pdf }));
-    const effectiveSessionAnswersPdfs = mat.materials
+    const effectiveSessionAnswersPdfs: Array<{
+        source: string;
+        sourceId: string;
+        name: string;
+        pdf: string | null;
+        studentId?: string;
+    }> = mat.materials
         .filter(material => material.session_answers_pdf)
         .map(({ source, sourceId, name, session_answers_pdf }) => ({ source, sourceId, name, pdf: session_answers_pdf }));
-
     return SuccessResponse(res, {
         session: {
             ...session[0],
@@ -817,6 +866,59 @@ export const getSessionById = async (req: Request, res: Response) => {
             studentPdfs: session[0].sessionRelationalType === "Mistakes" ? studentPdfs : undefined,
         },
     }, 200);
+};
+
+export const regenerateMistakesSessionPdfs = async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const [session] = await db
+        .select({
+            id: sessions.id,
+            name: sessions.name,
+            sessionDate: sessions.sessionDate,
+            timeFrom: sessions.timeFrom,
+            sessionRelationalType: sessions.sessionRelationalType,
+        })
+        .from(sessions)
+        .where(eq(sessions.id, id))
+        .limit(1);
+
+    if (!session) throw new NotFound("Session not found");
+    if (session.sessionRelationalType !== "Mistakes") {
+        throw new BadRequest("Mistakes PDFs can only be generated for Mistakes-type sessions");
+    }
+
+    const [lessonRows, directStudentRows, groupRows] = await Promise.all([
+        db.select({ lessonId: sessionLessons.lessonId })
+            .from(sessionLessons)
+            .where(eq(sessionLessons.sessionId, id)),
+        db.select({ studentId: sessionUsers.studentId })
+            .from(sessionUsers)
+            .where(eq(sessionUsers.sessionId, id)),
+        db.select({ groupId: sessionGroups.groupId })
+            .from(sessionGroups)
+            .where(eq(sessionGroups.sessionId, id)),
+    ]);
+
+    const studentIds = new Set(directStudentRows.map(row => row.studentId));
+    const groupIds = [...new Set(groupRows.map(row => row.groupId))];
+    if (groupIds.length > 0) {
+        const groupStudentRows = await db
+            .select({ studentId: groupStudents.studentId })
+            .from(groupStudents)
+            .where(inArray(groupStudents.groupId, groupIds));
+        groupStudentRows.forEach(row => studentIds.add(row.studentId));
+    }
+
+    const result = await generateMistakesPdfs(req, {
+        id: session.id,
+        name: session.name,
+        lessonIds: [...new Set(lessonRows.map(row => row.lessonId))],
+    }, [...studentIds]);
+
+    return SuccessResponse(res, {
+        sessionId: session.id,
+        ...result,
+    });
 };
 
 
@@ -1401,8 +1503,8 @@ export const getStudentsCourseAttendance = async (req: Request, res: Response) =
 };
 
 /**
- * Generate individualized worksheet and answer PDFs from selected students'
- * wrong answers in completed quiz attempts for lessons linked to the session.
+ * Generate combined worksheet and answer PDFs from selected students' wrong
+ * answers in completed exams for lessons linked to the session.
  */
 export const upsertSessionStudentPdfs = async (req: Request, res: Response) => {
     const { id: sessionId } = req.params;
@@ -1461,17 +1563,14 @@ export const upsertSessionStudentPdfs = async (req: Request, res: Response) => {
     const target = {
         id: session.id,
         name: session.name,
-        sessionDate: session.sessionDate ? String(session.sessionDate) : null,
-        timeFrom: session.timeFrom,
         lessonIds,
     };
 
-    const { generated, skipped } = await generateMistakesPdfs(req, target, targetStudentIds);
+    const result = await generateMistakesPdfs(req, target, targetStudentIds);
 
     return SuccessResponse(res, {
-        message: "Student mistakes PDFs generated successfully",
-        students: generated,
-        skipped,
+        message: "Combined mistakes PDFs generated successfully",
+        ...result,
     }, 200);
 };
 
