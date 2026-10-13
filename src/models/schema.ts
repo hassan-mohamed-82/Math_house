@@ -42,6 +42,7 @@ export * from "./schema/admin/grade";
 export * from "./schema/admin/prices";
 export * from "./schema/admin/SessionRatingQuestions";
 export * from "./schema/admin/ExtraHomework";
+export * from "./schema/admin/StudentAvailabilityPlan";
 
 // Drive schema
 export * from "../drive/models/drive";

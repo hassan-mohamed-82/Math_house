@@ -32,6 +32,7 @@ import reportsRouter from "./reports"
 import sessionRatingQuestionsRouter from "./SessionRatingQuestions"
 import sessionRatingRouter from "./SessionRating"
 import extraHomeworkRouter from "./ExtraHomework"
+import availabilityPlanRouter from "./availabilityPlan"
 import { authenticated } from "../../middlewares/authenticated";
 import { authorizeRoles } from "../../middlewares/authorized";
 import authRouter from "./auth"
@@ -49,6 +50,7 @@ router.use("/session", sessionRouter)
 router.use("/session-ratings", sessionRatingRouter)
 router.use("/rating-questions", sessionRatingQuestionsRouter)
 router.use("/extra-homework", extraHomeworkRouter)
+router.use("/availability-plans", availabilityPlanRouter)
 router.use("/package", packageRouter)
 router.use("/student", studentRouter)
 router.use("/parent", parentRouter)

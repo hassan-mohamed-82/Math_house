@@ -1,0 +1,384 @@
+import { Request, Response } from "express";
+import { randomUUID } from "crypto";
+import { db } from "../../models/connection";
+import {
+    studentAvailabilityPlans,
+    studentAvailabilitySlots,
+    studentPlanSessions
+} from "../../models/schema/admin/StudentAvailabilityPlan";
+import { Student } from "../../models/schema/admin/Student";
+import { sessions, sessionUsers } from "../../models/schema/admin/Session";
+import { teachers } from "../../models/schema/admin/teacher";
+import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { SuccessResponse } from "../../utils/response";
+import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
+import { sendStudentNotification } from "../../utils/studentNotification";
+
+const getStudentId = (req: Request): string => {
+    if (!req.user?.id) throw new UnauthorizedError("Not authenticated");
+    return req.user.id;
+};
+
+// ── 1. Create Availability Plan ──────────────────────────────────────────────
+export const createAvailabilityPlan = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { title, notes, slots } = req.body;
+
+    const [existingStudent] = await db
+        .select({ id: Student.id })
+        .from(Student)
+        .where(eq(Student.id, studentId))
+        .limit(1);
+
+    if (!existingStudent) {
+        throw new NotFound("Student not found");
+    }
+
+    const planId = randomUUID();
+
+    await db.insert(studentAvailabilityPlans).values({
+        id: planId,
+        studentId,
+        title,
+        notes: notes || null,
+        status: "pending_admin_review",
+    });
+
+    const slotInserts = slots.map((s: any) => ({
+        id: randomUUID(),
+        planId,
+        dayOfWeek: s.dayOfWeek || null,
+        specificDate: s.specificDate ? s.specificDate : null,
+        timeFrom: s.timeFrom,
+        timeTo: s.timeTo,
+    }));
+
+    await db.insert(studentAvailabilitySlots).values(slotInserts);
+
+    const [createdPlan] = await db
+        .select()
+        .from(studentAvailabilityPlans)
+        .where(eq(studentAvailabilityPlans.id, planId));
+
+    const createdSlots = await db
+        .select()
+        .from(studentAvailabilitySlots)
+        .where(eq(studentAvailabilitySlots.planId, planId));
+
+    return SuccessResponse(res, {
+        message: "Availability plan submitted successfully. Admin will review and propose sessions.",
+        plan: {
+            ...createdPlan,
+            slots: createdSlots,
+        },
+    }, 201);
+};
+
+// ── 2. Get My Availability Plans ─────────────────────────────────────────────
+export const getMyAvailabilityPlans = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { status, page = "1", limit = "10" } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit as string, 10) || 10);
+    const offset = (pageNum - 1) * limitNum;
+
+    const conditions = [eq(studentAvailabilityPlans.studentId, studentId)];
+    if (status && typeof status === "string") {
+        conditions.push(eq(studentAvailabilityPlans.status, status as any));
+    }
+
+    const whereClause = and(...conditions);
+
+    const [countResult] = await db
+        .select({ count: sql<number>`COUNT(*)` })
+        .from(studentAvailabilityPlans)
+        .where(whereClause);
+
+    const total = Number(countResult?.count || 0);
+
+    const plans = await db
+        .select({
+            id: studentAvailabilityPlans.id,
+            title: studentAvailabilityPlans.title,
+            status: studentAvailabilityPlans.status,
+            notes: studentAvailabilityPlans.notes,
+            adminNotes: studentAvailabilityPlans.adminNotes,
+            studentFeedback: studentAvailabilityPlans.studentFeedback,
+            proposedAt: studentAvailabilityPlans.proposedAt,
+            respondedAt: studentAvailabilityPlans.respondedAt,
+            createdAt: studentAvailabilityPlans.createdAt,
+            updatedAt: studentAvailabilityPlans.updatedAt,
+        })
+        .from(studentAvailabilityPlans)
+        .where(whereClause)
+        .orderBy(desc(studentAvailabilityPlans.createdAt))
+        .limit(limitNum)
+        .offset(offset);
+
+    // Fetch slots and session counts for these plans
+    const planIds: string[] = plans.map((p) => p.id as string);
+    let slotsMap: Record<string, any[]> = {};
+    let sessionCountMap: Record<string, number> = {};
+
+    if (planIds.length > 0) {
+        const allSlots = await db
+            .select()
+            .from(studentAvailabilitySlots)
+            .where(inArray(studentAvailabilitySlots.planId, planIds));
+
+        for (const slot of allSlots) {
+            if (!slotsMap[slot.planId]) slotsMap[slot.planId] = [];
+            slotsMap[slot.planId].push(slot);
+        }
+
+        const sessionCounts = await db
+            .select({
+                planId: studentPlanSessions.planId,
+                count: sql<number>`COUNT(*)`,
+            })
+            .from(studentPlanSessions)
+            .where(inArray(studentPlanSessions.planId, planIds))
+            .groupBy(studentPlanSessions.planId);
+
+        for (const sc of sessionCounts) {
+            sessionCountMap[sc.planId] = Number(sc.count);
+        }
+    }
+
+    const items = plans.map((p) => ({
+        ...p,
+        slots: slotsMap[p.id as string] || [],
+        proposedSessionsCount: sessionCountMap[p.id as string] || 0,
+    }));
+
+    return SuccessResponse(res, {
+        items,
+        pagination: {
+            page: pageNum,
+            limit: limitNum,
+            total,
+            totalPages: Math.ceil(total / limitNum),
+        },
+    });
+};
+
+// ── 3. Get Single Availability Plan by ID ───────────────────────────────────
+export const getMyAvailabilityPlanById = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { id } = req.params;
+
+    const [plan] = await db
+        .select({
+            id: studentAvailabilityPlans.id,
+            studentId: studentAvailabilityPlans.studentId,
+            title: studentAvailabilityPlans.title,
+            notes: studentAvailabilityPlans.notes,
+            status: studentAvailabilityPlans.status,
+            adminNotes: studentAvailabilityPlans.adminNotes,
+            studentFeedback: studentAvailabilityPlans.studentFeedback,
+            proposedAt: studentAvailabilityPlans.proposedAt,
+            respondedAt: studentAvailabilityPlans.respondedAt,
+            createdAt: studentAvailabilityPlans.createdAt,
+            updatedAt: studentAvailabilityPlans.updatedAt,
+        })
+        .from(studentAvailabilityPlans)
+        .where(
+            and(
+                eq(studentAvailabilityPlans.id, id),
+                eq(studentAvailabilityPlans.studentId, studentId)
+            )
+        )
+        .limit(1);
+
+    if (!plan) {
+        throw new NotFound("Availability plan not found");
+    }
+
+    const slots = await db
+        .select()
+        .from(studentAvailabilitySlots)
+        .where(eq(studentAvailabilitySlots.planId, id));
+
+    // Fetch proposed sessions with details
+    const proposedSessions = await db
+        .select({
+            planSessionId: studentPlanSessions.id,
+            planSessionNotes: studentPlanSessions.notes,
+            orderIndex: studentPlanSessions.orderIndex,
+            sessionId: sessions.id,
+            sessionName: sessions.name,
+            scheduleType: sessions.scheduleType,
+            sessionDate: sessions.sessionDate,
+            startDate: sessions.startDate,
+            endDate: sessions.endDate,
+            timeFrom: sessions.timeFrom,
+            timeTo: sessions.timeTo,
+            sessionLink: sessions.session_link,
+            sessionRelationalType: sessions.sessionRelationalType,
+            teacherId: sessions.teacherId,
+            teacherName: teachers.name,
+        })
+        .from(studentPlanSessions)
+        .innerJoin(sessions, eq(studentPlanSessions.sessionId, sessions.id))
+        .leftJoin(teachers, eq(sessions.teacherId, teachers.id))
+        .where(eq(studentPlanSessions.planId, id))
+        .orderBy(studentPlanSessions.orderIndex, sessions.sessionDate, sessions.timeFrom);
+
+    return SuccessResponse(res, {
+        plan: {
+            ...plan,
+            slots,
+            proposedSessions,
+        },
+    });
+};
+
+// ── 4. Respond to Proposed Plan (Accept / Reject) ───────────────────────────
+export const respondToProposedPlan = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { id } = req.params;
+    const { action, feedback } = req.body;
+
+    const [plan] = await db
+        .select()
+        .from(studentAvailabilityPlans)
+        .where(
+            and(
+                eq(studentAvailabilityPlans.id, id),
+                eq(studentAvailabilityPlans.studentId, studentId)
+            )
+        )
+        .limit(1);
+
+    if (!plan) {
+        throw new NotFound("Availability plan not found");
+    }
+
+    if (plan.status === "pending_admin_review") {
+        throw new BadRequest("The admin has not yet proposed sessions for this plan.");
+    }
+
+    if (plan.status === "accepted") {
+        throw new BadRequest("This plan has already been accepted.");
+    }
+
+    if (plan.status === "cancelled") {
+        throw new BadRequest("This plan was cancelled and cannot be responded to.");
+    }
+
+    if (action === "accept") {
+        // Fetch all assigned sessions
+        const assignedSessions = await db
+            .select({ sessionId: studentPlanSessions.sessionId })
+            .from(studentPlanSessions)
+            .where(eq(studentPlanSessions.planId, id));
+
+        if (assignedSessions.length === 0) {
+            throw new BadRequest("Cannot accept a plan with no proposed sessions.");
+        }
+
+        const sessionIds = assignedSessions.map((s) => s.sessionId);
+
+        // Find which sessions the student is not yet enrolled in
+        const existingEnrollments = await db
+            .select({ sessionId: sessionUsers.sessionId })
+            .from(sessionUsers)
+            .where(
+                and(
+                    eq(sessionUsers.studentId, studentId),
+                    inArray(sessionUsers.sessionId, sessionIds)
+                )
+            );
+
+        const enrolledSet = new Set(existingEnrollments.map((e) => e.sessionId));
+        const newEnrollments = sessionIds
+            .filter((sId) => !enrolledSet.has(sId))
+            .map((sId) => ({
+                id: randomUUID(),
+                sessionId: sId,
+                studentId,
+            }));
+
+        if (newEnrollments.length > 0) {
+            await db.insert(sessionUsers).values(newEnrollments);
+        }
+
+        // Update plan status
+        await db
+            .update(studentAvailabilityPlans)
+            .set({
+                status: "accepted",
+                studentFeedback: feedback || null,
+                respondedAt: new Date(),
+            })
+            .where(eq(studentAvailabilityPlans.id, id));
+
+        await sendStudentNotification(
+            studentId,
+            `You have successfully accepted the study plan "${plan.title}". You are now enrolled in ${sessionIds.length} sessions!`
+        );
+
+        return SuccessResponse(res, {
+            message: `Plan accepted successfully! You are now enrolled in ${sessionIds.length} sessions.`,
+            enrolledCount: sessionIds.length,
+            newlyEnrolledCount: newEnrollments.length,
+            status: "accepted",
+        });
+    }
+
+    if (action === "reject") {
+        await db
+            .update(studentAvailabilityPlans)
+            .set({
+                status: "rejected",
+                studentFeedback: feedback || null,
+                respondedAt: new Date(),
+            })
+            .where(eq(studentAvailabilityPlans.id, id));
+
+        await sendStudentNotification(
+            studentId,
+            `You have rejected the proposed schedule for "${plan.title}". The admin will review your feedback and propose alternative sessions.`
+        );
+
+        return SuccessResponse(res, {
+            message: "Plan rejected. Your feedback has been recorded for admin review.",
+            status: "rejected",
+        });
+    }
+
+    throw new BadRequest("Invalid action. Must be 'accept' or 'reject'.");
+};
+
+// ── 5. Cancel Plan (Only if pending admin review) ───────────────────────────
+export const cancelAvailabilityPlan = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { id } = req.params;
+
+    const [plan] = await db
+        .select()
+        .from(studentAvailabilityPlans)
+        .where(
+            and(
+                eq(studentAvailabilityPlans.id, id),
+                eq(studentAvailabilityPlans.studentId, studentId)
+            )
+        )
+        .limit(1);
+
+    if (!plan) {
+        throw new NotFound("Availability plan not found");
+    }
+
+    if (plan.status !== "pending_admin_review") {
+        throw new BadRequest("Cannot cancel a plan that has already been processed or answered.");
+    }
+
+    await db
+        .update(studentAvailabilityPlans)
+        .set({ status: "cancelled" })
+        .where(eq(studentAvailabilityPlans.id, id));
+
+    return SuccessResponse(res, { message: "Availability plan cancelled successfully." });
+};

@@ -19,6 +19,7 @@ import reportsRouter from "./reports";
 import promoCodesRouter from "./promoCodes";
 import sessionRatingRouter from "./SessionRating";
 import extraHomeworkRouter from "./ExtraHomework";
+import availabilityPlanRouter from "./availabilityPlan";
 import { authorizeRoles } from "../../middlewares/authorized";
 import { authenticated } from "../../middlewares/authenticated";
 const router = Router()
@@ -31,6 +32,7 @@ router.use("/payment", paymentRouter)
 router.use("/sessions", attendsRouter)
 router.use("/session-ratings", sessionRatingRouter)
 router.use("/extra-homework", extraHomeworkRouter)
+router.use("/availability-plans", availabilityPlanRouter)
 router.use("/packages", packagesRouter)
 router.use("/exams", examsRouter)
 router.use("/diagnostic-exams", diagnosticExamRouter)

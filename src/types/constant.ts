@@ -34,6 +34,7 @@ export const MODULES = [
     "sessions",
     "session_ratings",
     "session_rating_questions",
+    "availability_plans",
 
     // ── Assessment & Homework ─────────────────────────────────────
     "extra_homework",
