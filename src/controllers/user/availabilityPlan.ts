@@ -382,3 +382,84 @@ export const cancelAvailabilityPlan = async (req: Request, res: Response) => {
 
     return SuccessResponse(res, { message: "Availability plan cancelled successfully." });
 };
+
+// ── 6. Update Availability Plan ─────────────────────────────────────────────
+export const updateAvailabilityPlan = async (req: Request, res: Response) => {
+    const studentId = getStudentId(req);
+    const { id } = req.params;
+    const { title, notes, slots } = req.body;
+
+    const [plan] = await db
+        .select()
+        .from(studentAvailabilityPlans)
+        .where(
+            and(
+                eq(studentAvailabilityPlans.id, id),
+                eq(studentAvailabilityPlans.studentId, studentId)
+            )
+        )
+        .limit(1);
+
+    if (!plan) {
+        throw new NotFound("Availability plan not found");
+    }
+
+    if (plan.status === "accepted") {
+        throw new BadRequest("Cannot update an already accepted plan.");
+    }
+
+    if (plan.status === "cancelled") {
+        throw new BadRequest("Cannot update a cancelled plan.");
+    }
+
+    const updateData: any = {};
+    if (title !== undefined) updateData.title = title;
+    if (notes !== undefined) updateData.notes = notes;
+
+    // If slots are updated, reset status back to pending_admin_review if it was rejected or proposed
+    if (slots && slots.length > 0) {
+        if (plan.status === "rejected" || plan.status === "plan_proposed") {
+            updateData.status = "pending_admin_review";
+        }
+    }
+
+    if (Object.keys(updateData).length > 0) {
+        await db
+            .update(studentAvailabilityPlans)
+            .set(updateData)
+            .where(eq(studentAvailabilityPlans.id, id));
+    }
+
+    if (slots && Array.isArray(slots) && slots.length > 0) {
+        await db.delete(studentAvailabilitySlots).where(eq(studentAvailabilitySlots.planId, id));
+
+        const slotInserts = slots.map((s: any) => ({
+            id: randomUUID(),
+            planId: id,
+            dayOfWeek: s.dayOfWeek || null,
+            specificDate: s.specificDate ? s.specificDate : null,
+            timeFrom: s.timeFrom,
+            timeTo: s.timeTo,
+        }));
+
+        await db.insert(studentAvailabilitySlots).values(slotInserts);
+    }
+
+    const [updatedPlan] = await db
+        .select()
+        .from(studentAvailabilityPlans)
+        .where(eq(studentAvailabilityPlans.id, id));
+
+    const updatedSlots = await db
+        .select()
+        .from(studentAvailabilitySlots)
+        .where(eq(studentAvailabilitySlots.planId, id));
+
+    return SuccessResponse(res, {
+        message: "Availability plan updated successfully.",
+        plan: {
+            ...updatedPlan,
+            slots: updatedSlots,
+        },
+    });
+};

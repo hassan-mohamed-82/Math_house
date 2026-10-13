@@ -43,6 +43,12 @@ export const createAvailabilityPlanSchema = z.object({
     slots: z.array(availabilitySlotSchema).min(1, "Please provide at least one availability slot"),
 });
 
+export const updateAvailabilityPlanSchema = z.object({
+    title: z.string().min(2, "Title must be at least 2 characters").max(255).optional(),
+    notes: z.string().optional(),
+    slots: z.array(availabilitySlotSchema).min(1, "Please provide at least one availability slot").optional(),
+});
+
 export const respondToPlanSchema = z.object({
     action: z.enum(["accept", "reject"]),
     feedback: z.string().max(1000).optional(),
