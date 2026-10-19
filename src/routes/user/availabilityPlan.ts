@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
     createAvailabilityPlan,
+    getAvailableSlots,
     getMyAvailabilityPlans,
     getMyAvailabilityPlanById,
     respondToProposedPlan,
@@ -18,6 +19,7 @@ import {
 const router = Router();
 
 // Student Availability Plans routes
+router.get("/slots", catchAsync(getAvailableSlots));
 router.post("/", validate(createAvailabilityPlanSchema), catchAsync(createAvailabilityPlan));
 router.get("/", catchAsync(getMyAvailabilityPlans));
 router.get("/:id", catchAsync(getMyAvailabilityPlanById));

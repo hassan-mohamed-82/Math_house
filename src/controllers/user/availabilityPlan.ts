@@ -4,12 +4,14 @@ import { db } from "../../models/connection";
 import {
     studentAvailabilityPlans,
     studentAvailabilitySlots,
-    studentPlanSessions
+    studentPlanSessions,
+    adminAvailabilitySlots,
+    DAYS_OF_WEEK,
 } from "../../models/schema/admin/StudentAvailabilityPlan";
 import { Student } from "../../models/schema/admin/Student";
 import { sessions, sessionUsers } from "../../models/schema/admin/Session";
 import { teachers } from "../../models/schema/admin/teacher";
-import { eq, and, desc, sql, inArray } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 import { sendStudentNotification } from "../../utils/studentNotification";
@@ -19,10 +21,148 @@ const getStudentId = (req: Request): string => {
     return req.user.id;
 };
 
+// ── Helper: Resolve slots from admin templates or custom slot inputs ──────────
+const resolveAndPrepareSlots = async (planId: string, slotIds?: string[], slots?: any[]) => {
+    const slotInserts: any[] = [];
+
+    // Option 1: Direct array of admin slot IDs selected by student
+    if (Array.isArray(slotIds) && slotIds.length > 0) {
+        const foundAdminSlots = await db
+            .select()
+            .from(adminAvailabilitySlots)
+            .where(
+                and(
+                    inArray(adminAvailabilitySlots.id, slotIds),
+                    eq(adminAvailabilitySlots.isActive, true)
+                )
+            );
+
+        if (foundAdminSlots.length !== slotIds.length) {
+            throw new BadRequest("One or more selected slots are invalid or no longer active.");
+        }
+
+        for (const adminSlot of foundAdminSlots) {
+            slotInserts.push({
+                id: randomUUID(),
+                planId,
+                adminSlotId: adminSlot.id,
+                dayOfWeek: adminSlot.dayOfWeek,
+                specificDate: null,
+                timeFrom: adminSlot.timeFrom,
+                timeTo: adminSlot.timeTo,
+            });
+        }
+    } else if (Array.isArray(slots) && slots.length > 0) {
+        // Option 2: Array of slot objects (each may specify slotId and/or specificDate / custom times)
+        const refIds = slots.filter((s: any) => s.slotId).map((s: any) => s.slotId);
+        let adminSlotsMap: Record<string, any> = {};
+
+        if (refIds.length > 0) {
+            const foundAdminSlots = await db
+                .select()
+                .from(adminAvailabilitySlots)
+                .where(
+                    and(
+                        inArray(adminAvailabilitySlots.id, refIds),
+                        eq(adminAvailabilitySlots.isActive, true)
+                    )
+                );
+
+            if (foundAdminSlots.length !== refIds.length) {
+                throw new BadRequest("One or more selected slots are invalid or no longer active.");
+            }
+
+            for (const as of foundAdminSlots) {
+                adminSlotsMap[as.id] = as;
+            }
+        }
+
+        for (const s of slots) {
+            if (s.slotId && adminSlotsMap[s.slotId]) {
+                const adminSlot = adminSlotsMap[s.slotId];
+                slotInserts.push({
+                    id: randomUUID(),
+                    planId,
+                    adminSlotId: adminSlot.id,
+                    dayOfWeek: adminSlot.dayOfWeek,
+                    specificDate: s.specificDate ? s.specificDate : null,
+                    timeFrom: adminSlot.timeFrom,
+                    timeTo: adminSlot.timeTo,
+                });
+            } else {
+                slotInserts.push({
+                    id: randomUUID(),
+                    planId,
+                    adminSlotId: null,
+                    dayOfWeek: s.dayOfWeek || null,
+                    specificDate: s.specificDate ? s.specificDate : null,
+                    timeFrom: s.timeFrom,
+                    timeTo: s.timeTo,
+                });
+            }
+        }
+    }
+
+    return slotInserts;
+};
+
+// ── 0. Get Available Slots for Students ──────────────────────────────────────
+// Returns all 7 days of the week and all active slots defined by the admin
+export const getAvailableSlots = async (req: Request, res: Response) => {
+    const { dayOfWeek } = req.query;
+
+    const conditions: any[] = [eq(adminAvailabilitySlots.isActive, true)];
+
+    if (dayOfWeek && typeof dayOfWeek === "string") {
+        conditions.push(eq(adminAvailabilitySlots.dayOfWeek, dayOfWeek as any));
+    }
+
+    const allSlots = await db
+        .select()
+        .from(adminAvailabilitySlots)
+        .where(and(...conditions))
+        .orderBy(asc(adminAvailabilitySlots.dayOfWeek), asc(adminAvailabilitySlots.timeFrom));
+
+    const grouped: Record<string, any[]> = {
+        Saturday: [],
+        Sunday: [],
+        Monday: [],
+        Tuesday: [],
+        Wednesday: [],
+        Thursday: [],
+        Friday: [],
+    };
+
+    for (const slot of allSlots) {
+        if (grouped[slot.dayOfWeek]) {
+            grouped[slot.dayOfWeek].push(slot);
+        }
+    }
+
+    // Sort slots within each day by timeFrom ascending
+    for (const day of DAYS_OF_WEEK) {
+        grouped[day].sort((a, b) => a.timeFrom.localeCompare(b.timeFrom));
+    }
+
+    const days = DAYS_OF_WEEK.map((day) => ({
+        dayOfWeek: day,
+        count: grouped[day].length,
+        slots: grouped[day],
+    }));
+
+    return SuccessResponse(res, {
+        message: "Available slots retrieved successfully",
+        total: allSlots.length,
+        days,
+        grouped,
+        slots: allSlots,
+    });
+};
+
 // ── 1. Create Availability Plan ──────────────────────────────────────────────
 export const createAvailabilityPlan = async (req: Request, res: Response) => {
     const studentId = getStudentId(req);
-    const { title, notes, slots } = req.body;
+    const { title, notes, slots, slotIds } = req.body;
 
     const [existingStudent] = await db
         .select({ id: Student.id })
@@ -44,14 +184,11 @@ export const createAvailabilityPlan = async (req: Request, res: Response) => {
         status: "pending_admin_review",
     });
 
-    const slotInserts = slots.map((s: any) => ({
-        id: randomUUID(),
-        planId,
-        dayOfWeek: s.dayOfWeek || null,
-        specificDate: s.specificDate ? s.specificDate : null,
-        timeFrom: s.timeFrom,
-        timeTo: s.timeTo,
-    }));
+    const slotInserts = await resolveAndPrepareSlots(planId, slotIds, slots);
+
+    if (slotInserts.length === 0) {
+        throw new BadRequest("Please select at least one availability slot.");
+    }
 
     await db.insert(studentAvailabilitySlots).values(slotInserts);
 
@@ -387,7 +524,7 @@ export const cancelAvailabilityPlan = async (req: Request, res: Response) => {
 export const updateAvailabilityPlan = async (req: Request, res: Response) => {
     const studentId = getStudentId(req);
     const { id } = req.params;
-    const { title, notes, slots } = req.body;
+    const { title, notes, slots, slotIds } = req.body;
 
     const [plan] = await db
         .select()
@@ -416,8 +553,11 @@ export const updateAvailabilityPlan = async (req: Request, res: Response) => {
     if (title !== undefined) updateData.title = title;
     if (notes !== undefined) updateData.notes = notes;
 
+    const hasNewSlots = (slotIds && Array.isArray(slotIds) && slotIds.length > 0) ||
+        (slots && Array.isArray(slots) && slots.length > 0);
+
     // If slots are updated, reset status back to pending_admin_review if it was rejected or proposed
-    if (slots && slots.length > 0) {
+    if (hasNewSlots) {
         if (plan.status === "rejected" || plan.status === "plan_proposed") {
             updateData.status = "pending_admin_review";
         }
@@ -430,19 +570,13 @@ export const updateAvailabilityPlan = async (req: Request, res: Response) => {
             .where(eq(studentAvailabilityPlans.id, id));
     }
 
-    if (slots && Array.isArray(slots) && slots.length > 0) {
-        await db.delete(studentAvailabilitySlots).where(eq(studentAvailabilitySlots.planId, id));
+    if (hasNewSlots) {
+        const slotInserts = await resolveAndPrepareSlots(id, slotIds, slots);
 
-        const slotInserts = slots.map((s: any) => ({
-            id: randomUUID(),
-            planId: id,
-            dayOfWeek: s.dayOfWeek || null,
-            specificDate: s.specificDate ? s.specificDate : null,
-            timeFrom: s.timeFrom,
-            timeTo: s.timeTo,
-        }));
-
-        await db.insert(studentAvailabilitySlots).values(slotInserts);
+        if (slotInserts.length > 0) {
+            await db.delete(studentAvailabilitySlots).where(eq(studentAvailabilitySlots.planId, id));
+            await db.insert(studentAvailabilitySlots).values(slotInserts);
+        }
     }
 
     const [updatedPlan] = await db

@@ -16,7 +16,12 @@ import {
 } from "../../validation/admin/availabilityPlan";
 import { ActionName } from "../../types/constant";
 
+import availabilitySlotRouter from "./availabilitySlot";
+
 const router = Router();
+
+// Availability slots management (nested under availability-plans/slots)
+router.use("/slots", availabilitySlotRouter);
 
 /**
  * Flexible permission middleware that checks for 'availability_plans' permission,

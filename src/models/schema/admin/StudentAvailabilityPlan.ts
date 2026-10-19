@@ -1,9 +1,33 @@
 // schema/admin/StudentAvailabilityPlan.ts
-import { mysqlTable, varchar, char, timestamp, text, mysqlEnum, date, time, int, uniqueIndex, index } from "drizzle-orm/mysql-core";
+import { mysqlTable, varchar, char, timestamp, text, mysqlEnum, date, time, int, uniqueIndex, index, boolean } from "drizzle-orm/mysql-core";
 import { sql } from "drizzle-orm";
 import { Student } from "./Student";
 import { sessions } from "./Session";
 import { admins } from "./admin";
+
+export const DAYS_OF_WEEK = [
+    "Saturday",
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday"
+] as const;
+
+export const adminAvailabilitySlots = mysqlTable("admin_availability_slots", {
+    id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+    dayOfWeek: mysqlEnum("day_of_week", DAYS_OF_WEEK).notNull(),
+    timeFrom: time("time_from").notNull(),
+    timeTo: time("time_to").notNull(),
+    isActive: boolean("is_active").default(true).notNull(),
+    createdBy: char("created_by", { length: 255 }).references(() => admins.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
+}, (table) => [
+    index("admin_slots_day_idx").on(table.dayOfWeek),
+    index("admin_slots_active_idx").on(table.isActive),
+]);
 
 export const studentAvailabilityPlans = mysqlTable("student_availability_plans", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
@@ -36,16 +60,9 @@ export const studentAvailabilityPlans = mysqlTable("student_availability_plans",
 export const studentAvailabilitySlots = mysqlTable("student_availability_slots", {
     id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
     planId: char("plan_id", { length: 36 }).notNull().references(() => studentAvailabilityPlans.id, { onDelete: "cascade" }),
+    adminSlotId: char("admin_slot_id", { length: 36 }).references(() => adminAvailabilitySlots.id, { onDelete: "set null" }),
 
-    dayOfWeek: mysqlEnum("day_of_week", [
-        "Saturday",
-        "Sunday",
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday"
-    ]),
+    dayOfWeek: mysqlEnum("day_of_week", DAYS_OF_WEEK),
     specificDate: date("specific_date"),
 
     timeFrom: time("time_from").notNull(),
@@ -54,6 +71,7 @@ export const studentAvailabilitySlots = mysqlTable("student_availability_slots",
     createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
     index("availability_slots_plan_idx").on(table.planId),
+    index("availability_slots_admin_slot_idx").on(table.adminSlotId),
 ]);
 
 export const studentPlanSessions = mysqlTable("student_plan_sessions", {

@@ -127,6 +127,13 @@
       "when": 1791878726264,
       "tag": "0017_shocking_runaways",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1792403802131,
+      "tag": "0018_fair_galactus",
+      "breakpoints": true
     }
   ]
 }
