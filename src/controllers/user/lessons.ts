@@ -5,6 +5,28 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound } from "../../Errors";
 import { lessons, lessonIdeas, chapters, courses, teachers, semesters, prices, enrolledItems } from "../../models/schema";
 import { checkAccess } from "../../utils/accessControl";
+import { generateSecureStreamUrl } from "../../drive/services/services";
+
+// ─── helper: resolve video for a single idea ────────────────────────────────
+// Never expose bunnyGuid to the client; generate a short-lived signed URL instead.
+const resolveVideo = (idea: {
+    video: string | null;
+    bunnyGuid: string | null;
+    [key: string]: unknown;
+}) => {
+    const { bunnyGuid, video, ...rest } = idea;
+
+    let videoPayload: { type: "bunny"; streamUrl: string } | { type: "external"; url: string } | null = null;
+
+    if (bunnyGuid) {
+        videoPayload = { type: "bunny", streamUrl: generateSecureStreamUrl(bunnyGuid) };
+    } else if (video) {
+        videoPayload = { type: "external", url: video };
+    }
+
+    return { ...rest, video: videoPayload };
+};
+
 
 const lessonDetailedQuery = () =>
     db.select({
@@ -76,10 +98,12 @@ export const getLessonById = async (req: Request, res: Response) => {
         .where(eq(lessonIdeas.lessonId, id))
         .orderBy(asc(lessonIdeas.ideaOrder));
 
+    const resolvedIdeas = ideas.map(resolveVideo);
+
     return SuccessResponse(res, {
         message: "Lesson fetched successfully",
         ...result,
-        ideas,
+        ideas: resolvedIdeas,
         prices: lessonPrices,
         isLocked: false
     }, 200);
