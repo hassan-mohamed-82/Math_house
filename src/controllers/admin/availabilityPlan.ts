@@ -201,6 +201,7 @@ export const getAvailabilityPlanById = async (req: Request, res: Response) => {
             planSessionId: studentPlanSessions.id,
             planSessionNotes: studentPlanSessions.notes,
             orderIndex: studentPlanSessions.orderIndex,
+            studentResponse: studentPlanSessions.studentResponse,
             sessionId: sessions.id,
             sessionName: sessions.name,
             scheduleType: sessions.scheduleType,

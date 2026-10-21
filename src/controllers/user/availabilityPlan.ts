@@ -337,12 +337,13 @@ export const getMyAvailabilityPlanById = async (req: Request, res: Response) => 
         .from(studentAvailabilitySlots)
         .where(eq(studentAvailabilitySlots.planId, id));
 
-    // Fetch proposed sessions with details
+    // Fetch proposed sessions with details (including per-session student response)
     const proposedSessions = await db
         .select({
             planSessionId: studentPlanSessions.id,
             planSessionNotes: studentPlanSessions.notes,
             orderIndex: studentPlanSessions.orderIndex,
+            studentResponse: studentPlanSessions.studentResponse,
             sessionId: sessions.id,
             sessionName: sessions.name,
             scheduleType: sessions.scheduleType,
@@ -405,9 +406,9 @@ export const respondToProposedPlan = async (req: Request, res: Response) => {
     }
 
     if (action === "accept") {
-        // Fetch all assigned sessions
+        // Fetch all sessions proposed for this plan (with their plan-session row id)
         const assignedSessions = await db
-            .select({ sessionId: studentPlanSessions.sessionId })
+            .select({ id: studentPlanSessions.id, sessionId: studentPlanSessions.sessionId })
             .from(studentPlanSessions)
             .where(eq(studentPlanSessions.planId, id));
 
@@ -415,21 +416,49 @@ export const respondToProposedPlan = async (req: Request, res: Response) => {
             throw new BadRequest("Cannot accept a plan with no proposed sessions.");
         }
 
-        const sessionIds = assignedSessions.map((s) => s.sessionId);
+        // Student may optionally pass session IDs they want to reject (partial acceptance)
+        const { rejectedSessionIds = [] } = req.body as { rejectedSessionIds?: string[] };
+        const rejectedSet = new Set<string>(rejectedSessionIds);
 
-        // Find which sessions the student is not yet enrolled in
+        // Validate: all rejected IDs must actually belong to this plan
+        const planSessionIds = new Set(assignedSessions.map((s) => s.sessionId));
+        for (const rId of rejectedSet) {
+            if (!planSessionIds.has(rId)) {
+                throw new BadRequest(`Session "${rId}" is not part of this plan.`);
+            }
+        }
+
+        // Student must keep at least one session — cannot reject all
+        const acceptedSessions = assignedSessions.filter((s) => !rejectedSet.has(s.sessionId));
+        if (acceptedSessions.length === 0) {
+            throw new BadRequest(
+                "You must accept at least one session. To decline the entire plan use action 'reject'."
+            );
+        }
+
+        // ── Mark each plan-session row with the student's per-session response ──
+        for (const ps of assignedSessions) {
+            await db
+                .update(studentPlanSessions)
+                .set({ studentResponse: rejectedSet.has(ps.sessionId) ? "rejected" : "accepted" })
+                .where(eq(studentPlanSessions.id, ps.id));
+        }
+
+        // ── Enroll student only in accepted sessions ──────────────────────────
+        const acceptedSessionIds = acceptedSessions.map((s) => s.sessionId);
+
         const existingEnrollments = await db
             .select({ sessionId: sessionUsers.sessionId })
             .from(sessionUsers)
             .where(
                 and(
                     eq(sessionUsers.studentId, studentId),
-                    inArray(sessionUsers.sessionId, sessionIds)
+                    inArray(sessionUsers.sessionId, acceptedSessionIds)
                 )
             );
 
         const enrolledSet = new Set(existingEnrollments.map((e) => e.sessionId));
-        const newEnrollments = sessionIds
+        const newEnrollments = acceptedSessionIds
             .filter((sId) => !enrolledSet.has(sId))
             .map((sId) => ({
                 id: randomUUID(),
@@ -441,7 +470,7 @@ export const respondToProposedPlan = async (req: Request, res: Response) => {
             await db.insert(sessionUsers).values(newEnrollments);
         }
 
-        // Update plan status
+        // ── Mark the plan itself as accepted ──────────────────────────────────
         await db
             .update(studentAvailabilityPlans)
             .set({
@@ -451,14 +480,19 @@ export const respondToProposedPlan = async (req: Request, res: Response) => {
             })
             .where(eq(studentAvailabilityPlans.id, id));
 
+        const rejectedCount = rejectedSet.size;
+        const acceptedCount  = acceptedSessions.length;
+
         await sendStudentNotification(
             studentId,
-            `You have successfully accepted the study plan "${plan.title}". You are now enrolled in ${sessionIds.length} sessions!`
+            `You have accepted the study plan "${plan.title}" with ${acceptedCount} session(s)` +
+            (rejectedCount > 0 ? ` and rejected ${rejectedCount} session(s).` : ".")
         );
 
         return SuccessResponse(res, {
-            message: `Plan accepted successfully! You are now enrolled in ${sessionIds.length} sessions.`,
-            enrolledCount: sessionIds.length,
+            message: `Plan accepted. Enrolled in ${acceptedCount} session(s)${rejectedCount > 0 ? `, ${rejectedCount} session(s) skipped.` : "."}`,
+            acceptedCount,
+            rejectedCount,
             newlyEnrolledCount: newEnrollments.length,
             status: "accepted",
         });

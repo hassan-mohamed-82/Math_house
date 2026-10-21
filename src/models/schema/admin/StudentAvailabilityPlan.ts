@@ -81,9 +81,13 @@ export const studentPlanSessions = mysqlTable("student_plan_sessions", {
     notes: varchar("notes", { length: 255 }),
     orderIndex: int("order_index").default(0),
 
+    // Per-session student response: pending (default) → accepted or rejected when student responds
+    studentResponse: mysqlEnum("student_response", ["pending", "accepted", "rejected"]).default("pending").notNull(),
+
     createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [
     uniqueIndex("plan_session_unique").on(table.planId, table.sessionId),
     index("plan_sessions_plan_idx").on(table.planId),
     index("plan_sessions_session_idx").on(table.sessionId),
+    index("plan_sessions_response_idx").on(table.studentResponse),
 ]);
