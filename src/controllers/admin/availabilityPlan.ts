@@ -7,10 +7,11 @@ import {
     studentPlanSessions
 } from "../../models/schema/admin/StudentAvailabilityPlan";
 import { Student } from "../../models/schema/admin/Student";
-import { sessions, sessionUsers } from "../../models/schema/admin/Session";
+import { sessions, sessionUsers, sessionLessons } from "../../models/schema/admin/Session";
 import { teachers } from "../../models/schema/admin/teacher";
 import { admins } from "../../models/schema/admin/admin";
 import { grade } from "../../models/schema/admin/grade";
+import { lessons } from "../../models/schema/admin/lessons";
 import { category } from "../../models/schema/admin/category";
 import { eq, and, or, desc, sql, inArray, like, gte } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
@@ -237,6 +238,7 @@ export const getAvailabilityPlanById = async (req: Request, res: Response) => {
 export const getMatchingSessionsForPlan = async (req: Request, res: Response) => {
     const { id } = req.params;
 
+    // ── Load plan ──────────────────────────────────────────────────────────────
     const [plan] = await db
         .select()
         .from(studentAvailabilityPlans)
@@ -247,6 +249,9 @@ export const getMatchingSessionsForPlan = async (req: Request, res: Response) =>
         throw new NotFound("Availability plan not found");
     }
 
+    const studentId = plan.studentId;
+
+    // ── Load student availability slots for this plan ─────────────────────────
     const slots = await db
         .select()
         .from(studentAvailabilitySlots)
@@ -254,7 +259,7 @@ export const getMatchingSessionsForPlan = async (req: Request, res: Response) =>
 
     const todayStr = new Date().toISOString().split("T")[0];
 
-    // Fetch upcoming sessions
+    // ── Fetch upcoming sessions ───────────────────────────────────────────────
     const upcomingSessions = await db
         .select({
             id: sessions.id,
@@ -278,8 +283,51 @@ export const getMatchingSessionsForPlan = async (req: Request, res: Response) =>
             )
         )
         .orderBy(sessions.sessionDate, sessions.timeFrom)
-        .limit(100);
+        .limit(200);
 
+    if (upcomingSessions.length === 0) {
+        return SuccessResponse(res, { planSlots: slots, candidateSessions: [] });
+    }
+
+    const allSessionIds = upcomingSessions.map((s) => s.id);
+
+    // ── Fetch lessons linked to each session ──────────────────────────────────
+    const allSessionLessons = await db
+        .select({
+            sessionId: sessionLessons.sessionId,
+            lessonId: lessons.id,
+            lessonName: lessons.name,
+            lessonOrder: lessons.order,
+        })
+        .from(sessionLessons)
+        .innerJoin(lessons, eq(sessionLessons.lessonId, lessons.id))
+        .where(inArray(sessionLessons.sessionId, allSessionIds));
+
+    // Build a lookup: sessionId → lesson[]  
+    const lessonsMap: Record<string, { lessonId: string; lessonName: string; lessonOrder: number }[]> = {};
+    for (const sl of allSessionLessons) {
+        if (!lessonsMap[sl.sessionId]) lessonsMap[sl.sessionId] = [];
+        lessonsMap[sl.sessionId].push({
+            lessonId: sl.lessonId,
+            lessonName: sl.lessonName,
+            lessonOrder: sl.lessonOrder ?? 0,
+        });
+    }
+
+    // ── Check which sessions the student is already enrolled in ───────────────
+    const enrolledRows = await db
+        .select({ sessionId: sessionUsers.sessionId })
+        .from(sessionUsers)
+        .where(
+            and(
+                eq(sessionUsers.studentId, studentId),
+                inArray(sessionUsers.sessionId, allSessionIds)
+            )
+        );
+
+    const enrolledSessionIds = new Set(enrolledRows.map((r) => r.sessionId));
+
+    // ── Helper ────────────────────────────────────────────────────────────────
     const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
     const toMinutes = (timeStr: string) => {
@@ -287,62 +335,82 @@ export const getMatchingSessionsForPlan = async (req: Request, res: Response) =>
         return h * 60 + m;
     };
 
-    // Check matches against student slots
-    const sessionsWithMatchInfo = upcomingSessions.map((session) => {
-        let matchingSlots: any[] = [];
+    // ── Match each session against student availability slots ─────────────────
+    const matchedSessions: any[] = [];
+
+    for (const session of upcomingSessions) {
+        const matchingSlots: {
+            slotId: string;
+            dayOfWeek: string | null;
+            specificDate: string | null;
+            timeFrom: string;
+            timeTo: string;
+        }[] = [];
 
         for (const slot of slots) {
             let matchesDayOrDate = false;
 
             if (slot.specificDate && session.sessionDate) {
                 const sDate = new Date(session.sessionDate).toISOString().split("T")[0];
-                const targetDate = typeof slot.specificDate === "string" ? slot.specificDate : new Date(slot.specificDate).toISOString().split("T")[0];
-                if (sDate === targetDate) {
-                    matchesDayOrDate = true;
-                }
+                const targetDate =
+                    typeof slot.specificDate === "string"
+                        ? slot.specificDate
+                        : new Date(slot.specificDate).toISOString().split("T")[0];
+                if (sDate === targetDate) matchesDayOrDate = true;
             } else if (slot.dayOfWeek && session.sessionDate) {
                 const sDay = dayNames[new Date(session.sessionDate).getUTCDay()];
-                if (sDay.toLowerCase() === slot.dayOfWeek.toLowerCase()) {
-                    matchesDayOrDate = true;
-                }
+                if (sDay.toLowerCase() === slot.dayOfWeek.toLowerCase()) matchesDayOrDate = true;
             }
 
             if (matchesDayOrDate) {
                 const sessionStart = toMinutes(session.timeFrom);
-                const sessionEnd = toMinutes(session.timeTo);
-                const slotStart = toMinutes(slot.timeFrom);
-                const slotEnd = toMinutes(slot.timeTo);
+                const sessionEnd   = toMinutes(session.timeTo);
+                const slotStart    = toMinutes(slot.timeFrom);
+                const slotEnd      = toMinutes(slot.timeTo);
 
-                // Overlaps if session starts before slot ends and ends after slot starts
+                // Overlap: session starts before slot ends AND session ends after slot starts
                 const overlapsTime = sessionStart < slotEnd && sessionEnd > slotStart;
                 if (overlapsTime) {
                     matchingSlots.push({
-                        slotId: slot.id,
-                        dayOfWeek: slot.dayOfWeek,
+                        slotId:       slot.id,
+                        dayOfWeek:    slot.dayOfWeek ?? null,
+                        specificDate: slot.specificDate
+                            ? (typeof slot.specificDate === "string"
+                                ? slot.specificDate
+                                : new Date(slot.specificDate).toISOString().split("T")[0])
+                            : null,
                         timeFrom: slot.timeFrom,
-                        timeTo: slot.timeTo,
+                        timeTo:   slot.timeTo,
                     });
                 }
             }
         }
 
-        return {
-            ...session,
-            isMatchingAvailability: matchingSlots.length > 0,
-            matchingSlots,
-        };
-    });
+        // ── Only include sessions that match at least one slot ────────────────
+        if (matchingSlots.length === 0) continue;
 
-    // Sort: matching sessions first, then chronological
-    sessionsWithMatchInfo.sort((a, b) => {
-        if (a.isMatchingAvailability && !b.isMatchingAvailability) return -1;
-        if (!a.isMatchingAvailability && b.isMatchingAvailability) return 1;
-        return 0;
+        matchedSessions.push({
+            ...session,
+            // ── Availability ─────────────────────────────────────────────────
+            matchingSlots,
+            // ── Academic content linked to this session ───────────────────────
+            lessons: lessonsMap[session.id] ?? [],
+            // ── Whether this student is already enrolled ──────────────────────
+            studentAlreadyEnrolled: enrolledSessionIds.has(session.id),
+        });
+    }
+
+    // Sort chronologically (already ordered by DB, but keep consistent)
+    matchedSessions.sort((a, b) => {
+        const da = a.sessionDate ? new Date(a.sessionDate).getTime() : 0;
+        const db_ = b.sessionDate ? new Date(b.sessionDate).getTime() : 0;
+        if (da !== db_) return da - db_;
+        return toMinutes(a.timeFrom) - toMinutes(b.timeFrom);
     });
 
     return SuccessResponse(res, {
         planSlots: slots,
-        candidateSessions: sessionsWithMatchInfo,
+        candidateSessions: matchedSessions,
     });
 };
 
