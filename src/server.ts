@@ -13,7 +13,7 @@ import { Server } from "socket.io";
 import { initSocket } from "./socket/socket";
 import { sanitizeRequest } from "./middlewares/sanitize";
 
-import { startCurrencyCron } from "./jobs/cronJobs";
+import { startCurrencyCron, startSessionPackageCron } from "./jobs/cronJobs";
 
 dotenv.config();
 
@@ -91,4 +91,5 @@ app.use(errorHandler);
 httpServer.listen(3000, () => {
   console.log("Server is running on http://localhost:3000");
   startCurrencyCron();
+  startSessionPackageCron();
 });

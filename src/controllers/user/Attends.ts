@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { db } from "../../models/connection";
-import { sessionLessons, sessions, sessionUsers, sessionGroups, sessionStudentPdfs } from "../../models/schema/admin/Session";
+import { sessionLessons, sessions, sessionUsers, sessionGroups, sessionStudentPdfs, sessionPackageDeductions } from "../../models/schema/admin/Session";
 import { lessons, lessonIdeas, sessionAttendance, chapters } from "../../models/schema";
 import { groupStudents } from "../../models/schema/admin/Groups";
 import { teachers } from "../../models/schema/admin/teacher";
@@ -13,6 +13,7 @@ import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound, UnauthorizedError } from "../../Errors";
 import { generateSecureStreamUrl } from "../../drive/services/services";
 import { resolveSessionMaterials, emptySessionMaterials, SessionMaterialsResult } from "../../utils/sessionMaterials";
+import { processUpcomingSessionsDeductions } from "../../jobs/cronServices/sessionPackageCron";
 
 // ── config ────────────────────────────────────────────────────────────────────
 
@@ -201,6 +202,10 @@ async function fetchIdeasByLesson(lessonIds: string[]) {
 
 export const getUpcomingSessions = async (req: Request, res: Response) => {
     const studentId = getStudentId(req);
+
+    // Ensure session packages are deducted 24h prior to any upcoming sessions in real-time
+    await processUpcomingSessionsDeductions(studentId);
+
     const { today, currentTime } = cairoNow();
 
     const ExistingStudent = await db.select({ id: Student.id }).from(Student).where(eq(Student.id, studentId));
@@ -244,12 +249,12 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
         .leftJoin(courses, eq(chapters.courseId, courses.id))
         .where(and(
             sql`(
-                ${sessions.sessionDate} > ${today}
-                OR (${sessions.sessionDate} = ${today} AND ${sessions.timeTo} >= ${currentTime})
+                DATE(${sessions.sessionDate}) > ${today}
+                OR (DATE(${sessions.sessionDate}) = ${today} AND ${sessions.timeTo} >= ${currentTime})
             )`,
             enrolledSessionsFilter(studentId)
         ))
-        .orderBy(sql`${sessions.sessionDate} ASC, ${sessions.timeFrom} ASC`);
+        .orderBy(sql`DATE(${sessions.sessionDate}) ASC, ${sessions.timeFrom} ASC`);
 
     const sessionsMap = new Map<string, any>();
     const sessionIds: string[] = [];
@@ -364,12 +369,12 @@ export const getSessionHistory = async (req: Request, res: Response) => {
         .leftJoin(courses, eq(chapters.courseId, courses.id))
         .where(and(
             sql`(
-                ${sessions.sessionDate} < ${today}
-                OR (${sessions.sessionDate} = ${today} AND ${sessions.timeTo} < ${currentTime})
+                DATE(${sessions.sessionDate}) < ${today}
+                OR (DATE(${sessions.sessionDate}) = ${today} AND ${sessions.timeTo} < ${currentTime})
             )`,
             enrolledSessionsFilter(studentId)
         ))
-        .orderBy(sql`${sessions.sessionDate} DESC, ${sessions.timeFrom} DESC`);
+        .orderBy(sql`DATE(${sessions.sessionDate}) DESC, ${sessions.timeFrom} DESC`);
 
     const pastSessionsMap = new Map<string, any>();
     const pastSessionIds: string[] = [];
@@ -612,7 +617,15 @@ export const joinSession = async (req: Request, res: Response) => {
 
         // ── Join window (Cairo time) ──────────────────────────────────────────
         const { today, currentTime } = cairoNow();
-        if (String(session.sessionDate) !== today) {
+        // Normalize sessionDate: MySQL may return a Date object or ISO string like
+        // "2026-10-25T00:00:00.000Z". Extract the Cairo local date (YYYY-MM-DD).
+        const sessionDateStr = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Africa/Cairo",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).format(new Date(session.sessionDate as any));
+        if (sessionDateStr !== today) {
             throw new BadRequest("This session is not scheduled for today");
         }
         const nowMin = toMinutes(currentTime);

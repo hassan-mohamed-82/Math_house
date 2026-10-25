@@ -117,3 +117,19 @@ export const sessionStudentPdfs = mysqlTable("session_student_pdfs", {
     index("session_student_pdfs_session_idx").on(table.sessionId),
     index("session_student_pdfs_student_idx").on(table.studentId),
 ]);
+
+/**
+ * Tracks balance deduction for sessions (1 session deducted from student's live package
+ * 24 hours prior to the upcoming session start, or upon join).
+ * Ensures a student is NEVER deducted more than once for the same session.
+ */
+export const sessionPackageDeductions = mysqlTable("session_package_deductions", {
+    id: char("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+    sessionId: char("session_id", { length: 36 }).notNull().references(() => sessions.id, { onDelete: "cascade" }),
+    studentId: char("student_id", { length: 36 }).notNull().references(() => Student.id, { onDelete: "cascade" }),
+    deductedAt: timestamp("deducted_at").defaultNow().notNull(),
+}, (table) => [
+    uniqueIndex("session_student_deduction_unique").on(table.sessionId, table.studentId),
+    index("session_deduction_session_idx").on(table.sessionId),
+    index("session_deduction_student_idx").on(table.studentId),
+]);

@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import { refreshExchangeRates } from "./cronServices/currencyCron";
+import { startSessionPackageCron } from "./cronServices/sessionPackageCron";
 
 export const startCronJobs = () => {
     // Schedule: Every day at 00:00 (Midnight)
@@ -23,3 +24,5 @@ export const startCurrencyCron = () => {
 
     console.log("⏰ [CurrencyCron] Exchange rate auto-refresh scheduled (every 6 hours)");
 };
+
+export { startSessionPackageCron };
