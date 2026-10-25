@@ -145,41 +145,30 @@ const resolvePdfs = (
     effective: SessionMaterialsResult,
     studentPdf?: StudentPdfRow | null
 ) => {
-    if (!isAttended) {
-        return {
-            session_pdf: null,
-            session_answers_pdf: null,
-            teacher_explanation_pdf: null,
-            materials: [],
-            materialsLocked: true,
-        };
-    }
-
     const hasPersonalWorksheet = Boolean(studentPdf?.session_pdf);
+
+    // session_pdf is always visible to enrolled students
     const resolvedSessionPdf = hasPersonalWorksheet ? studentPdf!.session_pdf : effective.session_pdf;
 
-    let resolvedAnswersPdf: string | null = null;
-    if (STUDENTS_SEE_ANSWERS_AFTER_ATTENDING) {
-        resolvedAnswersPdf = hasPersonalWorksheet ? (studentPdf?.session_answers_pdf ?? null) : effective.session_answers_pdf;
-    }
-
-    const resolvedExplanationPdf = studentPdf?.teacher_explanation_pdf ?? session.teacher_explanation_pdf ?? null;
-
+    // explanation PDF only unlocked after attendance; answers PDF never sent to students
+    let resolvedExplanationPdf: string | null = null;
     let resolvedMaterials: any[] = [];
-    if (!hasPersonalWorksheet) {
-        if (STUDENTS_SEE_ANSWERS_AFTER_ATTENDING) {
-            resolvedMaterials = effective.materials;
-        } else {
-            resolvedMaterials = effective.materials.map(m => ({ ...m, session_answers_pdf: null }));
+    let materialsLocked = true;
+
+    if (isAttended) {
+        resolvedExplanationPdf = studentPdf?.teacher_explanation_pdf ?? session.teacher_explanation_pdf ?? null;
+
+        if (!hasPersonalWorksheet) {
+            resolvedMaterials = effective.materials.map(m => ({ ...m, session_answers_pdf: undefined }));
         }
+        materialsLocked = false;
     }
 
     return {
         session_pdf: resolvedSessionPdf,
-        session_answers_pdf: resolvedAnswersPdf,
         teacher_explanation_pdf: resolvedExplanationPdf,
         materials: resolvedMaterials,
-        materialsLocked: false,
+        materialsLocked,
     };
 };
 
