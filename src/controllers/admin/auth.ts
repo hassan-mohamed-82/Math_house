@@ -33,11 +33,14 @@ export async function login(req: Request, res: Response) {
         role = await db.select().from(roles).where(eq(roles.id, admin[0].roleId));
     }
 
-    const resolvedRole = (admin[0].type === "super_admin" ? "superadmin" : (role && role[0] ? role[0].name : "admin")) as Role;
+    const isSuperAdmin = admin[0].type === "super_admin" || (role?.[0]?.name?.toLowerCase() === "superadmin");
+    const systemRole: Role = isSuperAdmin ? "superadmin" : "admin";
+    const roleTitle = role?.[0]?.name ?? systemRole;
+
     const tokenPayload = {
         id: admin[0].id,
         name: admin[0].name,
-        role: resolvedRole,
+        role: systemRole,
     };
 
     const token = generateAdminToken(tokenPayload);
@@ -46,7 +49,6 @@ export async function login(req: Request, res: Response) {
     const adminPerms = safeParsePermissions(admin[0].permissions);
     const merged = mergePermissions(rolePerms, adminPerms);
 
-    const isSuperAdmin = admin[0].type === "super_admin" || resolvedRole === "superadmin" || (role?.[0]?.name?.toLowerCase() === "superadmin");
     const hasAll = isSuperAdmin || hasAllPermissions(merged);
     const finalPermissions = hasAll ? [] : merged;
 
@@ -56,7 +58,7 @@ export async function login(req: Request, res: Response) {
             email: admin[0].email,
             phoneNumber: admin[0].phoneNumber,
             roleId: admin[0].roleId,
-            role: resolvedRole,
+            role: roleTitle,
             permissions: finalPermissions,
             status: admin[0].status,
         }
@@ -157,11 +159,14 @@ export async function switchBack(req: Request, res: Response) {
         role = await db.select().from(roles).where(eq(roles.id, admin[0].roleId));
     }
 
-    const resolvedRole = (admin[0].type === "super_admin" ? "superadmin" : (role && role[0] ? role[0].name : "admin")) as Role;
+    const isSuperAdmin = admin[0].type === "super_admin" || (role?.[0]?.name?.toLowerCase() === "superadmin");
+    const systemRole: Role = isSuperAdmin ? "superadmin" : "admin";
+    const roleTitle = role?.[0]?.name ?? systemRole;
+
     const tokenPayload = {
         id: admin[0].id,
         name: admin[0].name,
-        role: resolvedRole,
+        role: systemRole,
     };
 
     const token = generateAdminToken(tokenPayload);
@@ -170,7 +175,6 @@ export async function switchBack(req: Request, res: Response) {
     const adminPerms = safeParsePermissions(admin[0].permissions);
     const merged = mergePermissions(rolePerms, adminPerms);
 
-    const isSuperAdmin = admin[0].type === "super_admin" || resolvedRole === "superadmin" || (role?.[0]?.name?.toLowerCase() === "superadmin");
     const hasAll = isSuperAdmin || hasAllPermissions(merged);
     const finalPermissions = hasAll ? [] : merged;
 
@@ -182,7 +186,7 @@ export async function switchBack(req: Request, res: Response) {
             email: admin[0].email,
             phoneNumber: admin[0].phoneNumber,
             roleId: admin[0].roleId,
-            role: resolvedRole,
+            role: roleTitle,
             permissions: finalPermissions,
             status: admin[0].status,
         }
