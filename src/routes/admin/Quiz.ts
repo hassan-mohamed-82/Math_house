@@ -19,11 +19,11 @@ import { requirePermission } from "../../middlewares/requirePermission";
 const router = Router();
 
 // Selection API
-router.get("/selection", catchAsync(getSelection));
+router.get("/selection", requirePermission("quizzes", "View"), catchAsync(getSelection));
 
 // Questions Bank
 router.get("/questions/bank", requirePermission("quizzes", "View"), catchAsync(getQuestionsBank));
-router.get("/questions/filters", catchAsync(getFilterOptions));
+router.get("/questions/filters", requirePermission("quizzes", "View"), catchAsync(getFilterOptions));
 
 // Quiz CRUD
 router.post("/", requirePermission("quizzes", "Add"), catchAsync(createQuiz));

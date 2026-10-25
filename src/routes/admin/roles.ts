@@ -14,9 +14,9 @@ import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 
-// ── Permission discovery — no action gate, any authenticated admin can view ──
-router.get("/available-permissions", catchAsync(getAvailablePermissions));
-router.get("/schema", catchAsync(getAdminPermissions));
+// ── Permission discovery ──
+router.get("/available-permissions", requirePermission("roles", "View"), catchAsync(getAvailablePermissions));
+router.get("/schema", requirePermission("roles", "View"), catchAsync(getAdminPermissions));
 
 // ── List & detail ─────────────────────────────────────────────────────────
 router.get("/",    requirePermission("roles", "View"),   catchAsync(getAllRoles));

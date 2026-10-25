@@ -10,9 +10,7 @@ import { catchAsync } from "../../utils/catchAsync";
 import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
-// No Authorization
-router.get("/selectionSections", catchAsync(getAllSections));
-//---------------------------
+router.get("/selectionSections", requirePermission("sections", "View"), catchAsync(getAllSections));
 router.post("/", requirePermission("sections", "Add"), catchAsync(createSection));
 router.get("/", requirePermission("sections", "View"), catchAsync(getAllSections));
 router.get("/:id", requirePermission("sections", "View"), catchAsync(getSectionById));

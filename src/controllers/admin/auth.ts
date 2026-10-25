@@ -9,6 +9,7 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { Permission, Role } from "../../types/custom";
 import { generateAdminToken } from "../../utils/jwt";
+import { safeParsePermissions, mergePermissions, hasAllPermissions } from "../../middlewares/requirePermission";
 
 export async function login(req: Request, res: Response) {
     const { email, password } = req.body;
@@ -31,15 +32,23 @@ export async function login(req: Request, res: Response) {
     if (admin[0].roleId) {
         role = await db.select().from(roles).where(eq(roles.id, admin[0].roleId));
     }
+
+    const resolvedRole = (admin[0].type === "super_admin" ? "superadmin" : (role && role[0] ? role[0].name : "admin")) as Role;
     const tokenPayload = {
         id: admin[0].id,
         name: admin[0].name,
-        role: (admin[0].type === "super_admin" ? "superadmin" : (role && role[0] ? role[0].name : "admin")) as Role,
-        // permissions: admin[0].permissions,
+        role: resolvedRole,
     };
 
     const token = generateAdminToken(tokenPayload);
 
+    const rolePerms = safeParsePermissions(role?.[0]?.permissions);
+    const adminPerms = safeParsePermissions(admin[0].permissions);
+    const merged = mergePermissions(rolePerms, adminPerms);
+
+    const isSuperAdmin = admin[0].type === "super_admin" || resolvedRole === "superadmin" || (role?.[0]?.name?.toLowerCase() === "superadmin");
+    const hasAll = isSuperAdmin || hasAllPermissions(merged);
+    const finalPermissions = hasAll ? [] : merged;
 
     return SuccessResponse(res, {
         message: "Admin logged in successfully", token, admin: {
@@ -47,7 +56,8 @@ export async function login(req: Request, res: Response) {
             email: admin[0].email,
             phoneNumber: admin[0].phoneNumber,
             roleId: admin[0].roleId,
-            permissions: admin[0].permissions,
+            role: resolvedRole,
+            permissions: finalPermissions,
             status: admin[0].status,
         }
     }, 200);
@@ -147,13 +157,22 @@ export async function switchBack(req: Request, res: Response) {
         role = await db.select().from(roles).where(eq(roles.id, admin[0].roleId));
     }
 
+    const resolvedRole = (admin[0].type === "super_admin" ? "superadmin" : (role && role[0] ? role[0].name : "admin")) as Role;
     const tokenPayload = {
         id: admin[0].id,
         name: admin[0].name,
-        role: (admin[0].type === "super_admin" ? "superadmin" : (role && role[0] ? role[0].name : "admin")) as Role,
+        role: resolvedRole,
     };
 
     const token = generateAdminToken(tokenPayload);
+
+    const rolePerms = safeParsePermissions(role?.[0]?.permissions);
+    const adminPerms = safeParsePermissions(admin[0].permissions);
+    const merged = mergePermissions(rolePerms, adminPerms);
+
+    const isSuperAdmin = admin[0].type === "super_admin" || resolvedRole === "superadmin" || (role?.[0]?.name?.toLowerCase() === "superadmin");
+    const hasAll = isSuperAdmin || hasAllPermissions(merged);
+    const finalPermissions = hasAll ? [] : merged;
 
     return SuccessResponse(res, {
         message: "Switched back to admin successfully",
@@ -163,7 +182,8 @@ export async function switchBack(req: Request, res: Response) {
             email: admin[0].email,
             phoneNumber: admin[0].phoneNumber,
             roleId: admin[0].roleId,
-            permissions: admin[0].permissions,
+            role: resolvedRole,
+            permissions: finalPermissions,
             status: admin[0].status,
         }
     }, 200);

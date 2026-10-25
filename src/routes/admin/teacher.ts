@@ -12,11 +12,9 @@ import { getAllCourses } from "../../controllers/admin/courses";
 import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
-// No Authorization for roles for it -------------
-router.get("/selectionCourses", catchAsync(getAllCourses));
-router.get("/selectionCategories", catchAsync(getCategorySelection))
-router.get("/selectionTeachers", catchAsync(getAllTeachers))
-// -------------------------------------------------
+router.get("/selectionCourses", requirePermission("teachers", "View"), catchAsync(getAllCourses));
+router.get("/selectionCategories", requirePermission("teachers", "View"), catchAsync(getCategorySelection));
+router.get("/selectionTeachers", requirePermission("teachers", "View"), catchAsync(getAllTeachers));
 
 router.post("/", requirePermission("teachers", "Add"), catchAsync(createTeacher));
 router.get("/:id", requirePermission("teachers", "View"), catchAsync(getTeacherById));

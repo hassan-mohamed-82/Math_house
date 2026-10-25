@@ -17,7 +17,7 @@ import { requirePermission } from "../../middlewares/requirePermission";
 const router = Router();
 
 // Select options & search
-router.get("/select-options", catchAsync(selectOptions));
+router.get("/select-options", requirePermission("notifications", "View"), catchAsync(selectOptions));
 router.get("/search/parents", requirePermission("notifications", "View"), catchAsync(searchParents));
 router.get("/search/students", requirePermission("notifications", "View"), catchAsync(searchStudents));
 router.get("/search/teachers", requirePermission("notifications", "View"), catchAsync(searchTeachers));

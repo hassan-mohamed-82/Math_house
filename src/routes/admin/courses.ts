@@ -17,9 +17,9 @@ import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 
-// ── Selection helpers (open to any authenticated admin — used in dropdowns) ──
-router.get("/categories", catchAsync(getCategoriesSelection));
-router.get("/selection",  catchAsync(selectionCourses));
+// ── Selection helpers (used in dropdowns) ──
+router.get("/categories", requirePermission("courses", "View"), catchAsync(getCategoriesSelection));
+router.get("/selection",  requirePermission("courses", "View"), catchAsync(selectionCourses));
 
 // ── List & detail ─────────────────────────────────────────────────────────
 router.get("/",                         requirePermission("courses", "View"),   catchAsync(getAllCourses));

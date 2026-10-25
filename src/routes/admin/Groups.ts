@@ -8,7 +8,7 @@ import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 
-router.get("/select", catchAsync(selectOptions));
+router.get("/select", requirePermission("groups", "View"), catchAsync(selectOptions));
 router.get("/search-students", requirePermission("groups", "View"), catchAsync(searchStudents));
 router.get("/", requirePermission("groups", "View"), catchAsync(getAllGroups));
 router.get("/:id", requirePermission("groups", "View"), catchAsync(getGroupById));

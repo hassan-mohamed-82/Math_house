@@ -15,7 +15,7 @@ const router = Router();
 
 router.post("/", requirePermission("diagnostic_exams", "Add"), catchAsync(createDiagnosticExam));
 router.get("/", requirePermission("diagnostic_exams", "View"), catchAsync(getAllDiagnosticExams));
-router.get("/selection", catchAsync(getSelection));
+router.get("/selection", requirePermission("diagnostic_exams", "View"), catchAsync(getSelection));
 router.get("/:id", requirePermission("diagnostic_exams", "View"), catchAsync(getDiagnosticExamById));
 router.put("/:id", requirePermission("diagnostic_exams", "Edit"), catchAsync(updateDiagnosticExam));
 router.delete("/:id", requirePermission("diagnostic_exams", "Delete"), catchAsync(deleteDiagnosticExam));

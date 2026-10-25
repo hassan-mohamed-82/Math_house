@@ -18,14 +18,14 @@ import { admins, roles } from "../models/schema";
 import { eq } from "drizzle-orm";
 import { ForbiddenError, UnauthorizedError } from "../Errors";
 import type { Permission } from "../types/custom";
-import type { ModuleName, ActionName } from "../types/constant";
+import { MODULES, ACTION_NAMES, type ModuleName, type ActionName } from "../types/constant";
 
 // ─────────────────────────────────────────────────────────────────
 // 🔧 Internal helpers
 // ─────────────────────────────────────────────────────────────────
 
 /** Safely parse a permissions value that might be a JSON string or already an array. */
-function safeParsePermissions(raw: any): Permission[] {
+export function safeParsePermissions(raw: any): Permission[] {
     if (!raw) return [];
     if (Array.isArray(raw)) return raw as Permission[];
     if (typeof raw === "string") {
@@ -48,7 +48,7 @@ function safeParsePermissions(raw: any): Permission[] {
  * Admin-level actions that already exist in the role are NOT duplicated.
  * Admin-level modules that don't exist in the role are appended.
  */
-function mergePermissions(
+export function mergePermissions(
     rolePerms: Permission[],
     adminPerms: Permission[]
 ): Permission[] {
@@ -79,10 +79,23 @@ function mergePermissions(
     return merged;
 }
 
+/** Check if the permission list covers every single module and action */
+export function hasAllPermissions(permissions: Permission[]): boolean {
+    if (!permissions || permissions.length < MODULES.length) return false;
+    for (const mod of MODULES) {
+        const found = permissions.find((p) => p.module === mod);
+        if (!found) return false;
+        for (const act of ACTION_NAMES) {
+            if (!found.actions.includes(act)) return false;
+        }
+    }
+    return true;
+}
+
 /**
  * Check whether `permissions` contains the required `module` + `action` pair.
  */
-function hasPermission(
+export function hasPermission(
     permissions: Permission[],
     module: ModuleName,
     action: ActionName
@@ -124,6 +137,7 @@ export const requirePermission = (
                     type: admins.type,
                     status: admins.status,
                     permissions: admins.permissions,
+                    roleName: roles.name,
                     rolePermissions: roles.permissions,
                 })
                 .from(admins)
@@ -140,7 +154,11 @@ export const requirePermission = (
             }
 
             // ── 3. super_admin type or superadmin role → bypass all permission checks ─────────────
-            if (adminRow.type === "super_admin" || req.user.role === "superadmin") {
+            if (
+                adminRow.type === "super_admin" ||
+                req.user.role === "superadmin" ||
+                adminRow.roleName === "superadmin"
+            ) {
                 return next();
             }
 
@@ -151,6 +169,11 @@ export const requirePermission = (
 
             // Attach merged permissions to req.user for downstream use
             req.user.permissions = merged;
+
+            // If admin has all permissions & actions, bypass
+            if (hasAllPermissions(merged)) {
+                return next();
+            }
 
             // ── 5. Check permission ───────────────────────────────────────
             if (!hasPermission(merged, module, action)) {

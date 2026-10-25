@@ -13,7 +13,7 @@ import { requirePermission } from "../../middlewares/requirePermission";
 const router = Router();
 
 // User-facing: get active popups by destination
-router.get("/active", catchAsync(getActivePopups));
+router.get("/active", requirePermission("popups", "View"), catchAsync(getActivePopups));
 
 // Admin CRUD
 router.post("/", requirePermission("popups", "Add"), catchAsync(createPopup));

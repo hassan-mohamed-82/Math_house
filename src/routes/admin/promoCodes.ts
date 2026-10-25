@@ -12,7 +12,7 @@ import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 
-router.get("/currency", catchAsync(currencySelection));
+router.get("/currency", requirePermission("promo_codes", "View"), catchAsync(currencySelection));
 router.post("/", requirePermission("promo_codes", "Add"), catchAsync(createPromoCode));
 router.get("/", requirePermission("promo_codes", "View"), catchAsync(getAllPromoCodes));
 router.get("/:id", requirePermission("promo_codes", "View"), catchAsync(getPromoCodebyId));

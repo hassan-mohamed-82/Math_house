@@ -23,14 +23,14 @@ import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 
-router.get("/select/category", catchAsync(selectCategory));
-router.get("/select/sub-category", catchAsync(selectSubCategory));
-router.get("/select/course/:categoryId", catchAsync(selectCourse));
-router.get("/select/chapter/:courseId", catchAsync(selectChapter));
-router.get("/select/lesson/:chapterId", catchAsync(selectLesson));
-router.get("/select/students", catchAsync(selectStudents));
-router.get("/select/teachers", catchAsync(selectTeachers));
-router.get("/select/groups", catchAsync(selectGroups));
+router.get("/select/category", requirePermission("sessions", "View"), catchAsync(selectCategory));
+router.get("/select/sub-category", requirePermission("sessions", "View"), catchAsync(selectSubCategory));
+router.get("/select/course/:categoryId", requirePermission("sessions", "View"), catchAsync(selectCourse));
+router.get("/select/chapter/:courseId", requirePermission("sessions", "View"), catchAsync(selectChapter));
+router.get("/select/lesson/:chapterId", requirePermission("sessions", "View"), catchAsync(selectLesson));
+router.get("/select/students", requirePermission("sessions", "View"), catchAsync(selectStudents));
+router.get("/select/teachers", requirePermission("sessions", "View"), catchAsync(selectTeachers));
+router.get("/select/groups", requirePermission("sessions", "View"), catchAsync(selectGroups));
 router.post("/students/attendance", requirePermission("sessions", "View"), catchAsync(getStudentsCourseAttendance));
 
 router.get("/", requirePermission("sessions", "View"), catchAsync(getAllSessions));

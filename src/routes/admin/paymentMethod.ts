@@ -11,9 +11,7 @@ import { catchAsync } from "../../utils/catchAsync";
 import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
-// No Authorization for this
-router.get("/selectionCurrency", catchAsync(getSelectionCurrency));
-//--------------------
+router.get("/selectionCurrency", requirePermission("payment_methods", "View"), catchAsync(getSelectionCurrency));
 
 router.post("/", requirePermission("payment_methods", "Add"), catchAsync(createPaymentMethod));
 router.get("/", requirePermission("payment_methods", "View"), catchAsync(getAllPaymentMethods));

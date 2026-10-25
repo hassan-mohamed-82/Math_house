@@ -20,8 +20,8 @@ import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 
-// ── Selection helpers (open to any authenticated admin) ──────────────────
-router.get("/select-chapters", catchAsync(selectChapters));
+// ── Selection helpers ──────────────────
+router.get("/select-chapters", requirePermission("lessons", "View"), catchAsync(selectChapters));
 
 // ── Lesson Routes ─────────────────────────────────────────────────────────
 router.get("/",                    requirePermission("lessons", "View"),   catchAsync(getAllLessons));

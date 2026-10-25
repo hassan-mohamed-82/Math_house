@@ -16,9 +16,9 @@ import { requirePermission } from "../../middlewares/requirePermission";
 const router = Router();
 
 // Select Options
-router.get("/select", catchAsync(selectOptions));
-router.get("/selection", catchAsync(selectionPackages));
-router.get("/courses/:categoryId", catchAsync(getCoursesByCategory));
+router.get("/select", requirePermission("packages", "View"), catchAsync(selectOptions));
+router.get("/selection", requirePermission("packages", "View"), catchAsync(selectionPackages));
+router.get("/courses/:categoryId", requirePermission("packages", "View"), catchAsync(getCoursesByCategory));
 
 
 // Packages CRUD

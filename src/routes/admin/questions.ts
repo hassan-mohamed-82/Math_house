@@ -26,10 +26,10 @@ import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 
-// ── Selection helpers (open to any authenticated admin) ──────────────────
-router.get("/selectionExamCode", catchAsync(getExamCodes));
-router.get("/selectionLesson",   catchAsync(selectLessons));
-router.get("/selectionDriveContents", catchAsync(selectDriveContents));
+// ── Selection helpers ──────────────────
+router.get("/selectionExamCode",      requirePermission("questions", "View"), catchAsync(getExamCodes));
+router.get("/selectionLesson",        requirePermission("questions", "View"), catchAsync(selectLessons));
+router.get("/selectionDriveContents", requirePermission("questions", "View"), catchAsync(selectDriveContents));
 
 // ── OCR / AI helpers ──────────────────────────────────────────────────────
 router.post("/ocr",                requirePermission("questions", "Add"),  upload.single("image"), catchAsync(getTextfromImage));
