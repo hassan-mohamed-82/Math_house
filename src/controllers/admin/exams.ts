@@ -5,7 +5,7 @@ import { eq, inArray } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
 import { randomUUID } from "crypto";
-import { examCodes, questions, Sections, rawScore, courses, semesters, category } from "../../models/schema";
+import { examCodes, questions, Sections, rawScore, courses, category } from "../../models/schema";
 import { CALCULATOR_TYPES } from "../../constants/calculators";
 import { validateAndSavePdf, deleteImage } from "../../utils/handleImages";
 
@@ -354,14 +354,12 @@ export const getAllExams = async (req: Request, res: Response) => {
         courseName: courses.name,
         codeName: examCodes.code,
         rawScoreName: rawScore.name,
-        semesterName: semesters.name,
         categoryName: category.name,
     })
         .from(Exams)
         .leftJoin(courses, eq(Exams.courseId, courses.id))
         .leftJoin(examCodes, eq(Exams.codeId, examCodes.id))
         .leftJoin(rawScore, eq(Exams.rawScoreId, rawScore.id))
-        .leftJoin(semesters, eq(courses.id, semesters.courseId))
         .leftJoin(category, eq(courses.categoryId, category.id))
 
     const staticExams = allExams.filter(e => e.examType === "static");
@@ -403,14 +401,12 @@ export const getExamById = async (req: Request, res: Response) => {
         courseName: courses.name,
         codeName: examCodes.code,
         rawScoreName: rawScore.name,
-        semesterName: semesters.name,
         categoryName: category.name,
     })
         .from(Exams)
         .leftJoin(courses, eq(Exams.courseId, courses.id))
         .leftJoin(examCodes, eq(Exams.codeId, examCodes.id))
         .leftJoin(rawScore, eq(Exams.rawScoreId, rawScore.id))
-        .leftJoin(semesters, eq(courses.id, semesters.courseId))
         .leftJoin(category, eq(courses.categoryId, category.id))
         .where(eq(Exams.id, id));
 
@@ -551,14 +547,12 @@ export const getExamsByCourseId = async (req: Request, res: Response) => {
         courseName: courses.name,
         codeName: examCodes.code,
         rawScoreName: rawScore.name,
-        semesterName: semesters.name,
         categoryName: category.name,
     })
         .from(Exams)
         .leftJoin(courses, eq(Exams.courseId, courses.id))
         .leftJoin(examCodes, eq(Exams.codeId, examCodes.id))
         .leftJoin(rawScore, eq(Exams.rawScoreId, rawScore.id))
-        .leftJoin(semesters, eq(courses.id, semesters.courseId))
         .leftJoin(category, eq(courses.categoryId, category.id))
         .where(eq(Exams.courseId, courseId));
 

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { diagnosticExam, rawScore, diagnosticExamQuestions, questions, courses, semesters, category } from "../../models/schema";
+import { diagnosticExam, rawScore, diagnosticExamQuestions, questions, courses, category } from "../../models/schema";
 import { eq, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -132,15 +132,10 @@ export const getAllDiagnosticExams = async (req: Request, res: Response) => {
                 id: category.id,
                 name: category.name,
             },
-            semester: {
-                id: semesters.id,
-                name: semesters.name,
-            }
         })
         .from(diagnosticExam)
         .leftJoin(rawScore, eq(diagnosticExam.rawScoreId, rawScore.id))
         .leftJoin(courses, eq(diagnosticExam.courseId, courses.id))
-        .leftJoin(semesters, eq(courses.id, semesters.courseId))
         .leftJoin(category, eq(courses.categoryId, category.id))
         .orderBy(desc(diagnosticExam.createdAt));
 
@@ -180,10 +175,6 @@ export const getDiagnosticExamById = async (req: Request, res: Response) => {
                 id: courses.id,
                 name: courses.name,
             },
-            semester: {
-                id: semesters.id,
-                name: semesters.name,
-            },
             category: {
                 id: category.id,
                 name: category.name,
@@ -192,7 +183,6 @@ export const getDiagnosticExamById = async (req: Request, res: Response) => {
         .from(diagnosticExam)
         .leftJoin(rawScore, eq(diagnosticExam.rawScoreId, rawScore.id))
         .leftJoin(courses, eq(diagnosticExam.courseId, courses.id))
-        .leftJoin(semesters, eq(courses.id, semesters.courseId))
         .leftJoin(category, eq(courses.categoryId, category.id))
         .where(eq(diagnosticExam.id, id))
         .limit(1);
@@ -358,10 +348,6 @@ export const getAllDiagnosticExamsbyCourseId = async (req: Request, res: Respons
                 is_giftingScore: rawScore.is_giftingScore,
                 giftingScore: rawScore.giftingScore,
             },
-            semester: {
-                id: semesters.id,
-                name: semesters.name,
-            },
             category: {
                 id: category.id,
                 name: category.name,
@@ -370,7 +356,6 @@ export const getAllDiagnosticExamsbyCourseId = async (req: Request, res: Respons
         .from(diagnosticExam)
         .leftJoin(rawScore, eq(diagnosticExam.rawScoreId, rawScore.id))
         .leftJoin(courses, eq(diagnosticExam.courseId, courses.id)) 
-        .leftJoin(semesters, eq(courses.id, semesters.courseId))
         .leftJoin(category, eq(courses.categoryId, category.id))
         .where(eq(diagnosticExam.courseId, courseId))
         .orderBy(desc(diagnosticExam.createdAt));
