@@ -9,6 +9,7 @@ import { category } from "../../models/schema/admin/category";
 import { Sections } from "../../models/schema/admin/sections";
 import { questions, questionOptions, questionAnswers, ParallelQuestion, ParallelQuestionOptions } from "../../models/schema/admin/questions";
 import { lessons } from "../../models/schema/admin/lessons";
+import { chapters } from "../../models/schema/admin/chapters";
 import { examCodes } from "../../models/schema/admin/examCodes";
 import { studentParallelAttempts } from "../../models/schema/admin/studentParallelAttempts";
 import { studentParallelAnswers } from "../../models/schema/admin/studentParallelAnswers";
@@ -1581,6 +1582,47 @@ export const submitSection = async (req: Request, res: Response) => {
         }));
     }
 
+    // Fetch wrong answers for this attempt and group by lessonId to see what to study
+    const wrongAnswerLessons = await db
+        .select({
+            lessonId: lessons.id,
+            lessonName: lessons.name,
+            chapterId: chapters.id,
+            chapterName: chapters.name,
+            courseId: courses.id,
+            courseName: courses.name,
+        })
+        .from(studentAnswers)
+        .innerJoin(questions, eq(studentAnswers.questionId, questions.id))
+        .innerJoin(lessons, eq(questions.lessonId, lessons.id))
+        .innerJoin(chapters, eq(lessons.chapterId, chapters.id))
+        .innerJoin(courses, eq(lessons.courseId, courses.id))
+        .where(
+            and(
+                eq(studentAnswers.attemptId, attemptId),
+                eq(studentAnswers.isCorrect, false)
+            )
+        );
+
+    // Extract unique lesson details that student got wrong
+    const uniqueLessonsMap = new Map();
+    for (const item of wrongAnswerLessons) {
+        if (!uniqueLessonsMap.has(item.lessonId)) {
+            uniqueLessonsMap.set(item.lessonId, {
+                lessonId: item.lessonId,
+                lessonName: item.lessonName,
+                chapter: {
+                    id: item.chapterId,
+                    name: item.chapterName
+                },
+                course: {
+                    id: item.courseId,
+                    name: item.courseName
+                }
+            });
+        }
+    }
+
     const [updatedStudent] = await db
         .select({ questionBalance: Student.questionbalance, examBalance: Student.exambalance })
         .from(Student)
@@ -1616,6 +1658,7 @@ export const submitSection = async (req: Request, res: Response) => {
             },
             examHasAnswers: !!answersPayment,
         },
+        recommendedLessonsToStudy: Array.from(uniqueLessonsMap.values()),
     });
 };
 
