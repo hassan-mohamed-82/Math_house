@@ -1,10 +1,15 @@
 import { Router } from "express";
-import { getStudentQuizReports, getStudentExamReports } from "../../controllers/admin/reports";
+import {
+    getStudentQuizReports,
+    getStudentExamReports,
+    getStudentDiagnosticExamReports
+} from "../../controllers/admin/reports";
 import { catchAsync } from "../../utils/catchAsync";
 import { requirePermission } from "../../middlewares/requirePermission";
 
 const router = Router();
 router.get("/:studentId/quizzes", requirePermission("reports", "View"), catchAsync(getStudentQuizReports));
 router.get("/:studentId/exams", requirePermission("reports", "View"), catchAsync(getStudentExamReports));
+router.get("/:studentId/diagnostic-exam", requirePermission("reports", "View"), catchAsync(getStudentDiagnosticExamReports));
 
 export default router;
