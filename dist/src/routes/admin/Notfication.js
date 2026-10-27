@@ -7,7 +7,7 @@ const Notfication_1 = require("../../controllers/admin/Notfication");
 const requirePermission_1 = require("../../middlewares/requirePermission");
 const router = (0, express_1.Router)();
 // Select options & search
-router.get("/select-options", (0, catchAsync_1.catchAsync)(Notfication_1.selectOptions));
+router.get("/select-options", (0, requirePermission_1.requirePermission)("notifications", "View"), (0, catchAsync_1.catchAsync)(Notfication_1.selectOptions));
 router.get("/search/parents", (0, requirePermission_1.requirePermission)("notifications", "View"), (0, catchAsync_1.catchAsync)(Notfication_1.searchParents));
 router.get("/search/students", (0, requirePermission_1.requirePermission)("notifications", "View"), (0, catchAsync_1.catchAsync)(Notfication_1.searchStudents));
 router.get("/search/teachers", (0, requirePermission_1.requirePermission)("notifications", "View"), (0, catchAsync_1.catchAsync)(Notfication_1.searchTeachers));

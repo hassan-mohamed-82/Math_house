@@ -331,14 +331,12 @@ const getAllExams = async (req, res) => {
         courseName: schema_1.courses.name,
         codeName: schema_1.examCodes.code,
         rawScoreName: schema_1.rawScore.name,
-        semesterName: schema_1.semesters.name,
         categoryName: schema_1.category.name,
     })
         .from(exams_1.Exams)
         .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(exams_1.Exams.courseId, schema_1.courses.id))
         .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(exams_1.Exams.codeId, schema_1.examCodes.id))
         .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(exams_1.Exams.rawScoreId, schema_1.rawScore.id))
-        .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.semesters.courseId))
         .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, schema_1.category.id));
     const staticExams = allExams.filter(e => e.examType === "static");
     const adaptiveExams = allExams.filter(e => e.examType === "adaptive");
@@ -377,14 +375,12 @@ const getExamById = async (req, res) => {
         courseName: schema_1.courses.name,
         codeName: schema_1.examCodes.code,
         rawScoreName: schema_1.rawScore.name,
-        semesterName: schema_1.semesters.name,
         categoryName: schema_1.category.name,
     })
         .from(exams_1.Exams)
         .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(exams_1.Exams.courseId, schema_1.courses.id))
         .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(exams_1.Exams.codeId, schema_1.examCodes.id))
         .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(exams_1.Exams.rawScoreId, schema_1.rawScore.id))
-        .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.semesters.courseId))
         .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, schema_1.category.id))
         .where((0, drizzle_orm_1.eq)(exams_1.Exams.id, id));
     if (exam.length === 0) {
@@ -509,14 +505,12 @@ const getExamsByCourseId = async (req, res) => {
         courseName: schema_1.courses.name,
         codeName: schema_1.examCodes.code,
         rawScoreName: schema_1.rawScore.name,
-        semesterName: schema_1.semesters.name,
         categoryName: schema_1.category.name,
     })
         .from(exams_1.Exams)
         .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(exams_1.Exams.courseId, schema_1.courses.id))
         .leftJoin(schema_1.examCodes, (0, drizzle_orm_1.eq)(exams_1.Exams.codeId, schema_1.examCodes.id))
         .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(exams_1.Exams.rawScoreId, schema_1.rawScore.id))
-        .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.semesters.courseId))
         .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, schema_1.category.id))
         .where((0, drizzle_orm_1.eq)(exams_1.Exams.courseId, courseId));
     const staticExams = courseExams.filter(e => e.examType === "static");

@@ -8,14 +8,20 @@ const authorizeRoles = (...roles) => {
         if (!req.user) {
             throw new Errors_1.UnauthorizedError("Not authenticated");
         }
+        const userRole = (req.user.role || "").toLowerCase();
         // superadmin can access any route
-        if (req.user.role === "superadmin") {
+        if (userRole === "superadmin" || userRole === "super_admin") {
             return next();
         }
-        if (!roles.includes(req.user.role)) {
-            throw new Errors_1.UnauthorizedError("You don't have permission to access this resource");
+        // Direct match
+        if (roles.includes(req.user.role)) {
+            return next();
         }
-        next();
+        // If route accepts "admin" and user has any admin role (e.g. "admin role")
+        if (roles.includes("admin") && userRole.includes("admin")) {
+            return next();
+        }
+        throw new Errors_1.UnauthorizedError("You don't have permission to access this resource");
     };
 };
 exports.authorizeRoles = authorizeRoles;

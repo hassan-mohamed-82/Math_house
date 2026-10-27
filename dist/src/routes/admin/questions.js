@@ -9,10 +9,10 @@ const examCodes_1 = require("../../controllers/admin/examCodes");
 const lessons_1 = require("../../controllers/admin/lessons");
 const requirePermission_1 = require("../../middlewares/requirePermission");
 const router = (0, express_1.Router)();
-// ── Selection helpers (open to any authenticated admin) ──────────────────
-router.get("/selectionExamCode", (0, catchAsync_1.catchAsync)(examCodes_1.getExamCodes));
-router.get("/selectionLesson", (0, catchAsync_1.catchAsync)(lessons_1.selectLessons));
-router.get("/selectionDriveContents", (0, catchAsync_1.catchAsync)(questions_2.selectDriveContents));
+// ── Selection helpers ──────────────────
+router.get("/selectionExamCode", (0, requirePermission_1.requirePermission)("questions", "View"), (0, catchAsync_1.catchAsync)(examCodes_1.getExamCodes));
+router.get("/selectionLesson", (0, requirePermission_1.requirePermission)("questions", "View"), (0, catchAsync_1.catchAsync)(lessons_1.selectLessons));
+router.get("/selectionDriveContents", (0, requirePermission_1.requirePermission)("questions", "View"), (0, catchAsync_1.catchAsync)(questions_2.selectDriveContents));
 // ── OCR / AI helpers ──────────────────────────────────────────────────────
 router.post("/ocr", (0, requirePermission_1.requirePermission)("questions", "Add"), multer_1.upload.single("image"), (0, catchAsync_1.catchAsync)(questions_1.getTextfromImage));
 router.post("/parallel/generate", (0, requirePermission_1.requirePermission)("questions", "Add"), (0, catchAsync_1.catchAsync)(questions_2.sendParallelQuestionGenerate));

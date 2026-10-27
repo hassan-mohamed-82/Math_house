@@ -73,4 +73,5 @@ app.use(errorHandler_1.errorHandler);
 httpServer.listen(3000, () => {
     console.log("Server is running on http://localhost:3000");
     (0, cronJobs_1.startCurrencyCron)();
+    (0, cronJobs_1.startSessionPackageCron)();
 });

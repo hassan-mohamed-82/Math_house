@@ -7,10 +7,10 @@ const catchAsync_1 = require("../../utils/catchAsync");
 const requirePermission_1 = require("../../middlewares/requirePermission");
 const router = (0, express_1.Router)();
 // Selection API
-router.get("/selection", (0, catchAsync_1.catchAsync)(Quiz_1.getSelection));
+router.get("/selection", (0, requirePermission_1.requirePermission)("quizzes", "View"), (0, catchAsync_1.catchAsync)(Quiz_1.getSelection));
 // Questions Bank
 router.get("/questions/bank", (0, requirePermission_1.requirePermission)("quizzes", "View"), (0, catchAsync_1.catchAsync)(Quiz_1.getQuestionsBank));
-router.get("/questions/filters", (0, catchAsync_1.catchAsync)(Quiz_1.getFilterOptions));
+router.get("/questions/filters", (0, requirePermission_1.requirePermission)("quizzes", "View"), (0, catchAsync_1.catchAsync)(Quiz_1.getFilterOptions));
 // Quiz CRUD
 router.post("/", (0, requirePermission_1.requirePermission)("quizzes", "Add"), (0, catchAsync_1.catchAsync)(Quiz_1.createQuiz));
 router.get("/", (0, requirePermission_1.requirePermission)("quizzes", "View"), (0, catchAsync_1.catchAsync)(Quiz_1.getAllQuizzes));

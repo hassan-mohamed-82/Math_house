@@ -5,7 +5,7 @@ const promoCodes_1 = require("../../controllers/admin/promoCodes");
 const catchAsync_1 = require("../../utils/catchAsync");
 const requirePermission_1 = require("../../middlewares/requirePermission");
 const router = (0, express_1.Router)();
-router.get("/currency", (0, catchAsync_1.catchAsync)(promoCodes_1.currencySelection));
+router.get("/currency", (0, requirePermission_1.requirePermission)("promo_codes", "View"), (0, catchAsync_1.catchAsync)(promoCodes_1.currencySelection));
 router.post("/", (0, requirePermission_1.requirePermission)("promo_codes", "Add"), (0, catchAsync_1.catchAsync)(promoCodes_1.createPromoCode));
 router.get("/", (0, requirePermission_1.requirePermission)("promo_codes", "View"), (0, catchAsync_1.catchAsync)(promoCodes_1.getAllPromoCodes));
 router.get("/:id", (0, requirePermission_1.requirePermission)("promo_codes", "View"), (0, catchAsync_1.catchAsync)(promoCodes_1.getPromoCodebyId));

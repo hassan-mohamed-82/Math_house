@@ -6,7 +6,7 @@ const Popup_1 = require("../../controllers/admin/Popup");
 const requirePermission_1 = require("../../middlewares/requirePermission");
 const router = (0, express_1.Router)();
 // User-facing: get active popups by destination
-router.get("/active", (0, catchAsync_1.catchAsync)(Popup_1.getActivePopups));
+router.get("/active", (0, requirePermission_1.requirePermission)("popups", "View"), (0, catchAsync_1.catchAsync)(Popup_1.getActivePopups));
 // Admin CRUD
 router.post("/", (0, requirePermission_1.requirePermission)("popups", "Add"), (0, catchAsync_1.catchAsync)(Popup_1.createPopup));
 router.get("/", (0, requirePermission_1.requirePermission)("popups", "View"), (0, catchAsync_1.catchAsync)(Popup_1.getAllPopups));

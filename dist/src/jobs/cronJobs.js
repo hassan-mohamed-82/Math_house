@@ -3,9 +3,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.startCurrencyCron = exports.startCronJobs = void 0;
+exports.startSessionPackageCron = exports.startCurrencyCron = exports.startCronJobs = void 0;
 const node_cron_1 = __importDefault(require("node-cron"));
 const currencyCron_1 = require("./cronServices/currencyCron");
+const sessionPackageCron_1 = require("./cronServices/sessionPackageCron");
+Object.defineProperty(exports, "startSessionPackageCron", { enumerable: true, get: function () { return sessionPackageCron_1.startSessionPackageCron; } });
 const startCronJobs = () => {
     // Schedule: Every day at 00:00 (Midnight)
     // Format: "minute hour day-of-month month day-of-week"

@@ -15,11 +15,12 @@ const getQuizQuestions = async (req, res) => {
     if (!existingQuiz) {
         throw new Errors_1.NotFound("Quiz not found");
     }
-    const hasAccess = await (0, accessControl_1.checkAccess)(req.user.id, {
+    const accessIds = await (0, accessControl_1.resolveAccessIds)({
         courseId: existingQuiz.courseId || undefined,
         chapterId: existingQuiz.chapterId || undefined,
-        lessonId: existingQuiz.lessonId || undefined
+        lessonId: existingQuiz.lessonId || undefined,
     });
+    const hasAccess = await (0, accessControl_1.checkAccess)(req.user.id, accessIds);
     if (!hasAccess) {
         throw new Errors_1.BadRequest("You do not have access to this quiz. Please purchase the corresponding course, chapter, or lesson.");
     }
@@ -66,11 +67,12 @@ const getQuizById = async (req, res) => {
     if (!existingQuiz) {
         throw new Errors_1.NotFound("Quiz not found");
     }
-    const hasAccess = await (0, accessControl_1.checkAccess)(studentId, {
+    const accessIds = await (0, accessControl_1.resolveAccessIds)({
         courseId: existingQuiz.courseId || undefined,
         chapterId: existingQuiz.chapterId || undefined,
-        lessonId: existingQuiz.lessonId || undefined
+        lessonId: existingQuiz.lessonId || undefined,
     });
+    const hasAccess = await (0, accessControl_1.checkAccess)(studentId, accessIds);
     if (!hasAccess) {
         throw new Errors_1.BadRequest("You do not have access to this quiz. Please purchase the corresponding course, chapter, or lesson.");
     }
@@ -112,11 +114,12 @@ const startQuiz = async (req, res) => {
         throw new Errors_1.NotFound("Quiz not found");
     if (!existingQuiz.isActive)
         throw new Errors_1.BadRequest("Quiz is not active");
-    const hasAccess = await (0, accessControl_1.checkAccess)(studentId, {
+    const accessIds = await (0, accessControl_1.resolveAccessIds)({
         courseId: existingQuiz.courseId || undefined,
         chapterId: existingQuiz.chapterId || undefined,
-        lessonId: existingQuiz.lessonId || undefined
+        lessonId: existingQuiz.lessonId || undefined,
     });
+    const hasAccess = await (0, accessControl_1.checkAccess)(studentId, accessIds);
     if (!hasAccess) {
         throw new Errors_1.BadRequest("You do not have access to this quiz.");
     }

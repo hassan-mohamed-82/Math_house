@@ -15,6 +15,7 @@ const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const services_1 = require("../../drive/services/services");
 const sessionMaterials_1 = require("../../utils/sessionMaterials");
+const sessionPackageCron_1 = require("../../jobs/cronServices/sessionPackageCron");
 // ── config ────────────────────────────────────────────────────────────────────
 exports.STUDENTS_SEE_ANSWERS_AFTER_ATTENDING = true;
 /** Students may join this many minutes before the session starts (until timeTo). */
@@ -98,37 +99,25 @@ async function fetchStudentPdfRows(studentId, sessionIds) {
     return studentPdfMap;
 }
 const resolvePdfs = (session, isAttended, effective, studentPdf) => {
-    if (!isAttended) {
-        return {
-            session_pdf: null,
-            session_answers_pdf: null,
-            teacher_explanation_pdf: null,
-            materials: [],
-            materialsLocked: true,
-        };
-    }
     const hasPersonalWorksheet = Boolean(studentPdf?.session_pdf);
+    // session_pdf is always visible to enrolled students
     const resolvedSessionPdf = hasPersonalWorksheet ? studentPdf.session_pdf : effective.session_pdf;
-    let resolvedAnswersPdf = null;
-    if (exports.STUDENTS_SEE_ANSWERS_AFTER_ATTENDING) {
-        resolvedAnswersPdf = hasPersonalWorksheet ? (studentPdf?.session_answers_pdf ?? null) : effective.session_answers_pdf;
-    }
-    const resolvedExplanationPdf = studentPdf?.teacher_explanation_pdf ?? session.teacher_explanation_pdf ?? null;
+    // explanation PDF only unlocked after attendance; answers PDF never sent to students
+    let resolvedExplanationPdf = null;
     let resolvedMaterials = [];
-    if (!hasPersonalWorksheet) {
-        if (exports.STUDENTS_SEE_ANSWERS_AFTER_ATTENDING) {
-            resolvedMaterials = effective.materials;
+    let materialsLocked = true;
+    if (isAttended) {
+        resolvedExplanationPdf = studentPdf?.teacher_explanation_pdf ?? session.teacher_explanation_pdf ?? null;
+        if (!hasPersonalWorksheet) {
+            resolvedMaterials = effective.materials.map(m => ({ ...m, session_answers_pdf: undefined }));
         }
-        else {
-            resolvedMaterials = effective.materials.map(m => ({ ...m, session_answers_pdf: null }));
-        }
+        materialsLocked = false;
     }
     return {
         session_pdf: resolvedSessionPdf,
-        session_answers_pdf: resolvedAnswersPdf,
         teacher_explanation_pdf: resolvedExplanationPdf,
         materials: resolvedMaterials,
-        materialsLocked: false,
+        materialsLocked,
     };
 };
 async function fetchIdeasByLesson(lessonIds) {
@@ -158,6 +147,8 @@ async function fetchIdeasByLesson(lessonIds) {
 // ── Controllers ───────────────────────────────────────────────────────────────
 const getUpcomingSessions = async (req, res) => {
     const studentId = getStudentId(req);
+    // Ensure session packages are deducted 24h prior to any upcoming sessions in real-time
+    await (0, sessionPackageCron_1.processUpcomingSessionsDeductions)(studentId);
     const { today, currentTime } = cairoNow();
     const ExistingStudent = await connection_1.db.select({ id: Student_1.Student.id }).from(Student_1.Student).where((0, drizzle_orm_1.eq)(Student_1.Student.id, studentId));
     if (ExistingStudent.length === 0) {
@@ -195,10 +186,10 @@ const getUpcomingSessions = async (req, res) => {
         .leftJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
         .leftJoin(courses_1.courses, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, courses_1.courses.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.sql) `(
-                ${Session_1.sessions.sessionDate} > ${today}
-                OR (${Session_1.sessions.sessionDate} = ${today} AND ${Session_1.sessions.timeTo} >= ${currentTime})
+                DATE(${Session_1.sessions.sessionDate}) > ${today}
+                OR (DATE(${Session_1.sessions.sessionDate}) = ${today} AND ${Session_1.sessions.timeTo} >= ${currentTime})
             )`, enrolledSessionsFilter(studentId)))
-        .orderBy((0, drizzle_orm_1.sql) `${Session_1.sessions.sessionDate} ASC, ${Session_1.sessions.timeFrom} ASC`);
+        .orderBy((0, drizzle_orm_1.sql) `DATE(${Session_1.sessions.sessionDate}) ASC, ${Session_1.sessions.timeFrom} ASC`);
     const sessionsMap = new Map();
     const sessionIds = [];
     rawSessions.forEach((row) => {
@@ -302,10 +293,10 @@ const getSessionHistory = async (req, res) => {
         .leftJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
         .leftJoin(courses_1.courses, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, courses_1.courses.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.sql) `(
-                ${Session_1.sessions.sessionDate} < ${today}
-                OR (${Session_1.sessions.sessionDate} = ${today} AND ${Session_1.sessions.timeTo} < ${currentTime})
+                DATE(${Session_1.sessions.sessionDate}) < ${today}
+                OR (DATE(${Session_1.sessions.sessionDate}) = ${today} AND ${Session_1.sessions.timeTo} < ${currentTime})
             )`, enrolledSessionsFilter(studentId)))
-        .orderBy((0, drizzle_orm_1.sql) `${Session_1.sessions.sessionDate} DESC, ${Session_1.sessions.timeFrom} DESC`);
+        .orderBy((0, drizzle_orm_1.sql) `DATE(${Session_1.sessions.sessionDate}) DESC, ${Session_1.sessions.timeFrom} DESC`);
     const pastSessionsMap = new Map();
     const pastSessionIds = [];
     rawPastSessions.forEach((row) => {
@@ -520,7 +511,15 @@ const joinSession = async (req, res) => {
         }
         // ── Join window (Cairo time) ──────────────────────────────────────────
         const { today, currentTime } = cairoNow();
-        if (String(session.sessionDate) !== today) {
+        // Normalize sessionDate: MySQL may return a Date object or ISO string like
+        // "2026-10-25T00:00:00.000Z". Extract the Cairo local date (YYYY-MM-DD).
+        const sessionDateStr = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Africa/Cairo",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit",
+        }).format(new Date(session.sessionDate));
+        if (sessionDateStr !== today) {
             throw new Errors_1.BadRequest("This session is not scheduled for today");
         }
         const nowMin = toMinutes(currentTime);

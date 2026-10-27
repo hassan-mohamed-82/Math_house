@@ -57,5 +57,6 @@ __exportStar(require("./schema/admin/grade"), exports);
 __exportStar(require("./schema/admin/prices"), exports);
 __exportStar(require("./schema/admin/SessionRatingQuestions"), exports);
 __exportStar(require("./schema/admin/ExtraHomework"), exports);
+__exportStar(require("./schema/admin/StudentAvailabilityPlan"), exports);
 // Drive schema
 __exportStar(require("../drive/models/drive"), exports);

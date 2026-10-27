@@ -6,8 +6,8 @@ const semester_1 = require("../../controllers/admin/semester");
 const catchAsync_1 = require("../../utils/catchAsync");
 const requirePermission_1 = require("../../middlewares/requirePermission");
 const router = (0, express_1.Router)();
-// ── Selection helpers (open to any authenticated admin) ──────────────────
-router.get("/selectionSemester/:courseId", (0, catchAsync_1.catchAsync)(semester_1.getSemestersByCourseId));
+// ── Selection helpers ──────────────────
+router.get("/selectionSemester/:courseId", (0, requirePermission_1.requirePermission)("chapters", "View"), (0, catchAsync_1.catchAsync)(semester_1.getSemestersByCourseId));
 // ── List & detail ─────────────────────────────────────────────────────────
 router.get("/", (0, requirePermission_1.requirePermission)("chapters", "View"), (0, catchAsync_1.catchAsync)(chapters_1.getAllChapters));
 router.get("/course/:courseId", (0, requirePermission_1.requirePermission)("chapters", "View"), (0, catchAsync_1.catchAsync)(chapters_1.getAllChaptersByCourseId));

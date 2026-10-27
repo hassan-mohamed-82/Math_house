@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sessionStudentPdfs = exports.sessionAttendance = exports.sessionRatings = exports.sessionLessons = exports.sessionUsers = exports.sessionGroups = exports.sessions = void 0;
+exports.sessionPackageDeductions = exports.sessionStudentPdfs = exports.sessionAttendance = exports.sessionRatings = exports.sessionLessons = exports.sessionUsers = exports.sessionGroups = exports.sessions = void 0;
 // schema/sessions.ts
 const mysql_core_1 = require("drizzle-orm/mysql-core");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -102,4 +102,19 @@ exports.sessionStudentPdfs = (0, mysql_core_1.mysqlTable)("session_student_pdfs"
     (0, mysql_core_1.uniqueIndex)("session_student_pdf_unique").on(table.sessionId, table.studentId),
     (0, mysql_core_1.index)("session_student_pdfs_session_idx").on(table.sessionId),
     (0, mysql_core_1.index)("session_student_pdfs_student_idx").on(table.studentId),
+]);
+/**
+ * Tracks balance deduction for sessions (1 session deducted from student's live package
+ * 24 hours prior to the upcoming session start, or upon join).
+ * Ensures a student is NEVER deducted more than once for the same session.
+ */
+exports.sessionPackageDeductions = (0, mysql_core_1.mysqlTable)("session_package_deductions", {
+    id: (0, mysql_core_1.char)("id", { length: 36 }).primaryKey().default((0, drizzle_orm_1.sql) `(UUID())`),
+    sessionId: (0, mysql_core_1.char)("session_id", { length: 36 }).notNull().references(() => exports.sessions.id, { onDelete: "cascade" }),
+    studentId: (0, mysql_core_1.char)("student_id", { length: 36 }).notNull().references(() => Student_1.Student.id, { onDelete: "cascade" }),
+    deductedAt: (0, mysql_core_1.timestamp)("deducted_at").defaultNow().notNull(),
+}, (table) => [
+    (0, mysql_core_1.uniqueIndex)("session_student_deduction_unique").on(table.sessionId, table.studentId),
+    (0, mysql_core_1.index)("session_deduction_session_idx").on(table.sessionId),
+    (0, mysql_core_1.index)("session_deduction_student_idx").on(table.studentId),
 ]);

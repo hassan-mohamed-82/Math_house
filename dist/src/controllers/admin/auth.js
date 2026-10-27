@@ -15,6 +15,7 @@ const Errors_1 = require("../../Errors");
 const bcrypt_1 = __importDefault(require("bcrypt"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const jwt_1 = require("../../utils/jwt");
+const requirePermission_1 = require("../../middlewares/requirePermission");
 async function login(req, res) {
     const { email, password } = req.body;
     if (!email || !password) {
@@ -35,20 +36,28 @@ async function login(req, res) {
     if (admin[0].roleId) {
         role = await connection_1.db.select().from(schema_1.roles).where((0, drizzle_orm_1.eq)(schema_1.roles.id, admin[0].roleId));
     }
+    const isSuperAdmin = admin[0].type === "super_admin" || (role?.[0]?.name?.toLowerCase() === "superadmin");
+    const systemRole = isSuperAdmin ? "superadmin" : "admin";
+    const roleTitle = role?.[0]?.name ?? systemRole;
     const tokenPayload = {
         id: admin[0].id,
         name: admin[0].name,
-        role: (admin[0].type === "super_admin" ? "superadmin" : (role && role[0] ? role[0].name : "admin")),
-        // permissions: admin[0].permissions,
+        role: systemRole,
     };
     const token = (0, jwt_1.generateAdminToken)(tokenPayload);
+    const rolePerms = (0, requirePermission_1.safeParsePermissions)(role?.[0]?.permissions);
+    const adminPerms = (0, requirePermission_1.safeParsePermissions)(admin[0].permissions);
+    const merged = (0, requirePermission_1.mergePermissions)(rolePerms, adminPerms);
+    const hasAll = isSuperAdmin || (0, requirePermission_1.hasAllPermissions)(merged);
+    const finalPermissions = hasAll ? [] : merged;
     return (0, response_1.SuccessResponse)(res, {
         message: "Admin logged in successfully", token, admin: {
             name: admin[0].name,
             email: admin[0].email,
             phoneNumber: admin[0].phoneNumber,
             roleId: admin[0].roleId,
-            permissions: admin[0].permissions,
+            role: roleTitle,
+            permissions: finalPermissions,
             status: admin[0].status,
         }
     }, 200);
@@ -134,12 +143,20 @@ async function switchBack(req, res) {
     if (admin[0].roleId) {
         role = await connection_1.db.select().from(schema_1.roles).where((0, drizzle_orm_1.eq)(schema_1.roles.id, admin[0].roleId));
     }
+    const isSuperAdmin = admin[0].type === "super_admin" || (role?.[0]?.name?.toLowerCase() === "superadmin");
+    const systemRole = isSuperAdmin ? "superadmin" : "admin";
+    const roleTitle = role?.[0]?.name ?? systemRole;
     const tokenPayload = {
         id: admin[0].id,
         name: admin[0].name,
-        role: (admin[0].type === "super_admin" ? "superadmin" : (role && role[0] ? role[0].name : "admin")),
+        role: systemRole,
     };
     const token = (0, jwt_1.generateAdminToken)(tokenPayload);
+    const rolePerms = (0, requirePermission_1.safeParsePermissions)(role?.[0]?.permissions);
+    const adminPerms = (0, requirePermission_1.safeParsePermissions)(admin[0].permissions);
+    const merged = (0, requirePermission_1.mergePermissions)(rolePerms, adminPerms);
+    const hasAll = isSuperAdmin || (0, requirePermission_1.hasAllPermissions)(merged);
+    const finalPermissions = hasAll ? [] : merged;
     return (0, response_1.SuccessResponse)(res, {
         message: "Switched back to admin successfully",
         token,
@@ -148,7 +165,8 @@ async function switchBack(req, res) {
             email: admin[0].email,
             phoneNumber: admin[0].phoneNumber,
             roleId: admin[0].roleId,
-            permissions: admin[0].permissions,
+            role: roleTitle,
+            permissions: finalPermissions,
             status: admin[0].status,
         }
     }, 200);

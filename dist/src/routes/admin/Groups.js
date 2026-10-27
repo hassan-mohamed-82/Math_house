@@ -5,7 +5,7 @@ const Groups_1 = require("../../controllers/admin/Groups");
 const catchAsync_1 = require("../../utils/catchAsync");
 const requirePermission_1 = require("../../middlewares/requirePermission");
 const router = (0, express_1.Router)();
-router.get("/select", (0, catchAsync_1.catchAsync)(Groups_1.selectOptions));
+router.get("/select", (0, requirePermission_1.requirePermission)("groups", "View"), (0, catchAsync_1.catchAsync)(Groups_1.selectOptions));
 router.get("/search-students", (0, requirePermission_1.requirePermission)("groups", "View"), (0, catchAsync_1.catchAsync)(Groups_1.searchStudents));
 router.get("/", (0, requirePermission_1.requirePermission)("groups", "View"), (0, catchAsync_1.catchAsync)(Groups_1.getAllGroups));
 router.get("/:id", (0, requirePermission_1.requirePermission)("groups", "View"), (0, catchAsync_1.catchAsync)(Groups_1.getGroupById));

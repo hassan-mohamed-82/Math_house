@@ -1,12 +1,6 @@
 "use strict";
-// import { Request, Response } from "express";
-// import { db } from "../../models/connection";
-// import { quizAttempts, studentQuizAnswers, quizzes, questions, questionOptions, Student, examAttempts, studentAnswers, Exams } from "../../models/schema";
-// import { eq, and, inArray } from "drizzle-orm";
-// import { SuccessResponse } from "../../utils/response";
-// import { NotFound } from "../../Errors";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getStudentExamReports = exports.getStudentQuizReports = void 0;
+exports.getStudentDiagnosticExamReports = exports.getStudentExamReports = exports.getStudentQuizReports = void 0;
 const connection_1 = require("../../models/connection");
 const schema_1 = require("../../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
@@ -440,3 +434,229 @@ const getStudentExamReports = async (req, res) => {
     });
 };
 exports.getStudentExamReports = getStudentExamReports;
+// ===================== GET STUDENT DIAGNOSTIC EXAM REPORTS =====================
+const getStudentDiagnosticExamReports = async (req, res) => {
+    const { studentId } = req.params;
+    const existingStudent = await connection_1.db.select().from(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, studentId));
+    if (existingStudent.length === 0) {
+        throw new Errors_1.NotFound("Student not found");
+    }
+    const studentCategory = existingStudent[0].category;
+    // 1. Fetch all attempts of the student for diagnostic exams
+    const studentAttempts = await connection_1.db
+        .select()
+        .from(schema_1.diagnosticExamAttempt)
+        .where((0, drizzle_orm_1.eq)(schema_1.diagnosticExamAttempt.studentId, studentId))
+        .orderBy((0, drizzle_orm_1.desc)(schema_1.diagnosticExamAttempt.startedAt));
+    const attemptExamIds = studentAttempts.map(a => a.diagnosticExamId);
+    // 2. Fetch all diagnostic exams in student's category OR exams that the student has attempted
+    const whereConditions = [
+        (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, studentCategory)
+    ];
+    if (attemptExamIds.length > 0) {
+        whereConditions.push((0, drizzle_orm_1.inArray)(schema_1.diagnosticExam.id, attemptExamIds));
+    }
+    const allDiagnosticExams = await connection_1.db
+        .select({
+        id: schema_1.diagnosticExam.id,
+        title: schema_1.diagnosticExam.title,
+        description: schema_1.diagnosticExam.description,
+        totalScore: schema_1.diagnosticExam.totalScore,
+        passScore: schema_1.diagnosticExam.passScore,
+        duration: schema_1.diagnosticExam.duration,
+        numberOfQuestions: schema_1.diagnosticExam.numberOfQuestions,
+        isActive: schema_1.diagnosticExam.isActive,
+        courseId: schema_1.diagnosticExam.courseId,
+        courseName: schema_1.courses.name,
+    })
+        .from(schema_1.diagnosticExam)
+        .innerJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, schema_1.courses.id))
+        .where((0, drizzle_orm_1.or)(...whereConditions));
+    // 3. Gather completed attempt IDs to fetch mistakes
+    const completedAttemptIds = studentAttempts
+        .filter(a => a.isCompleted)
+        .map(a => a.id);
+    let allMistakes = [];
+    if (completedAttemptIds.length > 0) {
+        allMistakes = await connection_1.db
+            .select({
+            attemptId: schema_1.studentDiagnosticAnswers.attemptId,
+            questionId: schema_1.questions.id,
+            questionText: schema_1.questions.question,
+            questionImage: schema_1.questions.image,
+            answerType: schema_1.questions.answerType,
+            lessonId: schema_1.questions.lessonId,
+            studentAnswerId: schema_1.studentDiagnosticAnswers.studentAnswerId,
+            studentGridInAnswer: schema_1.studentDiagnosticAnswers.studentGridInAnswer,
+        })
+            .from(schema_1.studentDiagnosticAnswers)
+            .innerJoin(schema_1.questions, (0, drizzle_orm_1.eq)(schema_1.studentDiagnosticAnswers.questionId, schema_1.questions.id))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.studentDiagnosticAnswers.attemptId, completedAttemptIds), (0, drizzle_orm_1.eq)(schema_1.studentDiagnosticAnswers.isCorrect, false)));
+    }
+    // 4. Fetch details for mistaken questions: options, right solutions, lessons, and session attendance
+    const mistakenQuestionIds = Array.from(new Set(allMistakes.map(m => m.questionId)));
+    const lessonIds = Array.from(new Set(allMistakes.map(m => m.lessonId).filter((id) => !!id)));
+    let lessonsList = [];
+    if (lessonIds.length > 0) {
+        lessonsList = await connection_1.db
+            .select()
+            .from(schema_1.lessons)
+            .where((0, drizzle_orm_1.inArray)(schema_1.lessons.id, lessonIds));
+    }
+    const lessonsMap = new Map(lessonsList.map(l => [l.id, l]));
+    let attendedLessonIds = new Set();
+    if (lessonIds.length > 0) {
+        const studentLessonAttendance = await connection_1.db
+            .select({
+            lessonId: schema_1.sessionLessons.lessonId
+        })
+            .from(schema_1.sessionLessons)
+            .innerJoin(schema_1.sessionAttendance, (0, drizzle_orm_1.eq)(schema_1.sessionLessons.sessionId, schema_1.sessionAttendance.sessionId))
+            .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(schema_1.sessionAttendance.studentId, studentId), (0, drizzle_orm_1.eq)(schema_1.sessionAttendance.status, "present"), (0, drizzle_orm_1.inArray)(schema_1.sessionLessons.lessonId, lessonIds)));
+        attendedLessonIds = new Set(studentLessonAttendance.map(a => a.lessonId));
+    }
+    let allOptions = [];
+    if (mistakenQuestionIds.length > 0) {
+        allOptions = await connection_1.db
+            .select({
+            id: schema_1.questionOptions.id,
+            questionId: schema_1.questionOptions.questionId,
+            answer: schema_1.questionOptions.answer,
+            isCorrect: schema_1.questionOptions.isCorrect,
+            order: schema_1.questionOptions.order
+        })
+            .from(schema_1.questionOptions)
+            .where((0, drizzle_orm_1.inArray)(schema_1.questionOptions.questionId, mistakenQuestionIds));
+    }
+    const optionsMap = new Map();
+    allOptions.forEach(o => {
+        if (!optionsMap.has(o.questionId))
+            optionsMap.set(o.questionId, []);
+        optionsMap.get(o.questionId).push(o);
+    });
+    let allRightSolutions = [];
+    if (mistakenQuestionIds.length > 0) {
+        allRightSolutions = await connection_1.db
+            .select({
+            questionId: schema_1.questionAnswers.questionId,
+            id: schema_1.questionAnswers.id,
+            pdf: schema_1.questionAnswers.pdf,
+            video: schema_1.questionAnswers.video,
+            image: schema_1.questionAnswers.image,
+            text: schema_1.questionAnswers.text
+        })
+            .from(schema_1.questionAnswers)
+            .where((0, drizzle_orm_1.inArray)(schema_1.questionAnswers.questionId, mistakenQuestionIds));
+    }
+    const rightSolutionsMap = new Map();
+    for (const s of allRightSolutions) {
+        if (!rightSolutionsMap.has(s.questionId))
+            rightSolutionsMap.set(s.questionId, []);
+        rightSolutionsMap.get(s.questionId).push({
+            id: s.id,
+            answerPdf: s.pdf,
+            answerVideo: s.video,
+            answerImage: s.image,
+            answerText: s.text,
+        });
+    }
+    const mistakesByAttemptMap = new Map();
+    allMistakes.forEach(m => {
+        if (!mistakesByAttemptMap.has(m.attemptId))
+            mistakesByAttemptMap.set(m.attemptId, []);
+        const qOptions = optionsMap.get(m.questionId) || [];
+        const correctOption = qOptions.find(o => o.isCorrect);
+        const studentOption = qOptions.find(o => o.id === m.studentAnswerId);
+        const rightSolution = rightSolutionsMap.get(m.questionId) ?? [];
+        const lessonDetail = m.lessonId ? lessonsMap.get(m.lessonId) || null : null;
+        const attendedLesson = m.lessonId ? attendedLessonIds.has(m.lessonId) : false;
+        mistakesByAttemptMap.get(m.attemptId).push({
+            questionId: m.questionId,
+            questionText: m.questionText,
+            questionImage: m.questionImage,
+            answerType: m.answerType,
+            studentSelectedOptionId: m.studentAnswerId,
+            studentGridInAnswer: m.studentGridInAnswer,
+            correctOption: correctOption ? correctOption.answer : null,
+            studentOption: studentOption ? studentOption.answer : null,
+            options: qOptions.map(({ questionId, isCorrect, ...rest }) => rest),
+            answers: rightSolution,
+            lesson: lessonDetail ? {
+                id: lessonDetail.id,
+                name: lessonDetail.name,
+                description: lessonDetail.description
+            } : null,
+            attendedLesson
+        });
+    });
+    const getLessonsToRecap = (attemptMistakes) => {
+        const recapMap = new Map();
+        attemptMistakes.forEach(m => {
+            if (m.lesson) {
+                const lessonId = m.lesson.id;
+                if (!recapMap.has(lessonId)) {
+                    recapMap.set(lessonId, {
+                        lesson: m.lesson,
+                        count: 0,
+                        attendedLesson: m.attendedLesson
+                    });
+                }
+                recapMap.get(lessonId).count += 1;
+            }
+        });
+        return Array.from(recapMap.values()).map(r => ({
+            ...r.lesson,
+            mistakesCount: r.count,
+            attendedLesson: r.attendedLesson
+        }));
+    };
+    // 5. Map and build final reportData
+    const reportData = allDiagnosticExams.map(exam => {
+        const attempt = studentAttempts.find(a => a.diagnosticExamId === exam.id);
+        let status = "absent";
+        let attemptId = null;
+        let score = null;
+        let date = null;
+        let mistakes = [];
+        let mistakesCount = 0;
+        let lessonsToRecap = [];
+        if (attempt) {
+            if (attempt.isCompleted) {
+                status = "attend";
+                attemptId = attempt.id;
+                score = attempt.score;
+                date = attempt.endedAt;
+                mistakes = mistakesByAttemptMap.get(attempt.id) || [];
+                mistakesCount = mistakes.length;
+                lessonsToRecap = getLessonsToRecap(mistakes);
+            }
+            else {
+                status = "waiting";
+                attemptId = attempt.id;
+            }
+        }
+        return {
+            diagnosticExamId: exam.id,
+            diagnosticExamName: exam.title,
+            courseId: exam.courseId,
+            courseName: exam.courseName,
+            totalScore: exam.totalScore,
+            passScore: exam.passScore,
+            duration: exam.duration,
+            numberOfQuestions: exam.numberOfQuestions,
+            isActive: exam.isActive,
+            status,
+            attemptId,
+            score,
+            date,
+            mistakesCount,
+            mistakes,
+            lessonsToRecap
+        };
+    });
+    return (0, response_1.SuccessResponse)(res, {
+        message: "Student diagnostic exam reports retrieved successfully",
+        data: reportData
+    });
+};
+exports.getStudentDiagnosticExamReports = getStudentDiagnosticExamReports;

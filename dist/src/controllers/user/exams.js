@@ -11,6 +11,7 @@ const category_1 = require("../../models/schema/admin/category");
 const sections_1 = require("../../models/schema/admin/sections");
 const questions_1 = require("../../models/schema/admin/questions");
 const lessons_1 = require("../../models/schema/admin/lessons");
+const chapters_1 = require("../../models/schema/admin/chapters");
 const examCodes_1 = require("../../models/schema/admin/examCodes");
 const studentParallelAttempts_1 = require("../../models/schema/admin/studentParallelAttempts");
 const studentParallelAnswers_1 = require("../../models/schema/admin/studentParallelAnswers");
@@ -1303,6 +1304,40 @@ const submitSection = async (req, res) => {
             hasParallel: parallelQuestionIds.has(q.id),
         }));
     }
+    // Fetch wrong answers for this attempt and group by lessonId to see what to study
+    const wrongAnswerLessons = await connection_1.db
+        .select({
+        lessonId: lessons_1.lessons.id,
+        lessonName: lessons_1.lessons.name,
+        chapterId: chapters_1.chapters.id,
+        chapterName: chapters_1.chapters.name,
+        courseId: courses_1.courses.id,
+        courseName: courses_1.courses.name,
+    })
+        .from(studentAnswers_1.studentAnswers)
+        .innerJoin(questions_1.questions, (0, drizzle_orm_1.eq)(studentAnswers_1.studentAnswers.questionId, questions_1.questions.id))
+        .innerJoin(lessons_1.lessons, (0, drizzle_orm_1.eq)(questions_1.questions.lessonId, lessons_1.lessons.id))
+        .innerJoin(chapters_1.chapters, (0, drizzle_orm_1.eq)(lessons_1.lessons.chapterId, chapters_1.chapters.id))
+        .innerJoin(courses_1.courses, (0, drizzle_orm_1.eq)(lessons_1.lessons.courseId, courses_1.courses.id))
+        .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.eq)(studentAnswers_1.studentAnswers.attemptId, attemptId), (0, drizzle_orm_1.eq)(studentAnswers_1.studentAnswers.isCorrect, false)));
+    // Extract unique lesson details that student got wrong
+    const uniqueLessonsMap = new Map();
+    for (const item of wrongAnswerLessons) {
+        if (!uniqueLessonsMap.has(item.lessonId)) {
+            uniqueLessonsMap.set(item.lessonId, {
+                lessonId: item.lessonId,
+                lessonName: item.lessonName,
+                chapter: {
+                    id: item.chapterId,
+                    name: item.chapterName
+                },
+                course: {
+                    id: item.courseId,
+                    name: item.courseName
+                }
+            });
+        }
+    }
     const [updatedStudent] = await connection_1.db
         .select({ questionBalance: Student_1.Student.questionbalance, examBalance: Student_1.Student.exambalance })
         .from(Student_1.Student)
@@ -1330,6 +1365,7 @@ const submitSection = async (req, res) => {
             },
             examHasAnswers: !!answersPayment,
         },
+        recommendedLessonsToStudy: Array.from(uniqueLessonsMap.values()),
     });
 };
 exports.submitSection = submitSection;

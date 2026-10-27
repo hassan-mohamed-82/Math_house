@@ -29,6 +29,7 @@ import paymentMethodRouter from "./paymentMethod"
 import paymentRouter from "./payment"
 import gradeRouter from "./grade"
 import reportsRouter from "./reports"
+import dashboardRouter from "./dashboard"
 import sessionRatingQuestionsRouter from "./SessionRatingQuestions"
 import sessionRatingRouter from "./SessionRating"
 import extraHomeworkRouter from "./ExtraHomework"
@@ -43,6 +44,7 @@ const router = Router()
 
 router.use("/auth", authRouter)
 router.use(authenticated, authorizeRoles("admin", "teacher"))
+router.use("/dashboard", dashboardRouter)
 // router.use("/", adminRouter)
 router.use("/grade", gradeRouter)
 router.use("/category", categoryRouter)

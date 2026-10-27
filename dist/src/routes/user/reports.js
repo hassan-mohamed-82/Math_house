@@ -5,4 +5,6 @@ const reports_1 = require("../../controllers/user/reports");
 const catchAsync_1 = require("../../utils/catchAsync");
 const router = (0, express_1.Router)();
 router.get("/quizzes", (0, catchAsync_1.catchAsync)(reports_1.getStudentQuizReports));
+router.get("/exams", (0, catchAsync_1.catchAsync)(reports_1.getStudentExamReports));
+router.get("/diagnostic-exam", (0, catchAsync_1.catchAsync)(reports_1.getStudentDiagnosticExamReports));
 exports.default = router;

@@ -7,7 +7,7 @@ const requirePermission_1 = require("../../middlewares/requirePermission");
 const router = (0, express_1.Router)();
 router.post("/", (0, requirePermission_1.requirePermission)("diagnostic_exams", "Add"), (0, catchAsync_1.catchAsync)(diagnosticExam_1.createDiagnosticExam));
 router.get("/", (0, requirePermission_1.requirePermission)("diagnostic_exams", "View"), (0, catchAsync_1.catchAsync)(diagnosticExam_1.getAllDiagnosticExams));
-router.get("/selection", (0, catchAsync_1.catchAsync)(diagnosticExam_1.getSelection));
+router.get("/selection", (0, requirePermission_1.requirePermission)("diagnostic_exams", "View"), (0, catchAsync_1.catchAsync)(diagnosticExam_1.getSelection));
 router.get("/:id", (0, requirePermission_1.requirePermission)("diagnostic_exams", "View"), (0, catchAsync_1.catchAsync)(diagnosticExam_1.getDiagnosticExamById));
 router.put("/:id", (0, requirePermission_1.requirePermission)("diagnostic_exams", "Edit"), (0, catchAsync_1.catchAsync)(diagnosticExam_1.updateDiagnosticExam));
 router.delete("/:id", (0, requirePermission_1.requirePermission)("diagnostic_exams", "Delete"), (0, catchAsync_1.catchAsync)(diagnosticExam_1.deleteDiagnosticExam));

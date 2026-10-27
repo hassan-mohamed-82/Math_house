@@ -14,10 +14,15 @@
 //   6. Grants access (next()) or throws ForbiddenError.
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.requirePermission = void 0;
+exports.safeParsePermissions = safeParsePermissions;
+exports.mergePermissions = mergePermissions;
+exports.hasAllPermissions = hasAllPermissions;
+exports.hasPermission = hasPermission;
 const connection_1 = require("../models/connection");
 const schema_1 = require("../models/schema");
 const drizzle_orm_1 = require("drizzle-orm");
 const Errors_1 = require("../Errors");
+const constant_1 = require("../types/constant");
 // ─────────────────────────────────────────────────────────────────
 // 🔧 Internal helpers
 // ─────────────────────────────────────────────────────────────────
@@ -75,6 +80,21 @@ function mergePermissions(rolePerms, adminPerms) {
     }
     return merged;
 }
+/** Check if the permission list covers every single module and action */
+function hasAllPermissions(permissions) {
+    if (!permissions || permissions.length < constant_1.MODULES.length)
+        return false;
+    for (const mod of constant_1.MODULES) {
+        const found = permissions.find((p) => p.module === mod);
+        if (!found)
+            return false;
+        for (const act of constant_1.ACTION_NAMES) {
+            if (!found.actions.includes(act))
+                return false;
+        }
+    }
+    return true;
+}
 /**
  * Check whether `permissions` contains the required `module` + `action` pair.
  */
@@ -111,6 +131,7 @@ const requirePermission = (module, action) => {
                 type: schema_1.admins.type,
                 status: schema_1.admins.status,
                 permissions: schema_1.admins.permissions,
+                roleName: schema_1.roles.name,
                 rolePermissions: schema_1.roles.permissions,
             })
                 .from(schema_1.admins)
@@ -124,7 +145,9 @@ const requirePermission = (module, action) => {
                 throw new Errors_1.UnauthorizedError("Admin account is inactive");
             }
             // ── 3. super_admin type or superadmin role → bypass all permission checks ─────────────
-            if (adminRow.type === "super_admin" || req.user.role === "superadmin") {
+            if (adminRow.type === "super_admin" ||
+                req.user.role === "superadmin" ||
+                adminRow.roleName === "superadmin") {
                 return next();
             }
             // ── 4. Parse & merge permissions ──────────────────────────────
@@ -133,6 +156,10 @@ const requirePermission = (module, action) => {
             const merged = mergePermissions(rolePerms, adminPerms);
             // Attach merged permissions to req.user for downstream use
             req.user.permissions = merged;
+            // If admin has all permissions & actions, bypass
+            if (hasAllPermissions(merged)) {
+                return next();
+            }
             // ── 5. Check permission ───────────────────────────────────────
             if (!hasPermission(merged, module, action)) {
                 throw new Errors_1.ForbiddenError(`You don't have permission to ${action.toLowerCase()} ${module}. ` +

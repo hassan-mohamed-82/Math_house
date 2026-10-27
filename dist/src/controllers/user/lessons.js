@@ -7,6 +7,20 @@ const response_1 = require("../../utils/response");
 const Errors_1 = require("../../Errors");
 const schema_1 = require("../../models/schema");
 const accessControl_1 = require("../../utils/accessControl");
+const services_1 = require("../../drive/services/services");
+// ─── helper: resolve video for a single idea ────────────────────────────────
+// Never expose bunnyGuid to the client; generate a short-lived signed URL instead.
+const resolveVideo = (idea) => {
+    const { bunnyGuid, video, ...rest } = idea;
+    let videoPayload = null;
+    if (bunnyGuid) {
+        videoPayload = { type: "bunny", streamUrl: (0, services_1.generateSecureStreamUrl)(bunnyGuid) };
+    }
+    else if (video) {
+        videoPayload = { type: "external", url: video };
+    }
+    return { ...rest, video: videoPayload };
+};
 const lessonDetailedQuery = () => connection_1.db.select({
     lesson: {
         id: schema_1.lessons.id,
@@ -69,10 +83,11 @@ const getLessonById = async (req, res) => {
     const ideas = await connection_1.db.select().from(schema_1.lessonIdeas)
         .where((0, drizzle_orm_1.eq)(schema_1.lessonIdeas.lessonId, id))
         .orderBy((0, drizzle_orm_1.asc)(schema_1.lessonIdeas.ideaOrder));
+    const resolvedIdeas = ideas.map(resolveVideo);
     return (0, response_1.SuccessResponse)(res, {
         message: "Lesson fetched successfully",
         ...result,
-        ideas,
+        ideas: resolvedIdeas,
         prices: lessonPrices,
         isLocked: false
     }, 200);

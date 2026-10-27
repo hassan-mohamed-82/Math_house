@@ -7,8 +7,8 @@ const validation_1 = require("../../middlewares/validation");
 const student_2 = require("../../validation/admin/student");
 const requirePermission_1 = require("../../middlewares/requirePermission");
 const router = (0, express_1.Router)();
-// ── Selection helpers (open to any authenticated admin) ──────────────────
-router.get("/select", (0, catchAsync_1.catchAsync)(student_1.selection));
+// ── Selection helpers ──────────────────
+router.get("/select", (0, requirePermission_1.requirePermission)("students", "View"), (0, catchAsync_1.catchAsync)(student_1.selection));
 // ── List & detail ─────────────────────────────────────────────────────────
 router.get("/", (0, requirePermission_1.requirePermission)("students", "View"), (0, catchAsync_1.catchAsync)(student_1.getAllStudents));
 router.get("/:id", (0, validation_1.validate)(student_2.idParamsSchema, "params"), (0, requirePermission_1.requirePermission)("students", "View"), (0, catchAsync_1.catchAsync)(student_1.getStudentById));

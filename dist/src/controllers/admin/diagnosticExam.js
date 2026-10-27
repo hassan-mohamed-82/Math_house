@@ -121,15 +121,10 @@ const getAllDiagnosticExams = async (req, res) => {
             id: schema_1.category.id,
             name: schema_1.category.name,
         },
-        semester: {
-            id: schema_1.semesters.id,
-            name: schema_1.semesters.name,
-        }
     })
         .from(schema_1.diagnosticExam)
         .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.rawScoreId, schema_1.rawScore.id))
         .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, schema_1.courses.id))
-        .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.semesters.courseId))
         .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, schema_1.category.id))
         .orderBy((0, drizzle_orm_1.desc)(schema_1.diagnosticExam.createdAt));
     const processedExams = exams.map(exam => {
@@ -166,10 +161,6 @@ const getDiagnosticExamById = async (req, res) => {
             id: schema_1.courses.id,
             name: schema_1.courses.name,
         },
-        semester: {
-            id: schema_1.semesters.id,
-            name: schema_1.semesters.name,
-        },
         category: {
             id: schema_1.category.id,
             name: schema_1.category.name,
@@ -178,7 +169,6 @@ const getDiagnosticExamById = async (req, res) => {
         .from(schema_1.diagnosticExam)
         .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.rawScoreId, schema_1.rawScore.id))
         .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, schema_1.courses.id))
-        .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.semesters.courseId))
         .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, schema_1.category.id))
         .where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.id, id))
         .limit(1);
@@ -330,10 +320,6 @@ const getAllDiagnosticExamsbyCourseId = async (req, res) => {
             is_giftingScore: schema_1.rawScore.is_giftingScore,
             giftingScore: schema_1.rawScore.giftingScore,
         },
-        semester: {
-            id: schema_1.semesters.id,
-            name: schema_1.semesters.name,
-        },
         category: {
             id: schema_1.category.id,
             name: schema_1.category.name,
@@ -342,7 +328,6 @@ const getAllDiagnosticExamsbyCourseId = async (req, res) => {
         .from(schema_1.diagnosticExam)
         .leftJoin(schema_1.rawScore, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.rawScoreId, schema_1.rawScore.id))
         .leftJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, schema_1.courses.id))
-        .leftJoin(schema_1.semesters, (0, drizzle_orm_1.eq)(schema_1.courses.id, schema_1.semesters.courseId))
         .leftJoin(schema_1.category, (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, schema_1.category.id))
         .where((0, drizzle_orm_1.eq)(schema_1.diagnosticExam.courseId, courseId))
         .orderBy((0, drizzle_orm_1.desc)(schema_1.diagnosticExam.createdAt));
