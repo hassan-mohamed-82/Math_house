@@ -252,6 +252,10 @@ export const getUpcomingSessions = async (req: Request, res: Response) => {
                 DATE(${sessions.sessionDate}) > ${today}
                 OR (DATE(${sessions.sessionDate}) = ${today} AND ${sessions.timeTo} >= ${currentTime})
             )`,
+            or(
+                sql`${sessionAttendance.status} IS NULL`,
+                sql`${sessionAttendance.status} != 'present'`
+            ),
             enrolledSessionsFilter(studentId)
         ))
         .orderBy(sql`DATE(${sessions.sessionDate}) ASC, ${sessions.timeFrom} ASC`);
@@ -371,6 +375,7 @@ export const getSessionHistory = async (req: Request, res: Response) => {
             sql`(
                 DATE(${sessions.sessionDate}) < ${today}
                 OR (DATE(${sessions.sessionDate}) = ${today} AND ${sessions.timeTo} < ${currentTime})
+                OR ${sessionAttendance.status} = 'present'
             )`,
             enrolledSessionsFilter(studentId)
         ))

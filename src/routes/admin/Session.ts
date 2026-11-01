@@ -17,6 +17,7 @@ import {
     deleteSession,
     upsertSessionStudentPdfs,
     deleteSessionStudentPdf,
+    manualAttendSessions,
 } from "../../controllers/admin/Session";
 import { catchAsync } from "../../utils/catchAsync";
 import { requirePermission } from "../../middlewares/requirePermission";
@@ -35,6 +36,7 @@ router.post("/students/attendance", requirePermission("sessions", "View"), catch
 
 router.get("/", requirePermission("sessions", "View"), catchAsync(getAllSessions));
 router.post("/", requirePermission("sessions", "Add"), catchAsync(createSession));
+router.post("/manual-attendance", requirePermission("sessions", "Edit"), catchAsync(manualAttendSessions));
 router.get("/:id", requirePermission("sessions", "View"), catchAsync(getSessionById));
 router.post("/:id/generate-mistakes", requirePermission("sessions", "Edit"), catchAsync(regenerateMistakesSessionPdfs));
 router.put("/:id", requirePermission("sessions", "Edit"), catchAsync(updateSession));

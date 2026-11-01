@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { randomUUID } from "crypto";
 import { db } from "../../models/connection";
-import { sessionRatings, sessionGroups, sessions, sessionUsers, sessionStudentPdfs } from "../../models/schema/admin/Session";
+import { sessionRatings, sessionGroups, sessions, sessionUsers, sessionStudentPdfs, sessionPackageDeductions } from "../../models/schema/admin/Session";
 import { groups, groupStudents } from "../../models/schema/admin/Groups";
 import {
     Student,
@@ -13,6 +13,7 @@ import {
     sessionLessons,
     sessionAttendance,
     Exams,
+    enrolledItems,
 } from "../../models/schema";
 import { eq, like, or, and, inArray, sql, asc } from "drizzle-orm";
 import { alias } from "drizzle-orm/mysql-core";
@@ -1598,4 +1599,246 @@ export const deleteSessionStudentPdf = async (req: Request, res: Response) => {
     await db.delete(sessionStudentPdfs).where(eq(sessionStudentPdfs.id, existing.id));
 
     return SuccessResponse(res, { message: "Student PDF record deleted successfully" }, 200);
+};
+
+/**
+ * POST /admin/session/manual-attend
+ * Allows Admin to manually mark attendance for one or more students across one or more sessions.
+ * Decreases the live sessions balance ("wallet"), enrolls them in sessionUsers so it shows in student history,
+ * records attendance as "present", and unlocks the session's lessons in enrolledItems.
+ */
+export const manualAttendSessions = async (req: Request, res: Response) => {
+    const rawStudentIds = req.body.studentIds ?? req.body.student_ids ?? req.body.studentId ?? req.body.student_id;
+    const rawSessionIds = req.body.sessionIds ?? req.body.session_ids ?? req.body.sessionId ?? req.body.session_id;
+
+    if (!rawStudentIds || (Array.isArray(rawStudentIds) && rawStudentIds.length === 0)) {
+        throw new BadRequest("studentIds is required");
+    }
+    if (!rawSessionIds || (Array.isArray(rawSessionIds) && rawSessionIds.length === 0)) {
+        throw new BadRequest("sessionIds is required");
+    }
+
+    const studentIds: string[] = Array.from(
+        new Set((Array.isArray(rawStudentIds) ? rawStudentIds : [rawStudentIds]).filter(Boolean).map(String))
+    );
+    const sessionIds: string[] = Array.from(
+        new Set((Array.isArray(rawSessionIds) ? rawSessionIds : [rawSessionIds]).filter(Boolean).map(String))
+    );
+
+    if (studentIds.length === 0) throw new BadRequest("At least one valid studentId must be provided");
+    if (sessionIds.length === 0) throw new BadRequest("At least one valid sessionId must be provided");
+
+    // Fetch existing students
+    const existingStudents = await db
+        .select({
+            id: Student.id,
+            firstname: Student.firstname,
+            lastname: Student.lastname,
+            livebalance: Student.livebalance,
+        })
+        .from(Student)
+        .where(inArray(Student.id, studentIds));
+
+    if (existingStudents.length === 0) {
+        throw new NotFound("None of the specified students were found");
+    }
+
+    // Fetch existing sessions
+    const existingSessions = await db
+        .select({
+            id: sessions.id,
+            name: sessions.name,
+            sessionRelationalType: sessions.sessionRelationalType,
+            contentAccessDays: sessions.contentAccessDays,
+        })
+        .from(sessions)
+        .where(inArray(sessions.id, sessionIds));
+
+    if (existingSessions.length === 0) {
+        throw new NotFound("None of the specified sessions were found");
+    }
+
+    // Fetch lessons for all target sessions
+    const allSessionLessons = await db
+        .select({
+            sessionId: sessionLessons.sessionId,
+            lessonId: sessionLessons.lessonId,
+        })
+        .from(sessionLessons)
+        .where(inArray(sessionLessons.sessionId, existingSessions.map(s => s.id)));
+
+    const lessonsBySession = new Map<string, string[]>();
+    for (const row of allSessionLessons) {
+        if (!lessonsBySession.has(row.sessionId)) {
+            lessonsBySession.set(row.sessionId, []);
+        }
+        lessonsBySession.get(row.sessionId)!.push(row.lessonId);
+    }
+
+    const attendanceResults: any[] = [];
+
+    await db.transaction(async (tx) => {
+        for (const student of existingStudents) {
+            let currentLiveBalance = student.livebalance;
+            let totalDeductionsForStudent = 0;
+            const attendedSessionsList: any[] = [];
+
+            for (const session of existingSessions) {
+                const sessionLessonIds = lessonsBySession.get(session.id) || [];
+
+                // 1. Ensure enrollment in sessionUsers so student history and details queries include it
+                const [existingSessionUser] = await tx
+                    .select({ id: sessionUsers.id })
+                    .from(sessionUsers)
+                    .where(and(
+                        eq(sessionUsers.sessionId, session.id),
+                        eq(sessionUsers.studentId, student.id)
+                    ))
+                    .limit(1);
+
+                if (!existingSessionUser) {
+                    await tx.insert(sessionUsers).values({
+                        id: randomUUID(),
+                        sessionId: session.id,
+                        studentId: student.id,
+                    });
+                }
+
+                // 2. Upsert sessionAttendance to "present"
+                const [existingAttendance] = await tx
+                    .select({ id: sessionAttendance.id, status: sessionAttendance.status })
+                    .from(sessionAttendance)
+                    .where(and(
+                        eq(sessionAttendance.sessionId, session.id),
+                        eq(sessionAttendance.studentId, student.id)
+                    ))
+                    .limit(1);
+
+                const attendedAt = new Date();
+                if (existingAttendance) {
+                    await tx.update(sessionAttendance)
+                        .set({ status: "present", attendedAt })
+                        .where(eq(sessionAttendance.id, existingAttendance.id));
+                } else {
+                    await tx.insert(sessionAttendance).values({
+                        id: randomUUID(),
+                        sessionId: session.id,
+                        studentId: student.id,
+                        status: "present",
+                        attendedAt,
+                    });
+                }
+
+                // 3. Balance deduction logic (re-explanation exempt check + prevent double deduction)
+                const [existingDeduction] = await tx
+                    .select({ id: sessionPackageDeductions.id })
+                    .from(sessionPackageDeductions)
+                    .where(and(
+                        eq(sessionPackageDeductions.sessionId, session.id),
+                        eq(sessionPackageDeductions.studentId, student.id)
+                    ))
+                    .limit(1);
+
+                let balanceDeducted = false;
+
+                if (!existingDeduction) {
+                    let shouldDeduct = true;
+
+                    // Re-Explanation: free if student attended all lessons previously in other sessions
+                    if (session.sessionRelationalType === "Re-Explanation" && sessionLessonIds.length > 0) {
+                        const previouslyAttendedRows = await tx
+                            .select({ lessonId: sessionLessons.lessonId })
+                            .from(sessionAttendance)
+                            .innerJoin(sessionLessons, eq(sessionAttendance.sessionId, sessionLessons.sessionId))
+                            .where(and(
+                                eq(sessionAttendance.studentId, student.id),
+                                eq(sessionAttendance.status, "present"),
+                                sql`${sessionAttendance.sessionId} != ${session.id}`,
+                                inArray(sessionLessons.lessonId, sessionLessonIds)
+                            ));
+
+                        const attendedLessonIdSet = new Set(previouslyAttendedRows.map(r => r.lessonId));
+                        if (sessionLessonIds.every(id => attendedLessonIdSet.has(id))) {
+                            shouldDeduct = false;
+                        }
+                    }
+
+                    if (shouldDeduct) {
+                        await tx
+                            .update(Student)
+                            .set({ livebalance: sql`GREATEST(0, ${Student.livebalance} - 1)` })
+                            .where(eq(Student.id, student.id));
+
+                        await tx.insert(sessionPackageDeductions).values({
+                            id: randomUUID(),
+                            sessionId: session.id,
+                            studentId: student.id,
+                            deductedAt: new Date(),
+                        }).catch(() => {});
+
+                        balanceDeducted = true;
+                        totalDeductionsForStudent += 1;
+                        currentLiveBalance = Math.max(0, currentLiveBalance - 1);
+                    }
+                }
+
+                // 4. Unlock session lessons in enrolledItems
+                let unlockedLessonsCount = 0;
+                if (sessionLessonIds.length > 0) {
+                    const alreadyEnrolled = await tx
+                        .select({ lessonId: enrolledItems.lessonId })
+                        .from(enrolledItems)
+                        .where(and(
+                            eq(enrolledItems.studentId, student.id),
+                            eq(enrolledItems.status, "active"),
+                            inArray(enrolledItems.lessonId, sessionLessonIds)
+                        ));
+
+                    const enrolledLessonIdSet = new Set(alreadyEnrolled.map(r => r.lessonId).filter(Boolean));
+
+                    const expiresAt = session.contentAccessDays
+                        ? new Date(Date.now() + session.contentAccessDays * 24 * 60 * 60 * 1000)
+                        : null;
+
+                    const newEnrollments = sessionLessonIds
+                        .filter(id => !enrolledLessonIdSet.has(id))
+                        .map(lessonId => ({
+                            id: randomUUID(),
+                            studentId: student.id,
+                            lessonId,
+                            status: "active" as const,
+                            expiresAt,
+                        }));
+
+                    if (newEnrollments.length > 0) {
+                        await tx.insert(enrolledItems).values(newEnrollments);
+                        unlockedLessonsCount = newEnrollments.length;
+                    }
+                }
+
+                attendedSessionsList.push({
+                    sessionId: session.id,
+                    sessionName: session.name,
+                    balanceDeducted,
+                    lessonsUnlocked: unlockedLessonsCount,
+                });
+            }
+
+            attendanceResults.push({
+                studentId: student.id,
+                studentName: `${student.firstname} ${student.lastname}`,
+                initialLiveBalance: student.livebalance,
+                finalLiveBalance: currentLiveBalance,
+                totalDeductions: totalDeductionsForStudent,
+                sessions: attendedSessionsList,
+            });
+        }
+    });
+
+    return SuccessResponse(res, {
+        message: "Students manual attendance recorded and wallet/sessions updated successfully",
+        totalStudentsProcessed: existingStudents.length,
+        totalSessionsProcessed: existingSessions.length,
+        results: attendanceResults,
+    }, 200);
 };
