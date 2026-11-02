@@ -21,6 +21,7 @@ import {
 } from "../../controllers/admin/Session";
 import { catchAsync } from "../../utils/catchAsync";
 import { requirePermission } from "../../middlewares/requirePermission";
+import { selectionLessons } from "../../controllers/admin/lessons";
 
 const router = Router();
 
@@ -41,6 +42,8 @@ router.get("/:id", requirePermission("sessions", "View"), catchAsync(getSessionB
 router.post("/:id/generate-mistakes", requirePermission("sessions", "Edit"), catchAsync(regenerateMistakesSessionPdfs));
 router.put("/:id", requirePermission("sessions", "Edit"), catchAsync(updateSession));
 router.delete("/:id", requirePermission("sessions", "Delete"), catchAsync(deleteSession));
+
+router.get("/course/:courseId/lessons", requirePermission("sessions", "View"), catchAsync(selectionLessons));
 
 // ── Mistakes-session PDFs ─────────────────────────────────────────────────────
 // POST   /admin/sessions/:id/student-pdfs             — generate one combined PDF pair

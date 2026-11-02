@@ -658,3 +658,24 @@ export const selectLessons = async (req: Request, res: Response) => {
     return SuccessResponse(res, { data: allLessons.map(l => ({ value: l.id, label: l.name })) }, 200);
 };
 
+export const selectionLessons = async (req: Request, res: Response) => {
+    const { courseId } = req.params;
+
+    if (!courseId) {
+        throw new BadRequest("courseId is required");
+    }
+
+    const lessonsList = await db
+        .select({
+            id: lessons.id,
+            name: lessons.name,
+        })
+        .from(lessons)
+        .where(eq(lessons.courseId, courseId))
+        .orderBy(asc(lessons.name));
+
+    return SuccessResponse(res, lessonsList.map(l => ({
+        value: l.id,
+        label: l.name,
+    })));
+};
