@@ -1238,7 +1238,41 @@ const getStudentsCourseAttendance = async (req, res) => {
             chapters: Array.from(attendanceData.chaptersById.values()),
         };
     });
-    return (0, response_1.SuccessResponse)(res, { students: studentsWithAttendance }, 200);
+    // Query: get all lessons in the course so we can find the lessons that
+    // none of the given students have attended yet
+    const courseLessons = await connection_1.db
+        .select({
+        chapterId: schema_1.chapters.id,
+        chapterName: schema_1.chapters.name,
+        lessonId: schema_1.lessons.id,
+        lessonName: schema_1.lessons.name,
+    })
+        .from(schema_1.lessons)
+        .innerJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.lessons.courseId, courseId))
+        .orderBy((0, drizzle_orm_1.asc)(schema_1.chapters.order), (0, drizzle_orm_1.asc)(schema_1.lessons.order));
+    const attendedLessonIds = new Set(attendanceRecords.map((record) => record.lessonId));
+    // Build nested structure of course lessons that none of the students attended
+    const commonChaptersById = new Map();
+    for (const lesson of courseLessons) {
+        if (attendedLessonIds.has(lesson.lessonId))
+            continue;
+        if (!commonChaptersById.has(lesson.chapterId)) {
+            commonChaptersById.set(lesson.chapterId, {
+                id: lesson.chapterId,
+                name: lesson.chapterName,
+                lessons: [],
+            });
+        }
+        commonChaptersById.get(lesson.chapterId).lessons.push({
+            id: lesson.lessonId,
+            name: lesson.lessonName,
+        });
+    }
+    return (0, response_1.SuccessResponse)(res, {
+        students: studentsWithAttendance,
+        commonLessons: Array.from(commonChaptersById.values()),
+    }, 200);
 };
 exports.getStudentsCourseAttendance = getStudentsCourseAttendance;
 /**
