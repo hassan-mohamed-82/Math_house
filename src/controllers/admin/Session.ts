@@ -1500,7 +1500,50 @@ export const getStudentsCourseAttendance = async (req: Request, res: Response) =
         };
     });
 
-    return SuccessResponse(res, { students: studentsWithAttendance }, 200);
+    // Query: get all lessons in the course so we can find the lessons that
+    // none of the given students have attended yet
+    const courseLessons = await db
+        .select({
+            chapterId: chapters.id,
+            chapterName: chapters.name,
+            lessonId: lessons.id,
+            lessonName: lessons.name,
+        })
+        .from(lessons)
+        .innerJoin(chapters, eq(lessons.chapterId, chapters.id))
+        .where(eq(lessons.courseId, courseId))
+        .orderBy(asc(chapters.order), asc(lessons.order));
+
+    const attendedLessonIds = new Set(attendanceRecords.map((record) => record.lessonId));
+
+    // Build nested structure of course lessons that none of the students attended
+    const commonChaptersById = new Map<string, any>();
+
+    for (const lesson of courseLessons) {
+        if (attendedLessonIds.has(lesson.lessonId)) continue;
+
+        if (!commonChaptersById.has(lesson.chapterId)) {
+            commonChaptersById.set(lesson.chapterId, {
+                id: lesson.chapterId,
+                name: lesson.chapterName,
+                lessons: [],
+            });
+        }
+
+        commonChaptersById.get(lesson.chapterId).lessons.push({
+            id: lesson.lessonId,
+            name: lesson.lessonName,
+        });
+    }
+
+    return SuccessResponse(
+        res,
+        {
+            students: studentsWithAttendance,
+            commonLessons: Array.from(commonChaptersById.values()),
+        },
+        200
+    );
 };
 
 /**
