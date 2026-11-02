@@ -1442,6 +1442,24 @@ export const getStudentsCourseAttendance = async (req: Request, res: Response) =
             )
         );
 
+    // Fetch student names so they are returned even when a student
+    // has no present attendance records yet
+    const studentInfoRows = await db
+        .select({
+            id: Student.id,
+            firstname: Student.firstname,
+            lastname: Student.lastname,
+        })
+        .from(Student)
+        .where(inArray(Student.id, studentIds));
+
+    const studentNameById = new Map<string, string>(
+        studentInfoRows.map((student) => [
+            student.id,
+            `${student.firstname} ${student.lastname}`,
+        ])
+    );
+
     // Build nested structure: student → chapters → lessons
     const studentAttendanceById = new Map<string, any>();
 
@@ -1488,7 +1506,7 @@ export const getStudentsCourseAttendance = async (req: Request, res: Response) =
         if (!attendanceData) {
             return {
                 studentId,
-                studentName: null,
+                studentName: studentNameById.get(studentId) ?? null,
                 chapters: [],
             };
         }

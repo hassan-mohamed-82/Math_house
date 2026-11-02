@@ -1192,6 +1192,20 @@ const getStudentsCourseAttendance = async (req, res) => {
         .innerJoin(schema_1.chapters, (0, drizzle_orm_1.eq)(schema_1.lessons.chapterId, schema_1.chapters.id))
         .innerJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.chapters.courseId, schema_1.courses.id))
         .where((0, drizzle_orm_1.and)((0, drizzle_orm_1.inArray)(schema_1.sessionAttendance.studentId, studentIds), (0, drizzle_orm_1.eq)(schema_1.sessionAttendance.status, "present"), (0, drizzle_orm_1.eq)(schema_1.courses.id, courseId)));
+    // Fetch student names so they are returned even when a student
+    // has no present attendance records yet
+    const studentInfoRows = await connection_1.db
+        .select({
+        id: schema_1.Student.id,
+        firstname: schema_1.Student.firstname,
+        lastname: schema_1.Student.lastname,
+    })
+        .from(schema_1.Student)
+        .where((0, drizzle_orm_1.inArray)(schema_1.Student.id, studentIds));
+    const studentNameById = new Map(studentInfoRows.map((student) => [
+        student.id,
+        `${student.firstname} ${student.lastname}`,
+    ]));
     // Build nested structure: student → chapters → lessons
     const studentAttendanceById = new Map();
     for (const record of attendanceRecords) {
@@ -1228,7 +1242,7 @@ const getStudentsCourseAttendance = async (req, res) => {
         if (!attendanceData) {
             return {
                 studentId,
-                studentName: null,
+                studentName: studentNameById.get(studentId) ?? null,
                 chapters: [],
             };
         }
