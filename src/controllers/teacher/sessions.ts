@@ -725,10 +725,10 @@ export const getSessionStudents = async (req: Request, res: Response) => {
 export const uploadTeacherExplanationPdf = async (req: Request, res: Response) => {
     const teacherId = getTeacherId(req);
     const { id: sessionId } = req.params;
-    const { teacher_explanation_pdf, studentId } = req.body;
+    const { teacher_explanation_pdf, session_link, studentId } = req.body;
 
-    if (!teacher_explanation_pdf) {
-        throw new BadRequest("teacher_explanation_pdf is required (base64 string or URL)");
+    if (!teacher_explanation_pdf && !session_link) {
+        throw new BadRequest("Either teacher_explanation_pdf or session_link is required");
     }
 
     const [session] = await db
@@ -738,11 +738,20 @@ export const uploadTeacherExplanationPdf = async (req: Request, res: Response) =
 
     if (!session) throw new NotFound("Session not found or not assigned to you");
 
-    let savedPdfUrl: string;
-    if (teacher_explanation_pdf.startsWith("http")) {
-        savedPdfUrl = teacher_explanation_pdf;
-    } else {
-        savedPdfUrl = await validateAndSavePdf(req, teacher_explanation_pdf, "session-pdfs");
+    // Handle teacher explanation PDF upload
+    let savedPdfUrl: string | null = null;
+    if (teacher_explanation_pdf) {
+        if (teacher_explanation_pdf.startsWith("http")) {
+            savedPdfUrl = teacher_explanation_pdf;
+        } else {
+            savedPdfUrl = await validateAndSavePdf(req, teacher_explanation_pdf, "session-pdfs");
+        }
+    }
+
+    // Handle session link: teacher's link replaces admin-added link
+    let savedLinkUrl: string | null = null;
+    if (session_link) {
+        savedLinkUrl = session_link;
     }
 
     if (studentId) {
@@ -797,22 +806,34 @@ export const uploadTeacherExplanationPdf = async (req: Request, res: Response) =
         return SuccessResponse(res, {
             message: "Explanation PDF uploaded successfully for student",
             teacher_explanation_pdf: savedPdfUrl,
+            session_link: savedLinkUrl,
             studentId,
         }, 200);
     } else {
-        // Session-wide teacher explanation PDF
-        if (session.teacher_explanation_pdf && !session.teacher_explanation_pdf.startsWith("http")) {
-            await deleteImage(session.teacher_explanation_pdf);
+        // Session-wide teacher explanation PDF and session link
+        if (savedPdfUrl) {
+            if (session.teacher_explanation_pdf && !session.teacher_explanation_pdf.startsWith("http")) {
+                await deleteImage(session.teacher_explanation_pdf);
+            }
+
+            await db
+                .update(sessions)
+                .set({ teacher_explanation_pdf: savedPdfUrl })
+                .where(eq(sessions.id, sessionId));
         }
 
-        await db
-            .update(sessions)
-            .set({ teacher_explanation_pdf: savedPdfUrl })
-            .where(eq(sessions.id, sessionId));
+        // Teacher's session link replaces any admin-added link
+        if (savedLinkUrl) {
+            await db
+                .update(sessions)
+                .set({ session_link: savedLinkUrl })
+                .where(eq(sessions.id, sessionId));
+        }
 
         return SuccessResponse(res, {
-            message: "Teacher explanation PDF uploaded successfully for session",
+            message: "Teacher explanation PDF and session link uploaded successfully for session",
             teacher_explanation_pdf: savedPdfUrl,
+            session_link: savedLinkUrl,
         }, 200);
     }
 };

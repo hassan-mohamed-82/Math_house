@@ -24,7 +24,7 @@ import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors";
 
 export const getStudentQuizReports = async (req: Request, res: Response) => {
-    const { studentId } = req.params;
+    const { studentId, courseId } = req.params;
 
     const existingStudent = await db.select().from(Student).where(eq(Student.id, studentId));
     if (existingStudent.length === 0) {
@@ -41,11 +41,17 @@ export const getStudentQuizReports = async (req: Request, res: Response) => {
 
     const attemptQuizIds = studentAttempts.map(a => a.quizId);
 
-    // 2. Fetch all quizzes in student's category OR quizzes that the student has attempted
-    const whereConditions = [
+    // 2. Build where conditions for quizzes
+    const whereConditions: any[] = [
         eq(quizzes.categoryId, studentCategory),
         eq(courses.categoryId, studentCategory)
     ];
+
+    // Filter by courseId if provided
+    if (courseId) {
+        whereConditions.push(eq(quizzes.courseId, courseId));
+    }
+
     if (attemptQuizIds.length > 0) {
         whereConditions.push(inArray(quizzes.id, attemptQuizIds));
     }
