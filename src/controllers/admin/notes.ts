@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { db } from "../../models/connection";
 import { notes } from "../../models/schema/admin/Notes";
 import { Student } from "../../models/schema/admin/Student";
-import { eq, and } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { BadRequest, NotFound } from "../../Errors";
 
@@ -20,20 +20,23 @@ const assertStudentExists = async (studentId: string) => {
 
 // ── 1. Get all notes for a student ───────────────────────────────────────────
 export const getStudentNotes = async (req: Request, res: Response) => {
-    const { studentId } = req.params;
+    const studentId = req.params.studentId || req.params.id;
+    if (!studentId) throw new BadRequest("Student id is required");
 
     await assertStudentExists(studentId);
 
     const noteRows = await db
         .select({
             id: notes.id,
+            studentId: notes.studentId,
             title: notes.title,
             content: notes.content,
             createdAt: notes.createdAt,
             updatedAt: notes.updatedAt,
         })
         .from(notes)
-        .where(eq(notes.studentId, studentId));
+        .where(eq(notes.studentId, studentId))
+        .orderBy(desc(notes.createdAt));
 
     return SuccessResponse(res, {
         message: "Student notes retrieved successfully",
@@ -43,7 +46,9 @@ export const getStudentNotes = async (req: Request, res: Response) => {
 
 // ── 2. Create a note for a student ───────────────────────────────────────────
 export const createStudentNote = async (req: Request, res: Response) => {
-    const { studentId } = req.params;
+    const studentId = req.params.studentId || req.params.id;
+    if (!studentId) throw new BadRequest("Student id is required");
+
     const { title, content } = req.body;
 
     if (!title && !content) {
@@ -74,7 +79,11 @@ export const createStudentNote = async (req: Request, res: Response) => {
 
 // ── 3. Update a note by note id ──────────────────────────────────────────────
 export const updateStudentNote = async (req: Request, res: Response) => {
-    const { studentId, noteId } = req.params;
+    const studentId = req.params.studentId || req.params.id;
+    const noteId = req.params.noteId;
+
+    if (!studentId || !noteId) throw new BadRequest("Student id and note id are required");
+
     const { title, content } = req.body;
 
     await assertStudentExists(studentId);
@@ -110,7 +119,10 @@ export const updateStudentNote = async (req: Request, res: Response) => {
 
 // ── 4. Delete a single note by note id ───────────────────────────────────────
 export const deleteStudentNote = async (req: Request, res: Response) => {
-    const { studentId, noteId } = req.params;
+    const studentId = req.params.studentId || req.params.id;
+    const noteId = req.params.noteId;
+
+    if (!studentId || !noteId) throw new BadRequest("Student id and note id are required");
 
     await assertStudentExists(studentId);
 

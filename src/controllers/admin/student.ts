@@ -1,8 +1,8 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
-import { category, Student, wallet, walletTransaction, grade as gradeTable, courses, chapters, lessons, enrolledItems, prices, packages, paymentMethod, payment, parents, examAttempts, Exams } from "../../models/schema";
+import { category, Student, wallet, walletTransaction, grade as gradeTable, courses, chapters, lessons, enrolledItems, prices, packages, paymentMethod, payment, parents, examAttempts, Exams, notes } from "../../models/schema";
 import { studentAvailabilityPlans, studentAvailabilitySlots } from "../../models/schema/admin/StudentAvailabilityPlan";
-import { eq, or, like, isNull, and, inArray, isNotNull, sql, gt } from "drizzle-orm";
+import { eq, or, like, isNull, and, inArray, isNotNull, sql, gt, desc } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
 import { BadRequest } from "../../Errors/BadRequest";
@@ -336,10 +336,24 @@ export const getStudentById = async (req: Request, res: Response) => {
         slots: slotsByPlan.get(plan.id) || [],
     }));
 
+    // Fetch notes for the student
+    const studentNotes = await db
+        .select({
+            id: notes.id,
+            title: notes.title,
+            content: notes.content,
+            createdAt: notes.createdAt,
+            updatedAt: notes.updatedAt,
+        })
+        .from(notes)
+        .where(eq(notes.studentId, id))
+        .orderBy(desc(notes.createdAt));
+
     const fullStudentData = {
         ...student,
         availabilityPlans,
         availabilitySlots: allSlots,
+        notes: studentNotes,
         courses: studentCourses,
         packages: studentPackages,
         exams: studentExams,

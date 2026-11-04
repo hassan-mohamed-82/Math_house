@@ -20,6 +20,7 @@ import promoCodesRouter from "./promoCodes";
 import sessionRatingRouter from "./SessionRating";
 import extraHomeworkRouter from "./ExtraHomework";
 import availabilityPlanRouter from "./availabilityPlan";
+import notesRouter from "./notes";
 import { authorizeRoles } from "../../middlewares/authorized";
 import { authenticated } from "../../middlewares/authenticated";
 const router = Router()
@@ -45,5 +46,6 @@ router.use("/lessons", lessonsRouter)
 router.use("/ideas", ideasRouter)
 router.use("/reports", reportsRouter)
 router.use("/promo-codes", promoCodesRouter)
+router.use("/notes", notesRouter)
 export default router
 
