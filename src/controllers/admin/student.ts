@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { db } from "../../models/connection";
 import { category, Student, wallet, walletTransaction, grade as gradeTable, courses, chapters, lessons, enrolledItems, prices, packages, paymentMethod, payment, parents, examAttempts, Exams } from "../../models/schema";
+import { studentAvailabilityPlans, studentAvailabilitySlots } from "../../models/schema/admin/StudentAvailabilityPlan";
 import { eq, or, like, isNull, and, inArray, isNotNull, sql, gt } from "drizzle-orm";
 import { SuccessResponse } from "../../utils/response";
 import { NotFound } from "../../Errors/NotFound";
@@ -280,8 +281,65 @@ export const getStudentById = async (req: Request, res: Response) => {
         };
     });
 
+    // Fetch availability plans with slots
+    const availabilityPlansRaw = await db
+        .select({
+            id: studentAvailabilityPlans.id,
+            title: studentAvailabilityPlans.title,
+            notes: studentAvailabilityPlans.notes,
+            status: studentAvailabilityPlans.status,
+            adminNotes: studentAvailabilityPlans.adminNotes,
+            studentFeedback: studentAvailabilityPlans.studentFeedback,
+            proposedAt: studentAvailabilityPlans.proposedAt,
+            respondedAt: studentAvailabilityPlans.respondedAt,
+            createdAt: studentAvailabilityPlans.createdAt,
+        })
+        .from(studentAvailabilityPlans)
+        .where(eq(studentAvailabilityPlans.studentId, id));
+
+    const planIds = availabilityPlansRaw.map(p => p.id);
+
+    const allSlots = planIds.length > 0
+        ? await db
+            .select({
+                id: studentAvailabilitySlots.id,
+                planId: studentAvailabilitySlots.planId,
+                adminSlotId: studentAvailabilitySlots.adminSlotId,
+                dayOfWeek: studentAvailabilitySlots.dayOfWeek,
+                specificDate: studentAvailabilitySlots.specificDate,
+                timeFrom: studentAvailabilitySlots.timeFrom,
+                timeTo: studentAvailabilitySlots.timeTo,
+                createdAt: studentAvailabilitySlots.createdAt,
+            })
+            .from(studentAvailabilitySlots)
+            .where(inArray(studentAvailabilitySlots.planId, planIds))
+        : [];
+
+    const slotsByPlan = new Map<string, typeof allSlots>();
+    for (const slot of allSlots) {
+        if (!slotsByPlan.has(slot.planId)) slotsByPlan.set(slot.planId, []);
+        slotsByPlan.get(slot.planId)!.push(slot);
+    }
+
+    const safeParseNotes = (val: string | null) => {
+        if (!val) return null;
+        try {
+            return JSON.parse(val);
+        } catch {
+            return val;
+        }
+    };
+
+    const availabilityPlans = availabilityPlansRaw.map(plan => ({
+        ...plan,
+        adminNotes: safeParseNotes(plan.adminNotes),
+        slots: slotsByPlan.get(plan.id) || [],
+    }));
+
     const fullStudentData = {
         ...student,
+        availabilityPlans,
+        availabilitySlots: allSlots,
         courses: studentCourses,
         packages: studentPackages,
         exams: studentExams,

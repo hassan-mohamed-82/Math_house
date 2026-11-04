@@ -9,6 +9,7 @@ import { catchAsync } from "../../utils/catchAsync";
 import { validate } from "../../middlewares/validation";
 import { studentSchema, updateStudentSchema, idParamsSchema, increaseLessonsDurationSchema } from "../../validation/admin/student";
 import { requirePermission } from "../../middlewares/requirePermission";
+import { getStudentNotes } from "../../controllers/admin/notes";
 
 const router = Router();
 
@@ -22,6 +23,7 @@ router.get("/:id/open-account",    validate(idParamsSchema, "params"), requirePe
 router.get("/:id/payment-history", validate(idParamsSchema, "params"), requirePermission("students", "View"),  catchAsync(getPaymentHistory));
 router.get("/:id/content",         validate(idParamsSchema, "params"), requirePermission("students", "View"),  catchAsync(getStudentContent));
 router.get("/:id/packages",        validate(idParamsSchema, "params"), requirePermission("students", "View"),  catchAsync(getStudentPackages));
+router.get("/:id/notes", validate(idParamsSchema, "params"), requirePermission("students", "View"),  catchAsync(getStudentNotes));
 
 // ── Create ────────────────────────────────────────────────────────────────
 router.post("/", validate(studentSchema), requirePermission("students", "Add"), catchAsync(createStudent));
@@ -36,4 +38,4 @@ router.post("/:id/increase-lessons-duration",   validate(idParamsSchema, "params
 // ── Delete ────────────────────────────────────────────────────────────────
 router.delete("/:id", validate(idParamsSchema, "params"), requirePermission("students", "Delete"), catchAsync(deleteStudent));
 
-export default router;
+export default router;
