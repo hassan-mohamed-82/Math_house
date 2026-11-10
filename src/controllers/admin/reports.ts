@@ -15,6 +15,7 @@ import {
     sessionLessons,
     sessionAttendance,
     courses,
+    enrolledItems,
     diagnosticExam,
     diagnosticExamAttempt,
     studentDiagnosticAnswers
@@ -270,9 +271,21 @@ export const getStudentQuizReports = async (req: Request, res: Response) => {
         };
     });
 
+    // Fetch all courses the student is enrolled in (just id and name)
+    const studentCourses = await db
+        .select({
+            id: courses.id,
+            name: courses.name,
+        })
+        .from(enrolledItems)
+        .innerJoin(courses, eq(enrolledItems.courseId, courses.id))
+        .where(eq(enrolledItems.studentId, studentId))
+        .groupBy(courses.id);
+
     return SuccessResponse(res, {
         message: "Student quiz reports retrieved successfully",
-        data: reportData
+        data: reportData,
+        courses: studentCourses
     });
 };
 

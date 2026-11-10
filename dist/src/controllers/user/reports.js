@@ -13,6 +13,7 @@ const getStudentId = (req) => {
 };
 const getStudentQuizReports = async (req, res) => {
     const studentId = getStudentId(req);
+    const { courseId } = req.params;
     const existingStudent = await connection_1.db.select().from(schema_1.Student).where((0, drizzle_orm_1.eq)(schema_1.Student.id, studentId));
     if (existingStudent.length === 0) {
         throw new Errors_1.NotFound("Student not found");
@@ -29,6 +30,10 @@ const getStudentQuizReports = async (req, res) => {
         (0, drizzle_orm_1.eq)(schema_1.quizzes.categoryId, studentCategory),
         (0, drizzle_orm_1.eq)(schema_1.courses.categoryId, studentCategory)
     ];
+    // Filter by courseId if provided
+    if (courseId) {
+        whereConditions.push((0, drizzle_orm_1.eq)(schema_1.quizzes.courseId, courseId));
+    }
     if (attemptQuizIds.length > 0) {
         whereConditions.push((0, drizzle_orm_1.inArray)(schema_1.quizzes.id, attemptQuizIds));
     }
@@ -219,9 +224,20 @@ const getStudentQuizReports = async (req, res) => {
             } : null
         };
     });
+    // Fetch all courses the student is enrolled in (just id and name)
+    const studentCourses = await connection_1.db
+        .select({
+            id: schema_1.courses.id,
+            name: schema_1.courses.name,
+        })
+        .from(schema_1.enrolledItems)
+        .innerJoin(schema_1.courses, (0, drizzle_orm_1.eq)(schema_1.enrolledItems.courseId, schema_1.courses.id))
+        .where((0, drizzle_orm_1.eq)(schema_1.enrolledItems.studentId, studentId))
+        .groupBy(schema_1.courses.id);
     return (0, response_1.SuccessResponse)(res, {
         message: "Quiz reports retrieved successfully",
-        data: reportData
+        data: reportData,
+        courses: studentCourses
     });
 };
 exports.getStudentQuizReports = getStudentQuizReports;

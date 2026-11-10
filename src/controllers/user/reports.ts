@@ -12,6 +12,7 @@ import {
     sessionLessons,
     sessionAttendance,
     courses,
+    enrolledItems,
     category,
     Exams,
     examAttempts,
@@ -31,6 +32,7 @@ const getStudentId = (req: Request): string => {
 
 export const getStudentQuizReports = async (req: Request, res: Response) => {
     const studentId = getStudentId(req);
+    const { courseId } = req.params;
 
     const existingStudent = await db.select().from(Student).where(eq(Student.id, studentId));
     if (existingStudent.length === 0) {
@@ -52,6 +54,12 @@ export const getStudentQuizReports = async (req: Request, res: Response) => {
         eq(quizzes.categoryId, studentCategory),
         eq(courses.categoryId, studentCategory)
     ];
+
+    // Filter by courseId if provided
+    if (courseId) {
+        whereConditions.push(eq(quizzes.courseId, courseId));
+    }
+
     if (attemptQuizIds.length > 0) {
         whereConditions.push(inArray(quizzes.id, attemptQuizIds));
     }
@@ -270,9 +278,21 @@ export const getStudentQuizReports = async (req: Request, res: Response) => {
         };
     });
 
+    // Fetch all courses the student is enrolled in (just id and name)
+    const studentCourses = await db
+        .select({
+            id: courses.id,
+            name: courses.name,
+        })
+        .from(enrolledItems)
+        .innerJoin(courses, eq(enrolledItems.courseId, courses.id))
+        .where(eq(enrolledItems.studentId, studentId))
+        .groupBy(courses.id);
+
     return SuccessResponse(res, {
         message: "Quiz reports retrieved successfully",
-        data: reportData
+        data: reportData,
+        courses: studentCourses
     });
 };
 
